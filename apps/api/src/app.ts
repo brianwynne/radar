@@ -1,6 +1,6 @@
 // radar-api application factory. Builds a configured Fastify instance with structured
-// logging, correlation IDs, secure headers, request-size limits and OpenAPI. It wires
-// no business or NS1 logic (that arrives in later commits) and holds no durable state.
+// logging, correlation IDs, secure headers, request-size limits, OpenAPI, and the
+// read-only NS1 + DNS-explanation routes. Holds no durable state.
 import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import helmet from '@fastify/helmet';
 import swagger from '@fastify/swagger';
@@ -9,16 +9,22 @@ import { randomUUID } from 'node:crypto';
 import type { Config } from './config.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
+import { ns1Routes } from './routes/ns1.js';
+import { dnsRoutes } from './routes/dns.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 import type { DatabaseHealthCheck } from './database/health.js';
+import { createNs1Client } from './ns1/index.js';
+import type { Ns1ReadClient } from './ns1/index.js';
 
 const CORRELATION_HEADER = 'x-correlation-id';
 
 /** Injectable dependencies for the app factory. Everything is optional so tests can wire
- *  fakes (a local JWKS, a stub database probe) without external services. */
+ *  fakes (a local JWKS, a stub database probe, a fixture NS1 client) without external
+ *  services. */
 export interface BuildDeps extends AuthDeps {
   databaseHealth?: DatabaseHealthCheck;
+  ns1Client?: Ns1ReadClient;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -94,6 +100,8 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
       tags: [
         { name: 'health', description: 'Liveness and readiness' },
         { name: 'identity', description: 'Authenticated principal' },
+        { name: 'ns1', description: 'Read-only NS1 configuration (GET-only)' },
+        { name: 'dns', description: 'DNS steering explanation (read-only evaluation)' },
       ],
       components: {
         securitySchemes: {
@@ -119,6 +127,12 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
     databaseHealth: deps.databaseHealth,
   });
   await app.register(meRoutes, { prefix: '/api/v1' });
+
+  // Read-only NS1 + DNS explanation. The NS1 client is GET-only; in mock mode it needs no
+  // credential. Tests may inject a fixture client via deps.
+  const ns1Client = deps.ns1Client ?? createNs1Client(config.ns1);
+  await app.register(ns1Routes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1 });
+  await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1 });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());
