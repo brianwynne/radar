@@ -6,6 +6,7 @@ come from `/api/v1/me`.
 | Screen | Route | Permission | Purpose |
 |---|---|---|---|
 | Dashboard | `/` | `dashboard.read` | NOC overview: zones count, read-only posture, telemetry-not-connected panels. |
+| Live Steering | `/live-steering` | `steering.summary.read` | Primary operational view — live *expected* DNS steering per ISP. |
 | Explain | `/explain` | `dns.explain.read` | The core workflow — enter a DNS-request scenario, see a filter-by-filter graphical explanation. |
 | Steering | `/steering` | `steering.summary.read` | Effective steering matrix; rows generated from `/api/v1/dns/explain`. |
 | Topology | `/topology` | `topology.summary.read` | Configured delivery topology and the NS1/Cloudflare boundary. |
@@ -18,6 +19,28 @@ come from `/api/v1/me`.
 - **Viewing Engineer** — the above plus Explain, NS1 Explorer, Activity, and the detailed
   Topology/Steering evaluation.
 - **Engineer** — the above plus Settings and disabled future-edit controls.
+
+## Live Steering screen (`/live-steering`, `steering.summary.read`) — primary operational view
+"**Current Expected DNS Steering**". Select up to six ISPs (Eir, Virgin Media, Vodafone,
+Three, Sky, Digiweb); for each, RADAR repeatedly evaluates the current NS1 configuration via
+`/api/v1/dns/explain` (every 15/30/60 s) and shows the expected steering path:
+
+`ISP/ASN → Identity source → Matched policy (filter chain) → Eligible platforms → Expected
+DNS distribution → Preferred Réalta network path → Cloudflare Load Balancer`.
+
+This is **expected steering derived from configuration, not measured traffic** (measured
+utilisation shows *Telemetry not connected*). **Stable fingerprinting** means only
+meaningful changes (eligible answers, expected distribution, completeness, identity source,
+preferred path) trigger an update — the random Weighted-Shuffle *ordering* is deliberately
+ignored. On a change: the ISP path is highlighted for 10 s (respecting
+`prefers-reduced-motion`), the previous→current state and a trace-derived reason are shown,
+and an entry is added to **Recent Steering Changes**. Controls: pause/resume, manual
+refresh, interval, last-successful-update and a stale indicator; per-ISP error handling.
+
+RBAC: `steering.summary.read` opens the screen (NOC). The per-ISP live evaluation calls
+`/api/v1/dns/explain`, which requires `dns.explain.read` — so a NOC viewer sees the summary
+notice, while Viewing Engineers/Engineers get the full live paths (and the evaluation trace
+with `ns1.detail.read`).
 
 ## Explain screen
 Scenario form (zone/domain/type + resolver IP, ECS, country, ASN, "Réalta down") with

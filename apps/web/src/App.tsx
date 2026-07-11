@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Ns1Explorer } from './pages/Ns1Explorer';
 import { ExplainDns } from './pages/ExplainDns';
 import { Steering } from './pages/Steering';
+import { LiveSteering } from './pages/LiveSteering';
 import { Topology } from './pages/Topology';
 import { Activity } from './pages/Activity';
 import { SnapshotDetail } from './pages/SnapshotDetail';
@@ -34,6 +35,7 @@ export function App() {
       <Route element={<AppShell />}>
         <Route index element={<Dashboard />} />
         <Route path="explain" element={<ExplainDns />} />
+        <Route path="live-steering" element={<LiveSteering />} />
         <Route path="steering" element={<Steering />} />
         <Route path="topology" element={<Topology />} />
         <Route path="explorer" element={<Ns1Explorer />} />

@@ -155,5 +155,24 @@ table.matrix thead th { position: sticky; top: 0; background: var(--panel); z-in
 table.matrix tbody tr { cursor: pointer; }
 table.matrix tbody tr:hover { background: var(--panel-muted); }
 .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; align-items: end; }
+
+/* ---- Live steering ---- */
+.live-controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+.live-controls .spacer { flex: 1; }
+.isp-picker { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.isp-picker label { display: inline-flex; align-items: center; gap: 0.35rem; border: 1px solid var(--line); border-radius: 999px; padding: 0.25rem 0.7rem; cursor: pointer; font-size: 0.82rem; background: #fff; }
+.isp-picker label.on { border-color: var(--brand); background: var(--info-bg); color: var(--brand-ink); font-weight: 600; }
+.isp-card { border: 1px solid var(--line); border-left: 4px solid var(--brand); border-radius: 10px; background: #fff; padding: 0.85rem 1rem; margin-bottom: 0.75rem; transition: box-shadow 0.4s ease, border-color 0.4s ease; }
+.isp-card.changed { border-color: var(--info); box-shadow: 0 0 0 2px var(--info-bg); }
+.isp-card.stale { border-left-color: var(--warn); }
+.isp-card.error { border-left-color: var(--danger); }
+.path { display: flex; align-items: stretch; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+.seg { border: 1px solid var(--line); border-radius: 8px; padding: 0.35rem 0.6rem; background: var(--panel-muted); min-width: 120px; }
+.seg .seg-label { display: block; font-size: 0.62rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.1rem; }
+.seg.cloudflare { border-left: 3px solid #f38020; }
+.seg.realta { border-left: 3px solid #7a3ff2; }
+@media (prefers-reduced-motion: reduce) {
+  .isp-card { transition: none; }
+}
 ul.notes { margin: 0.3rem 0 0; padding-left: 1.1rem; color: var(--ink-soft); }
 ul.notes li { margin: 0.15rem 0; }
