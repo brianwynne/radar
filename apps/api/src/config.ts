@@ -17,7 +17,8 @@ const schema = z.object({
   RADAR_DEV_USER_ID: z.string().default('dev-engineer'),
   RADAR_DEV_USER_NAME: z.string().default('Development Engineer'),
   RADAR_DEV_USER_EMAIL: z.string().default('dev-engineer@example.invalid'),
-  RADAR_DEV_ROLE: z.enum(['NOC_VIEWER', 'VIEWING_ENGINEER', 'ENGINEER']).default('VIEWING_ENGINEER'),
+  // Least-privilege application default; .env.example may demonstrate a higher role.
+  RADAR_DEV_ROLE: z.enum(['NOC_VIEWER', 'VIEWING_ENGINEER', 'ENGINEER']).default('NOC_VIEWER'),
 });
 
 const TRUTHY = new Set(['true', '1', 'yes', 'on']);

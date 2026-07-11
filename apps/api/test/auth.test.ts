@@ -106,6 +106,12 @@ describe('development principal cannot be overridden by the request', () => {
   });
 });
 
+describe('development role default', () => {
+  it('defaults to NOC_VIEWER (least privilege) when RADAR_DEV_ROLE is unset', () => {
+    expect(loadConfig({ RADAR_DEV_AUTH: 'true' }).devUser.role).toBe('NOC_VIEWER');
+  });
+});
+
 describe('production safety', () => {
   it('refuses to start with RADAR_DEV_AUTH=true in production', () => {
     expect(() => loadConfig({ NODE_ENV: 'production', RADAR_DEV_AUTH: 'true' })).toThrow(/production/i);
