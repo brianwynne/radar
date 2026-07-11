@@ -88,17 +88,32 @@ export function makeExplain(req: ReqBody): ExplainResponse {
   };
 }
 
+export const ZONE_BODY = {
+  zone: 'rte.ie',
+  records: [
+    { domain: 'live.rte.ie', type: 'A' },
+    { domain: 'vod.rte.ie', type: 'A' },
+  ],
+};
+export const RECORD_BODY = { id: 'demo', zone: 'rte.ie', domain: 'live.rte.ie', type: 'A', ttl: 30, use_client_subnet: true, answers: [{ id: 'ans-realta', answer: ['192.0.2.10'] }], filters: [{ filter: 'up' }] };
+export const RAW_BODY = { ...RECORD_BODY, _radar_note: 'SYNTHETIC / MOCK NS1 data — not real RTÉ or NS1 configuration.' };
+
 export function stubApi(principal: Principal): void {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const path = String(input);
+      const p = String(input).split('?')[0];
+      let status = 200;
       let body: unknown = {};
-      if (path.includes('/api/v1/me')) body = principal;
-      else if (path.includes('/api/v1/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
-      else if (path.includes('/api/v1/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
-      else if (path.includes('/api/v1/ns1/zones')) body = { provenance: PROV, zones: [{ zone: 'rte.ie' }] };
-      return new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
+      if (p.endsWith('/api/v1/me')) body = principal;
+      else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
+      else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
+      else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+\/raw$/.test(p)) body = { provenance: PROV, raw: RAW_BODY };
+      else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+$/.test(p)) body = { provenance: PROV, record: RECORD_BODY };
+      else if (/\/ns1\/zones\/[^/]+$/.test(p)) body = { provenance: PROV, zone: ZONE_BODY };
+      else if (p.endsWith('/ns1/zones')) body = { provenance: PROV, zones: [{ zone: 'rte.ie' }] };
+      else status = 404;
+      return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
     }),
   );
 }

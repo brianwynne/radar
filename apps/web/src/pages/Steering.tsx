@@ -200,7 +200,7 @@ export function Steering() {
                           className="ghost"
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate('/explorer');
+                            navigate(`/explorer/${s.request.zone}/${s.request.domain}/${s.request.type}`);
                           }}
                         >
                           record

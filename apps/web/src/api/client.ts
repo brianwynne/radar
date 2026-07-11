@@ -7,6 +7,7 @@ import type {
   Principal,
   RawRecordResponse,
   RecordResponse,
+  ZoneResponse,
   ZonesResponse,
 } from './types';
 
@@ -51,6 +52,7 @@ export const api = {
   me: () => request<Principal>('/api/v1/me'),
   ns1Config: () => request<Ns1Status>('/api/v1/ns1/config'),
   zones: () => request<ZonesResponse>('/api/v1/ns1/zones'),
+  zone: (zone: string) => request<ZoneResponse>(`/api/v1/ns1/zones/${enc(zone)}`),
   record: (zone: string, domain: string, type: string) =>
     request<RecordResponse>(`/api/v1/ns1/zones/${enc(zone)}/${enc(domain)}/${enc(type)}`),
   rawRecord: (zone: string, domain: string, type: string) =>

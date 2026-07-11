@@ -35,6 +35,8 @@ export function App() {
         <Route path="steering" element={<Steering />} />
         <Route path="topology" element={<Topology />} />
         <Route path="explorer" element={<Ns1Explorer />} />
+        <Route path="explorer/:zone" element={<Ns1Explorer />} />
+        <Route path="explorer/:zone/:domain/:type" element={<Ns1Explorer />} />
         <Route path="activity" element={<Activity />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<div className="center-note">Page not found.</div>} />

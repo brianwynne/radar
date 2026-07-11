@@ -141,6 +141,11 @@ export interface ZonesResponse {
   zones: unknown[];
 }
 
+export interface ZoneResponse {
+  provenance: Provenance;
+  zone: Record<string, unknown>;
+}
+
 export interface RecordResponse {
   provenance: Provenance;
   record: Record<string, unknown>;

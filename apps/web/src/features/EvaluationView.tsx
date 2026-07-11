@@ -2,6 +2,7 @@
 // evaluation contract from /api/v1/dns/explain: derived identity, the Filter Chain
 // pipeline, eligible answers, and the expected (probabilistic) delivery-platform
 // distribution — with the required disclaimers. No evaluation logic lives here.
+import { Link } from 'react-router-dom';
 import type { Confidence, ExplainResponse, FilterTrace, TracedAnswer } from '../api/types';
 import { ProvenanceLine } from '../components/Provenance';
 import { networkPathForAsn } from '../topology/model';
@@ -63,6 +64,9 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
           ) : (
             <span className="badge warn">partial evaluation</span>
           )}
+          <Link className="ghost" style={{ marginLeft: 'auto' }} to={`/explorer/${request.zone}/${request.domain}/${request.type}`}>
+            View NS1 record
+          </Link>
         </div>
         <p style={{ marginTop: '0.5rem' }}>{ev.explanation}</p>
         <ProvenanceLine p={provenance} />
