@@ -8,6 +8,8 @@ import swaggerUi from '@fastify/swagger-ui';
 import { randomUUID } from 'node:crypto';
 import type { Config } from './config.js';
 import { healthRoutes } from './routes/health.js';
+import { meRoutes } from './routes/me.js';
+import { registerAuth } from './auth/plugin.js';
 
 const CORRELATION_HEADER = 'x-correlation-id';
 
@@ -47,6 +49,21 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     reply.header(CORRELATION_HEADER, req.id);
   });
 
+  // Authentication: attaches request.principal (a fixed dev principal in dev-auth mode,
+  // otherwise null → fail closed). Never trusts request headers/query/cookies.
+  registerAuth(app, config);
+
+  // Consistent, safe error responses carrying the correlation id; internal detail hidden.
+  app.setErrorHandler((err, req, reply) => {
+    const status = typeof err.statusCode === 'number' && err.statusCode >= 400 ? err.statusCode : 500;
+    if (status >= 500) req.log.error({ err, route: req.url }, 'unhandled request error');
+    void reply.code(status).send({
+      code: err.code ?? (status >= 500 ? 'INTERNAL_ERROR' : 'REQUEST_ERROR'),
+      message: status >= 500 ? 'Internal server error.' : err.message,
+      correlationId: req.id,
+    });
+  });
+
   // Secure HTTP headers. CSP is disabled here because the API returns JSON and the
   // dev-only Swagger UI needs inline assets; all other helmet protections apply.
   await app.register(helmet, { contentSecurityPolicy: false });
@@ -60,7 +77,10 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
         description:
           'RADAR — Réalta Adaptive Delivery Analysis and Routing. RTÉ NS1 steering explainability (read-only v1).',
       },
-      tags: [{ name: 'health', description: 'Liveness and readiness' }],
+      tags: [
+        { name: 'health', description: 'Liveness and readiness' },
+        { name: 'identity', description: 'Authenticated principal' },
+      ],
     },
   });
 
@@ -70,6 +90,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
   }
 
   await app.register(healthRoutes, { prefix: '/api/v1/health' });
+  await app.register(meRoutes, { prefix: '/api/v1' });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());
