@@ -4,6 +4,8 @@
 import type { Ns1ReadClient } from '../ns1/client.js';
 import type { RadarMode } from '../ns1/config.js';
 import type { Database } from '../database/repositories.js';
+import type { SteeringStore } from '../database/steering-store.js';
+import type { PollerLock } from '../database/poller-lock.js';
 import { ChangeDetectionService, type Logger } from './service.js';
 import { Ns1ActivityEventSource } from './ns1-event-source.js';
 
@@ -25,6 +27,8 @@ export interface CreateChangeDetectionOptions {
   client: Ns1ReadClient;
   database: Database;
   mode: RadarMode;
+  steeringStore?: SteeringStore;
+  lock?: PollerLock;
   intervalMs?: number;
   logger?: Logger;
 }
@@ -35,6 +39,8 @@ export function createChangeDetectionService(opts: CreateChangeDetectionOptions)
     client: opts.client,
     database: opts.database,
     mode: opts.mode,
+    steeringStore: opts.steeringStore,
+    lock: opts.lock,
     intervalMs: opts.intervalMs,
     logger: opts.logger,
   });

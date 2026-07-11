@@ -15,6 +15,10 @@ import {
   MigrationChecksumError,
   PostgresAuditRepository,
   PostgresSnapshotRepository,
+  PostgresCheckpointRepository,
+  PostgresSteeringStateRepository,
+  PostgresSteeringEventRepository,
+  type NewSteeringState,
   type Queryable,
 } from '../../src/index.js';
 
@@ -48,7 +52,10 @@ const sampleSnapshot = {
 describe.skipIf(!URL)('real PostgreSQL persistence', () => {
   let pool: pg.Pool;
   const q = (): Queryable => pool as unknown as Queryable;
-  const reset = () => pool.query('DROP TABLE IF EXISTS configuration_snapshots, audit_events, schema_migrations CASCADE');
+  const reset = () =>
+    pool.query(
+      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, schema_migrations CASCADE',
+    );
   const migrate = async () => {
     const c = await pool.connect();
     try {
@@ -69,9 +76,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
   describe('migration runner', () => {
     beforeEach(reset);
 
-    it('bootstraps schema_migrations, applies 0001 in lexical order with timing', async () => {
+    it('bootstraps schema_migrations, applies migrations in lexical order with timing', async () => {
       const applied = await migrate();
-      expect(applied).toEqual(['0001_init']);
+      expect(applied).toEqual(['0001_init', '0002_live_steering']);
       const cols = await pool.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'schema_migrations'`,
       );
@@ -155,9 +162,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
         }
       };
       const [a, b] = await Promise.all([runOnce(), runOnce()]);
-      expect([a.length, b.length].sort()).toEqual([0, 1]); // one applied, the other found it applied
+      expect([a.length, b.length].sort()).toEqual([0, 2]); // one applied both, the other found them applied
       const count = await pool.query<{ n: number }>('SELECT count(*)::int n FROM schema_migrations');
-      expect(count.rows[0].n).toBe(1); // no duplicate
+      expect(count.rows[0].n).toBe(2); // no duplicate
     });
 
     it('releases the advisory lock after success and after failure', async () => {
@@ -364,6 +371,102 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
       expect(await repo.list({ limit: 1 })).toHaveLength(1);
       const all = await repo.list({});
       expect(all[0].occurredAt.getTime()).toBeGreaterThanOrEqual(all[1].occurredAt.getTime()); // newest first
+    });
+  });
+
+  // ----- Live Steering: checkpoint, state & event repositories -------------
+  describe('steering repositories', () => {
+    beforeAll(async () => {
+      await reset();
+      await migrate();
+    });
+    afterEach(() => pool.query('TRUNCATE change_detection_checkpoints, live_steering_states, steering_change_events'));
+
+    const state = (over: Partial<NewSteeringState> = {}): NewSteeringState => ({
+      ispId: 'eir',
+      resourceKey: 'rte.ie/live.rte.ie/A',
+      ispName: 'Eir',
+      asn: 5466,
+      fingerprint: 'fp-1',
+      identitySource: 'ecs',
+      country: 'IE',
+      matchedPrefix: '185.2.100.0/24',
+      preferredPath: 'Eir PNI',
+      eligibleAnswerIds: ['ans-realta', 'ans-fastly'],
+      distribution: [
+        { answerId: 'ans-realta', label: 'Réalta', deliveryPlatform: 'Réalta', share: 0.7 },
+        { answerId: 'ans-fastly', label: 'Fastly', deliveryPlatform: 'Fastly', share: 0.3 },
+      ],
+      filterChain: ['up', 'weighted_shuffle'],
+      complete: true,
+          structuralChecksum: 'sha256:aaaa',
+      evaluatedAt: new Date('2026-07-11T10:00:00.000Z'),
+      ...over,
+    });
+
+    it('checkpoint upserts by source, survives (durable) and updates in place — one row per source', async () => {
+      const repo = new PostgresCheckpointRepository(q());
+      expect(await repo.get('ns1-activity-poll')).toBeNull();
+      await repo.upsert('ns1-activity-poll', 'act-10', new Date('2026-07-11T10:00:00.000Z'));
+      // A fresh repository instance reads the durable row (simulates a process restart).
+      const reread = new PostgresCheckpointRepository(q());
+      const cp = await reread.get('ns1-activity-poll');
+      expect(cp?.checkpointId).toBe('act-10');
+      expect(cp?.checkpointOccurredAt?.toISOString()).toBe('2026-07-11T10:00:00.000Z');
+      // Advancing overwrites the same source row (no duplicate PK).
+      await repo.upsert('ns1-activity-poll', 'act-20', new Date('2026-07-11T11:00:00.000Z'));
+      const rows = await pool.query<{ n: number }>("SELECT count(*)::int n FROM change_detection_checkpoints WHERE source = 'ns1-activity-poll'");
+      expect(rows.rows[0].n).toBe(1);
+      expect((await repo.get('ns1-activity-poll'))?.checkpointId).toBe('act-20');
+    });
+
+    it('steering state upserts on (isp_id, resource_key), preserves JSON, filters and bounds', async () => {
+      const repo = new PostgresSteeringStateRepository(q());
+      await repo.upsert(state());
+      await repo.upsert(state({ ispId: 'virgin', ispName: 'Virgin Media', asn: 6830, fingerprint: 'fp-v' }));
+      // Upsert the same key again → still one row, updated fingerprint + fresh updatedAt.
+      await repo.upsert(state({ fingerprint: 'fp-2', eligibleAnswerIds: ['ans-fastly'] }));
+
+      const eir = await repo.get('eir', 'rte.ie/live.rte.ie/A');
+      expect(eir?.fingerprint).toBe('fp-2');
+      expect(eir?.eligibleAnswerIds).toEqual(['ans-fastly']);
+      expect(eir?.distribution).toEqual(state().distribution); // jsonb round-trips structurally
+      expect(eir?.evaluatedAt).toBeInstanceOf(Date);
+      expect(eir?.updatedAt).toBeInstanceOf(Date);
+
+      expect(await repo.list()).toHaveLength(2); // one per ISP, not per upsert
+      expect(await repo.list({ ispId: 'eir' })).toHaveLength(1);
+      expect(await repo.list({ asn: 6830 })).toHaveLength(1);
+      expect(await repo.list({ resourceKey: 'rte.ie/live.rte.ie/A' })).toHaveLength(2);
+    });
+
+    it('persists steering-change events with full previous/current state and filters by isp/asn/since/before/limit, newest first', async () => {
+      const repo = new PostgresSteeringEventRepository(q());
+      const prev = state({ fingerprint: 'fp-1' });
+      const curr = state({ fingerprint: 'fp-2', eligibleAnswerIds: ['ans-fastly'] });
+      const e1 = await repo.create({
+        ispId: 'eir', ispName: 'Eir', asn: 5466, resourceKey: 'rte.ie/live.rte.ie/A', reason: 'answer_became_unavailable',
+        previousFingerprint: 'fp-1', currentFingerprint: 'fp-2', previousState: prev, currentState: curr,
+        previousChecksum: 'sha256:aaaa', currentChecksum: 'sha256:bbbb', activity: { action: 'update' }, occurredAt: new Date('2026-07-11T10:00:00.000Z'),
+      });
+      expect(e1.id).toMatch(/^[0-9a-f-]{36}$/);
+      await repo.create({
+        ispId: 'virgin', ispName: 'Virgin Media', asn: 6830, resourceKey: 'rte.ie/live.rte.ie/A', reason: 'expected_weight_changed',
+        currentFingerprint: 'fp-v2', currentState: curr, activity: {}, occurredAt: new Date('2026-07-11T11:00:00.000Z'),
+      });
+
+      const all = await repo.list();
+      expect(all).toHaveLength(2);
+      expect(all[0].occurredAt.getTime()).toBeGreaterThan(all[1].occurredAt.getTime()); // newest first
+      const eir = await repo.list({ ispId: 'eir' });
+      expect(eir).toHaveLength(1);
+      expect(eir[0].reason).toBe('answer_became_unavailable');
+      expect(eir[0].previousState).toEqual(JSON.parse(JSON.stringify(prev))); // full state jsonb round-trips (Dates → ISO strings)
+      expect(eir[0].currentChecksum).toBe('sha256:bbbb');
+      expect(await repo.list({ asn: 6830 })).toHaveLength(1);
+      expect(await repo.list({ since: new Date('2026-07-11T10:30:00.000Z') })).toHaveLength(1);
+      expect(await repo.list({ before: new Date('2026-07-11T10:30:00.000Z') })).toHaveLength(1);
+      expect(await repo.list({ limit: 1 })).toHaveLength(1);
     });
   });
 

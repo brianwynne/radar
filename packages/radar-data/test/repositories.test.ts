@@ -12,6 +12,10 @@ import {
   MigrationChecksumError,
   PostgresSnapshotRepository,
   PostgresAuditRepository,
+  PostgresCheckpointRepository,
+  PostgresSteeringStateRepository,
+  PostgresSteeringEventRepository,
+  type NewSteeringState,
   type Queryable,
 } from '../src/index.js';
 
@@ -45,7 +49,10 @@ describe('migrations (pg-mem)', () => {
     const { db } = await freshDb();
     expect(await applyMigrations(db, loadMigrations())).toEqual([]); // nothing left
     const status = await migrationStatus(db, loadMigrations());
-    expect(status).toEqual([{ version: '0001_init', filename: '0001_init.sql', applied: true, checksumMatches: true }]);
+    expect(status).toEqual([
+      { version: '0001_init', filename: '0001_init.sql', applied: true, checksumMatches: true },
+      { version: '0002_live_steering', filename: '0002_live_steering.sql', applied: true, checksumMatches: true },
+    ]);
   });
 
   it('rejects an already-applied migration whose checksum changed', async () => {
@@ -109,5 +116,86 @@ describe('PostgresAuditRepository (pg-mem)', () => {
     expect(login.actorRoles).toEqual([]);
     expect(login.details).toEqual({});
     expect(await repo.list({ correlationId: 'corr-123' })).toHaveLength(1);
+  });
+});
+
+const steeringState = (over: Partial<NewSteeringState> = {}): NewSteeringState => ({
+  ispId: 'eir',
+  resourceKey: 'rte.ie/live.rte.ie/A',
+  ispName: 'Eir',
+  asn: 5466,
+  fingerprint: 'fp-1',
+  identitySource: 'ecs',
+  country: 'IE',
+  matchedPrefix: '185.2.100.0/24',
+  preferredPath: 'Eir PNI',
+  eligibleAnswerIds: ['ans-realta', 'ans-fastly'],
+  distribution: [{ answerId: 'ans-realta', label: 'Réalta', deliveryPlatform: 'Réalta', share: 0.7 }],
+  filterChain: ['up', 'weighted_shuffle'],
+  complete: true,
+  structuralChecksum: 'sha256:aaaa',
+  evaluatedAt: new Date('2026-07-11T10:00:00.000Z'),
+  ...over,
+});
+
+describe('PostgresCheckpointRepository (pg-mem)', () => {
+  let db: Queryable;
+  beforeEach(async () => {
+    db = (await freshDb()).db;
+  });
+
+  it('upserts one row per source and updates in place', async () => {
+    const repo = new PostgresCheckpointRepository(db);
+    expect(await repo.get('ns1-activity-poll')).toBeNull();
+    await repo.upsert('ns1-activity-poll', 'act-1', new Date('2026-07-11T10:00:00.000Z'));
+    await repo.upsert('ns1-activity-poll', 'act-2', new Date('2026-07-11T11:00:00.000Z'));
+    const cp = await repo.get('ns1-activity-poll');
+    expect(cp?.checkpointId).toBe('act-2');
+  });
+});
+
+describe('PostgresSteeringStateRepository (pg-mem)', () => {
+  let db: Queryable;
+  beforeEach(async () => {
+    db = (await freshDb()).db;
+  });
+
+  it('upserts on (isp_id, resource_key), round-trips JSON, filters and lists', async () => {
+    const repo = new PostgresSteeringStateRepository(db);
+    await repo.upsert(steeringState());
+    await repo.upsert(steeringState({ fingerprint: 'fp-2', eligibleAnswerIds: ['ans-fastly'] }));
+    await repo.upsert(steeringState({ ispId: 'virgin', ispName: 'Virgin Media', asn: 6830, fingerprint: 'fp-v' }));
+    const eir = await repo.get('eir', 'rte.ie/live.rte.ie/A');
+    expect(eir?.fingerprint).toBe('fp-2');
+    expect(eir?.eligibleAnswerIds).toEqual(['ans-fastly']);
+    expect(eir?.filterChain).toEqual(['up', 'weighted_shuffle']);
+    expect(await repo.list()).toHaveLength(2);
+    expect(await repo.list({ ispId: 'virgin' })).toHaveLength(1);
+  });
+});
+
+describe('PostgresSteeringEventRepository (pg-mem)', () => {
+  let db: Queryable;
+  beforeEach(async () => {
+    db = (await freshDb()).db;
+  });
+
+  it('creates events, round-trips previous/current state, filters and bounds', async () => {
+    const repo = new PostgresSteeringEventRepository(db);
+    const prev = steeringState({ fingerprint: 'fp-1' });
+    const curr = steeringState({ fingerprint: 'fp-2', eligibleAnswerIds: ['ans-fastly'] });
+    const created = await repo.create({
+      ispId: 'eir', ispName: 'Eir', asn: 5466, resourceKey: 'rte.ie/live.rte.ie/A', reason: 'answer_became_unavailable',
+      previousFingerprint: 'fp-1', currentFingerprint: 'fp-2', previousState: prev, currentState: curr,
+      previousChecksum: 'sha256:aaaa', currentChecksum: 'sha256:bbbb', activity: { action: 'update' },
+    });
+    expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
+    const [ev] = await repo.list({ ispId: 'eir' });
+    expect(ev.reason).toBe('answer_became_unavailable');
+    // previous/current state are opaque JSONB snapshots (Dates serialise to ISO strings).
+    expect(ev.previousState).toEqual(JSON.parse(JSON.stringify(prev)));
+    expect(ev.currentChecksum).toBe('sha256:bbbb');
+    expect(await repo.list({ asn: 5466 })).toHaveLength(1);
+    expect(await repo.list({ limit: 1 })).toHaveLength(1);
   });
 });

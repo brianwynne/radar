@@ -21,26 +21,30 @@ come from `/api/v1/me`.
 - **Engineer** — the above plus Settings and disabled future-edit controls.
 
 ## Live Steering screen (`/live-steering`, `steering.summary.read`) — primary operational view
-"**Current Expected DNS Steering**". Select up to six ISPs (Eir, Virgin Media, Vodafone,
-Three, Sky, Digiweb); for each, RADAR repeatedly evaluates the current NS1 configuration via
-`/api/v1/dns/explain` (every 15/30/60 s) and shows the expected steering path:
+"**Current Expected DNS Steering**". The screen is backed by RADAR's **persisted** steering
+state and events — it does not evaluate in the browser. It loads `/live-steering/config`
+(ISP scenarios, reason vocabulary), reads the latest `/live-steering/state`, then **polls
+only `/live-steering/events`** (every 15/30/60 s, default 30). An ISP card refreshes **only
+when a relevant event arrives** (from the event's own persisted `currentState`). Select up
+to six ISPs (Eir, Virgin Media, Vodafone, Three, Sky, Digiweb); each shows:
 
-`ISP/ASN → Identity source → Matched policy (filter chain) → Eligible platforms → Expected
-DNS distribution → Preferred Réalta network path → Cloudflare Load Balancer`.
+`ISP/ASN → Identity source → NS1 steering result (filter chain) → Eligible platforms →
+Expected DNS distribution → Preferred Réalta network path → Cloudflare Load Balancer`.
 
-This is **expected steering derived from configuration, not measured traffic** (measured
-utilisation shows *Telemetry not connected*). **Stable fingerprinting** means only
-meaningful changes (eligible answers, expected distribution, completeness, identity source,
-preferred path) trigger an update — the random Weighted-Shuffle *ordering* is deliberately
-ignored. On a change: the ISP path is highlighted for 10 s (respecting
-`prefers-reduced-motion`), the previous→current state and a trace-derived reason are shown,
-and an entry is added to **Recent Steering Changes**. Controls: pause/resume, manual
-refresh, interval, last-successful-update and a stale indicator; per-ISP error handling.
+This is **expected steering derived from configuration, not measured traffic** — PNI/INEX/
+transit utilisation and actual CDN traffic share show *Telemetry not connected*. Events only
+exist for **meaningful** changes (the server's stable fingerprint excludes timestamps and
+the random Weighted-Shuffle *ordering*). On a new event: the affected ISP is highlighted for
+10 s (respecting `prefers-reduced-motion`; unaffected ISPs are not), the previous→current
+state, the attributed **reason** and the checksum-before/after are shown, and the change is
+added to **Recent Steering Changes** — which is backed by the **persisted** events, so a
+reload shows the same history and does **not** re-highlight already-seen changes. Controls:
+pause/resume, manual refresh, interval, last-successful-poll and a stale indicator (also
+shown after a polling failure); per-ISP failures are isolated.
 
-RBAC: `steering.summary.read` opens the screen (NOC). The per-ISP live evaluation calls
-`/api/v1/dns/explain`, which requires `dns.explain.read` — so a NOC viewer sees the summary
-notice, while Viewing Engineers/Engineers get the full live paths (and the evaluation trace
-with `ns1.detail.read`).
+RBAC: `steering.summary.read` opens the whole screen — **including NOC Viewers**, who now
+see the persisted expected-steering summary (no in-browser evaluation is required). The
+optional fingerprint detail is gated on `ns1.detail.read`.
 
 ## Explain screen
 Scenario form (zone/domain/type + resolver IP, ECS, country, ASN, "Réalta down") with

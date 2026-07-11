@@ -22,6 +22,9 @@ Requests are same-origin (`/api/...`), proxied to radar-api by Vite (dev) or ngi
 | `api.snapshot(id)` | `GET /api/v1/snapshots/:id` | `{ snapshot }` |
 | `api.compareSnapshots(a, b)` | `POST /api/v1/snapshots/compare` | `CompareResponse` |
 | `api.compareCurrent(id)` | `POST /api/v1/snapshots/:id/compare-current` | `CompareCurrentResponse` |
+| `api.liveSteeringConfig()` | `GET /api/v1/live-steering/config` | `LiveSteeringConfig` |
+| `api.liveSteeringState(q?)` | `GET /api/v1/live-steering/state` | `LiveSteeringStateResponse` |
+| `api.liveSteeringEvents(q?)` | `GET /api/v1/live-steering/events` | `LiveSteeringEventsResponse` |
 
 ## Errors
 Non-2xx responses throw `ApiError { status, code, message }`. Callers map:

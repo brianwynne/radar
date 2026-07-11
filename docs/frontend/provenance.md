@@ -30,6 +30,12 @@ utilisation percentage**.
   never a guaranteed traffic share.
 - **Partial evaluations** (unsupported filter) never assert a definitive platform or
   distribution; they are shown as **Partial**.
+- **Live Steering** is titled **Current Expected DNS Steering** and every payload carries
+  `provenance.label = "Current Expected DNS Steering"`. It is the persisted *expected*
+  result of evaluating NS1's Filter Chain — **never actual delivered traffic**. PNI/INEX/
+  transit utilisation and actual CDN traffic share remain *Telemetry not connected*.
+- **Steering-change reasons** are attributed from a fixed vocabulary; an unexplainable
+  change is labelled *"Reason not yet attributable"* rather than inventing a cause.
 
 ## Responsibility boundary
 Provenance also covers *who decides what*: NS1 selects the delivery platform; Cloudflare

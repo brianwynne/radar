@@ -286,3 +286,100 @@ export interface CompareCurrentResponse {
   warnings: string[];
   provenance: Provenance;
 }
+
+// --- Live Steering (persisted state & events) --------------------------------
+
+export interface LiveSteeringProvenance {
+  source: 'radar';
+  readOnly: true;
+  label: string;
+  retrievedAt: string;
+}
+
+export interface LiveSteeringIsp {
+  id: string;
+  name: string;
+  asn: number;
+  ecsPrefix: string;
+  preferredPath: string;
+}
+
+export interface LiveSteeringRecord {
+  zone: string;
+  domain: string;
+  type: string;
+  resourceKey: string;
+}
+
+export interface LiveSteeringReason {
+  id: string;
+  label: string;
+}
+
+export interface LiveSteeringConfig {
+  provenance: LiveSteeringProvenance;
+  maxSelectableIsps: number;
+  pollIntervalsSeconds: number[];
+  defaultPollIntervalSeconds: number;
+  highlightSeconds: number;
+  isps: LiveSteeringIsp[];
+  records: LiveSteeringRecord[];
+  reasons: LiveSteeringReason[];
+}
+
+export interface SteeringDistributionShare {
+  answerId: string;
+  label: string;
+  deliveryPlatform?: string;
+  share: number;
+}
+
+export interface LiveSteeringState {
+  ispId: string;
+  ispName: string;
+  asn?: number;
+  resourceKey: string;
+  identitySource?: string;
+  country?: string;
+  matchedPrefix?: string;
+  preferredPath?: string;
+  eligibleAnswerIds: string[];
+  distribution: SteeringDistributionShare[];
+  filterChain: string[];
+  complete: boolean;
+  stoppedAtFilterIndex?: number;
+  fingerprint: string;
+  structuralChecksum?: string;
+  evaluatedAt: string;
+  updatedAt: string;
+}
+
+export interface LiveSteeringStateResponse {
+  provenance: LiveSteeringProvenance;
+  count: number;
+  items: LiveSteeringState[];
+}
+
+export interface LiveSteeringEvent {
+  id: string;
+  occurredAt: string;
+  ispId: string;
+  ispName: string;
+  asn?: number;
+  resourceKey: string;
+  reason: string;
+  reasonLabel: string;
+  previousFingerprint?: string;
+  currentFingerprint: string;
+  previousChecksum?: string;
+  currentChecksum?: string;
+  previousState?: LiveSteeringState | null;
+  currentState: LiveSteeringState;
+  activity: Record<string, unknown>;
+}
+
+export interface LiveSteeringEventsResponse {
+  provenance: LiveSteeringProvenance;
+  count: number;
+  items: LiveSteeringEvent[];
+}

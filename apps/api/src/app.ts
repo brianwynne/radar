@@ -14,10 +14,12 @@ import { dnsRoutes } from './routes/dns.js';
 import { snapshotRoutes } from './routes/snapshots.js';
 import { auditRoutes } from './routes/audit.js';
 import { changeDetectionRoutes } from './routes/change-detection.js';
+import { liveSteeringRoutes } from './routes/live-steering.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 import type { DatabaseHealthCheck } from './database/health.js';
 import type { Database } from './database/repositories.js';
+import type { SteeringStore } from './database/steering-store.js';
 import type { ChangeDetectionService } from './change-detection/index.js';
 import { createNs1Client } from './ns1/index.js';
 import type { Ns1ReadClient } from './ns1/index.js';
@@ -31,6 +33,7 @@ export interface BuildDeps extends AuthDeps {
   databaseHealth?: DatabaseHealthCheck;
   ns1Client?: Ns1ReadClient;
   database?: Database;
+  steeringStore?: SteeringStore;
   changeDetection?: ChangeDetectionService;
 }
 
@@ -146,6 +149,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database });
   await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });
   await app.register(changeDetectionRoutes, { prefix: '/api/v1', service: deps.changeDetection });
+  await app.register(liveSteeringRoutes, { prefix: '/api/v1', store: deps.steeringStore });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());

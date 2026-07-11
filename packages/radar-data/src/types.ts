@@ -92,6 +92,99 @@ export interface AuditEvent extends NewAuditEvent {
   details: Record<string, unknown>;
 }
 
+// --- Change-detection checkpoint --------------------------------------------
+
+export interface CheckpointRecord {
+  source: string;
+  checkpointId?: string;
+  checkpointOccurredAt?: Date;
+  updatedAt: Date;
+}
+
+export interface CheckpointRepository {
+  get(source: string): Promise<CheckpointRecord | null>;
+  upsert(source: string, checkpointId: string | undefined, checkpointOccurredAt: Date | undefined): Promise<void>;
+}
+
+// --- Live steering state & events -------------------------------------------
+
+export interface SteeringDistributionShare {
+  answerId: string;
+  label: string;
+  deliveryPlatform?: string;
+  share: number;
+}
+
+export interface SteeringState {
+  ispId: string;
+  resourceKey: string;
+  ispName: string;
+  asn?: number;
+  fingerprint: string;
+  identitySource?: string;
+  country?: string;
+  matchedPrefix?: string;
+  preferredPath?: string;
+  eligibleAnswerIds: string[];
+  distribution: SteeringDistributionShare[];
+  filterChain: string[];
+  complete: boolean;
+  stoppedAtFilterIndex?: number;
+  structuralChecksum?: string;
+  evaluatedAt: Date;
+  updatedAt: Date;
+}
+
+export type NewSteeringState = Omit<SteeringState, 'updatedAt'>;
+
+export interface SteeringStateQuery {
+  ispId?: string;
+  asn?: number;
+  resourceKey?: string;
+}
+
+export interface SteeringStateRepository {
+  upsert(state: NewSteeringState): Promise<void>;
+  get(ispId: string, resourceKey: string): Promise<SteeringState | null>;
+  list(query?: SteeringStateQuery): Promise<SteeringState[]>;
+}
+
+export interface SteeringChangeEvent {
+  id: string;
+  occurredAt: Date;
+  ispId: string;
+  ispName: string;
+  asn?: number;
+  resourceKey: string;
+  reason: string;
+  previousFingerprint?: string;
+  currentFingerprint: string;
+  previousState?: unknown;
+  currentState: unknown;
+  previousChecksum?: string;
+  currentChecksum?: string;
+  activity: Record<string, unknown>;
+}
+
+export type NewSteeringChangeEvent = Omit<SteeringChangeEvent, 'id' | 'occurredAt'> & { occurredAt?: Date };
+
+export interface SteeringEventQuery {
+  ispId?: string;
+  asn?: number;
+  resourceKey?: string;
+  /** Events strictly after this instant. */
+  since?: Date;
+  /** Events at or before this instant. */
+  before?: Date;
+  /** Page size, 1..500 (default 100). */
+  limit?: number;
+}
+
+export interface SteeringEventRepository {
+  create(event: NewSteeringChangeEvent): Promise<SteeringChangeEvent>;
+  list(query?: SteeringEventQuery): Promise<SteeringChangeEvent[]>;
+}
+
 export interface AuditQuery {
   actorSubject?: string;
   action?: string;

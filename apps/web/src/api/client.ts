@@ -7,6 +7,9 @@ import type {
   CompareResponse,
   ExplainRequest,
   ExplainResponse,
+  LiveSteeringConfig,
+  LiveSteeringEventsResponse,
+  LiveSteeringStateResponse,
   Ns1Status,
   Principal,
   RawRecordResponse,
@@ -80,4 +83,24 @@ export const api = {
     request<CompareResponse>('/api/v1/snapshots/compare', { method: 'POST', body: JSON.stringify({ a, b }) }),
   compareCurrent: (id: string) =>
     request<CompareCurrentResponse>(`/api/v1/snapshots/${enc(id)}/compare-current`, { method: 'POST', body: JSON.stringify({}) }),
+  liveSteeringConfig: () => request<LiveSteeringConfig>('/api/v1/live-steering/config'),
+  liveSteeringState: (q: { isp?: string; asn?: number; record?: string } = {}) => {
+    const p = new URLSearchParams();
+    if (q.isp) p.set('isp', q.isp);
+    if (q.asn !== undefined) p.set('asn', String(q.asn));
+    if (q.record) p.set('record', q.record);
+    const qs = p.toString();
+    return request<LiveSteeringStateResponse>(`/api/v1/live-steering/state${qs ? `?${qs}` : ''}`);
+  },
+  liveSteeringEvents: (q: { isp?: string; asn?: number; record?: string; since?: string; before?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.isp) p.set('isp', q.isp);
+    if (q.asn !== undefined) p.set('asn', String(q.asn));
+    if (q.record) p.set('record', q.record);
+    if (q.since) p.set('since', q.since);
+    if (q.before) p.set('before', q.before);
+    if (q.limit !== undefined) p.set('limit', String(q.limit));
+    const qs = p.toString();
+    return request<LiveSteeringEventsResponse>(`/api/v1/live-steering/events${qs ? `?${qs}` : ''}`);
+  },
 };

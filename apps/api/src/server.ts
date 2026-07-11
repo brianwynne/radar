@@ -7,6 +7,8 @@ import { redactDatabaseUrl } from './database/config.js';
 import { createPool } from './database/pool.js';
 import { databaseHealthCheck } from './database/health.js';
 import { createDatabase } from './database/repositories.js';
+import { createSteeringStore } from './database/steering-store.js';
+import { PostgresPollerLock } from './database/poller-lock.js';
 import { createNs1Client } from './ns1/index.js';
 import { createChangeDetectionService } from './change-detection/index.js';
 
@@ -18,14 +20,23 @@ async function main(): Promise<void> {
 
   const pool = createPool(config.database);
   const database = createDatabase(pool);
+  const steeringStore = createSteeringStore(pool);
   const ns1Client = createNs1Client(config.ns1);
   const changeDetection = config.changeDetection.enabled
-    ? createChangeDetectionService({ client: ns1Client, database, mode: config.ns1.mode, intervalMs: config.changeDetection.intervalMs })
+    ? createChangeDetectionService({
+        client: ns1Client,
+        database,
+        mode: config.ns1.mode,
+        steeringStore,
+        lock: new PostgresPollerLock(pool),
+        intervalMs: config.changeDetection.intervalMs,
+      })
     : undefined;
 
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
     database,
+    steeringStore,
     ns1Client,
     changeDetection,
   });
@@ -36,7 +47,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'radar-api shutting down');
-    changeDetection?.stop();
+    await changeDetection?.stop();
     await app.close();
     await pool.end();
     process.exit(0);

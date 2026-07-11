@@ -14,3 +14,13 @@ export const ISP_SCENARIOS: IspScenario[] = [
 
 /** Records RADAR watches for change (the Live Steering evaluation target). */
 export const DEFAULT_WATCHED_RECORDS: WatchedRecord[] = [{ zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }];
+
+/** CONFIGURED mapping of requester ASN → preferred RTÉ network path (manually maintained;
+ *  kept in step with apps/web/src/topology/model.ts). */
+export function preferredPathForAsn(asn?: number): string {
+  if (asn === undefined) return 'Unknown (no ASN)';
+  if ([5466, 15502, 25441].includes(asn)) return 'Eir PNI';
+  if (asn === 6830) return 'Virgin / Liberty PNI';
+  if ([1213, 2128, 43760].includes(asn)) return 'INEX';
+  return 'Transit';
+}
