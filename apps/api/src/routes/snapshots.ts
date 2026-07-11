@@ -10,6 +10,7 @@ import type { Ns1Config } from '../ns1/config.js';
 import type { Database } from '../database/repositories.js';
 import { Ns1Error } from '../ns1/errors.js';
 import { canonicalise, diffJson, rawChecksum, structuralChecksum, summariseRecordDiff } from '../ns1/snapshot.js';
+import { captureRecordSnapshot } from '../ns1/snapshot-capture.js';
 import { requirePermission } from '../auth/guards.js';
 import { buildProvenance, sendNs1Error } from './ns1-helpers.js';
 
@@ -56,7 +57,6 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
     const { zone, domain, type } = req.params as { zone: string; domain: string; type: string };
     const bodyLabel = (req.body as { label?: unknown } | null)?.label;
     const label = typeof bodyLabel === 'string' && bodyLabel.trim() ? bodyLabel.trim().slice(0, 200) : undefined;
-    const resourceKey = `${zone}/${domain}/${type}`;
     const sourceEndpoint = `/v1/zones/${zone}/${domain}/${type}`;
     const retrievedAt = new Date();
 
@@ -72,36 +72,12 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
     }
 
     const principal = req.principal!;
-    const warnings = ns1.mode === 'mock' ? ['Captured in mock mode; payload is synthetic and non-production.'] : [];
-    const newSnapshot = {
-      sourceSystem: 'ns1',
-      resourceKind: 'record',
-      resourceKey,
-      sourceEndpoint,
-      retrievedAt,
+    const snapshot = await captureRecordSnapshot(database, { zone, domain, type }, raw, ns1.mode, {
       createdBySubject: principal.subject,
       label,
-      rawPayload: raw,
-      canonicalPayload: canonicalise(raw),
-      rawChecksum: rawChecksum(raw),
-      structuralChecksum: structuralChecksum(raw),
-      metadata: { mode: ns1.mode, synthetic: ns1.mode === 'mock', warnings },
-    };
-
-    const snapshot = await database.transaction(async (repos) => {
-      const created = await repos.snapshots.create(newSnapshot);
-      await repos.audit.record({
-        actorSubject: principal.subject,
-        actorRoles: principal.roles,
-        authenticationMethod: principal.authenticationMethod,
-        action: 'snapshot.create',
-        resourceType: 'record',
-        resourceKey,
-        outcome: 'success',
-        correlationId: req.id,
-        details: { snapshotId: created.id, rawChecksum: created.rawChecksum, mode: ns1.mode, synthetic: ns1.mode === 'mock' },
-      });
-      return created;
+      auditActorRoles: principal.roles,
+      auditAuthenticationMethod: principal.authenticationMethod,
+      correlationId: req.id,
     });
 
     return reply.code(201).send({ provenance: buildProvenance(ns1, sourceEndpoint, retrievedAt.toISOString()), snapshot: detail(snapshot) });

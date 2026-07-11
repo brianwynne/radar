@@ -7,6 +7,8 @@ import { redactDatabaseUrl } from './database/config.js';
 import { createPool } from './database/pool.js';
 import { databaseHealthCheck } from './database/health.js';
 import { createDatabase } from './database/repositories.js';
+import { createNs1Client } from './ns1/index.js';
+import { createChangeDetectionService } from './change-detection/index.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -15,9 +17,17 @@ async function main(): Promise<void> {
   }
 
   const pool = createPool(config.database);
+  const database = createDatabase(pool);
+  const ns1Client = createNs1Client(config.ns1);
+  const changeDetection = config.changeDetection.enabled
+    ? createChangeDetectionService({ client: ns1Client, database, mode: config.ns1.mode, intervalMs: config.changeDetection.intervalMs })
+    : undefined;
+
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
-    database: createDatabase(pool),
+    database,
+    ns1Client,
+    changeDetection,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -26,6 +36,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'radar-api shutting down');
+    changeDetection?.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -36,6 +47,10 @@ async function main(): Promise<void> {
 
   try {
     await app.listen({ port: config.API_PORT, host: config.API_HOST });
+    if (changeDetection) {
+      changeDetection.start();
+      app.log.info({ intervalMs: config.changeDetection.intervalMs }, 'change detection started');
+    }
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');
     await pool.end().catch(() => undefined);

@@ -1,0 +1,16 @@
+// Configured Live Steering ISP scenarios, re-evaluated when a watched record changes.
+// Synthetic ASNs/prefixes for the mock — illustrative, not authoritative routing data.
+// (Kept in step with apps/web/src/pages/LiveSteering.tsx.)
+import type { IspScenario, WatchedRecord } from './types.js';
+
+export const ISP_SCENARIOS: IspScenario[] = [
+  { id: 'eir', name: 'Eir', asn: 5466, ecsPrefix: '185.2.100.0/24' },
+  { id: 'virgin', name: 'Virgin Media', asn: 6830, ecsPrefix: '80.233.0.0/24' },
+  { id: 'vodafone', name: 'Vodafone', asn: 15502, ecsPrefix: '109.76.0.0/24' },
+  { id: 'three', name: 'Three', asn: 34218, ecsPrefix: '37.228.0.0/24' },
+  { id: 'sky', name: 'Sky', asn: 5607, ecsPrefix: '2.216.0.0/24' },
+  { id: 'digiweb', name: 'Digiweb', asn: 15919, ecsPrefix: '89.19.0.0/24' },
+];
+
+/** Records RADAR watches for change (the Live Steering evaluation target). */
+export const DEFAULT_WATCHED_RECORDS: WatchedRecord[] = [{ zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }];

@@ -13,10 +13,12 @@ import { ns1Routes } from './routes/ns1.js';
 import { dnsRoutes } from './routes/dns.js';
 import { snapshotRoutes } from './routes/snapshots.js';
 import { auditRoutes } from './routes/audit.js';
+import { changeDetectionRoutes } from './routes/change-detection.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 import type { DatabaseHealthCheck } from './database/health.js';
 import type { Database } from './database/repositories.js';
+import type { ChangeDetectionService } from './change-detection/index.js';
 import { createNs1Client } from './ns1/index.js';
 import type { Ns1ReadClient } from './ns1/index.js';
 
@@ -29,6 +31,7 @@ export interface BuildDeps extends AuthDeps {
   databaseHealth?: DatabaseHealthCheck;
   ns1Client?: Ns1ReadClient;
   database?: Database;
+  changeDetection?: ChangeDetectionService;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -108,6 +111,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
         { name: 'dns', description: 'DNS steering explanation (read-only evaluation)' },
         { name: 'snapshots', description: 'Configuration snapshots and version history' },
         { name: 'audit', description: 'RADAR audit history (read-only)' },
+        { name: 'change-detection', description: 'NS1 change-detection service status (read-only)' },
       ],
       components: {
         securitySchemes: {
@@ -141,6 +145,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1 });
   await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database });
   await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });
+  await app.register(changeDetectionRoutes, { prefix: '/api/v1', service: deps.changeDetection });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());

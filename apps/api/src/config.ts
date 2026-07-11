@@ -37,6 +37,10 @@ const schema = z.object({
   OIDC_ROLE_NOC_VIEWER: z.string().default('RADAR.NOCViewer'),
   OIDC_ROLE_VIEWING_ENGINEER: z.string().default('RADAR.ViewingEngineer'),
   OIDC_ROLE_ENGINEER: z.string().default('RADAR.Engineer'),
+
+  // Change detection (NS1 Activity-API polling). Off by default; requires a database.
+  CHANGE_DETECTION_ENABLED: z.string().optional(),
+  CHANGE_DETECTION_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
 });
 
 const TRUTHY = new Set(['true', '1', 'yes', 'on']);
@@ -80,6 +84,8 @@ export interface Config {
   database?: DatabaseConfig;
   /** NS1 read-only client configuration (mock by default; live requires a read-only key). */
   ns1: Ns1Config;
+  /** Change-detection service (off by default; needs a database to run). */
+  changeDetection: { enabled: boolean; intervalMs: number };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -156,5 +162,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     oidc,
     database,
     ns1,
+    changeDetection: { enabled: parseBool(p.CHANGE_DETECTION_ENABLED), intervalMs: p.CHANGE_DETECTION_INTERVAL_MS },
   };
 }
