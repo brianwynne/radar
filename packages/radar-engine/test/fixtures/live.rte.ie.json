@@ -25,14 +25,13 @@
     {
       "id": "ans-cloudfront",
       "answer": ["192.0.2.40"],
-      "meta": { "up": true, "note": "CloudFront standby", "weight": 100, "priority": 2 }
+      "meta": { "up": true, "note": "CloudFront standby", "weight": 0 }
     }
   ],
   "filters": [
     { "filter": "up" },
     { "filter": "geotarget_country" },
     { "filter": "netfence_asn" },
-    { "filter": "priority" },
     { "filter": "weighted_shuffle" },
     { "filter": "select_first_n", "config": { "N": 1 } }
   ],

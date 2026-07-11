@@ -10,13 +10,14 @@
 // register with a confidence level; unsupported filters degrade the trace to
 // partial and stop RADAR claiming certainty (principle 5.4).
 
-import type { NS1Answer, NS1Record } from './ns1.js';
-import { deriveIdentity, type Confidence, type Scenario } from './identity.js';
+import type { NS1Answer, NS1Filter, NS1Record } from './ns1.js';
+import { deriveIdentity, type Confidence, type DerivedIdentity, type Scenario } from './identity.js';
 import type {
   AnswerOutcome,
   EvaluationResult,
   ExpectedDistribution,
-  FilterStepTrace,
+  FilterBehaviour,
+  FilterTrace,
   TracedAnswer,
 } from './model.js';
 
@@ -282,30 +283,12 @@ const geofence_country: FilterFn = (input, config, ctx) => {
   };
 };
 
-const NO_PRIORITY = Number.MAX_SAFE_INTEGER;
-const priority: FilterFn = (input) => {
-  const eff = (w: Work) => numMeta(w.raw.meta?.priority) ?? NO_PRIORITY;
-  const min = Math.min(...input.map(eff));
-  const output: Work[] = [];
-  const outcomes: AnswerOutcome[] = [];
-  for (const w of input) {
-    const p = eff(w);
-    if (p === min) {
-      output.push(w);
-      outcomes.push({ answerId: w.id, disposition: 'retained', reason: p === NO_PRIORITY ? 'no priority set → top tier' : `priority ${p} (top tier)` });
-    } else {
-      outcomes.push({ answerId: w.id, disposition: 'standby', reason: `priority ${p} > top tier ${min} → standby/failover` });
-    }
-  }
-  return {
-    output,
-    outcomes,
-    reorder: false,
-    metadataConsumed: ['priority'],
-    confidence: 'high',
-    reason: `Selected top priority tier (${min === NO_PRIORITY ? 'unset' : min}): retained ${output.length}, ${input.length - output.length} on standby.`,
-  };
-};
+// NOTE: `priority`, `cost`, `shed_load` and the Pulsar filters are deliberately NOT
+// implemented (NS1 guide §17). Their wire representation, mode (sort vs sift),
+// missing-value behaviour and interaction with later filters are fixture-pending, so
+// RADAR treats them as UNSUPPORTED → partial rather than guessing (see
+// docs/ns1/assumptions.md). The raw filter config is still displayed; evaluation stops
+// claiming completeness at that step.
 
 const weighted_shuffle: FilterFn = (input) => {
   const w = (x: Work) => numMeta(x.raw.meta?.weight) ?? 1;
@@ -350,9 +333,19 @@ const REGISTRY: Record<string, FilterFn> = {
   netfence_prefix,
   geotarget_country,
   geofence_country,
-  priority,
   weighted_shuffle,
   select_first_n,
+};
+
+/** How each supported filter acts on the answer list (NS1 guide §8.1). */
+const BEHAVIOUR: Record<string, FilterBehaviour> = {
+  up: 'eliminate',
+  netfence_asn: 'eliminate',
+  netfence_prefix: 'eliminate',
+  geofence_country: 'eliminate',
+  geotarget_country: 'reorder',
+  weighted_shuffle: 'reorder',
+  select_first_n: 'select',
 };
 
 /* ---------------------------------------------------------------- evaluate */
@@ -377,10 +370,11 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
     region: w.raw.region,
   }));
 
-  const steps: FilterStepTrace[] = [];
+  const traces: FilterTrace[] = [];
   const warnings: string[] = [];
   const unsupportedFilters: string[] = [];
-  let certain = true;
+  let complete = true;
+  let stoppedAtFilterIndex: number | undefined;
   let current = works;
   let weightedSet: Work[] | undefined;
   let weightingMethod: ExpectedDistribution['method'] | undefined;
@@ -390,12 +384,14 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
     const inputIds = current.map((w) => w.id);
 
     if (f.disabled) {
-      steps.push({
-        index, type: f.filter, disabled: true, supported: true, config,
+      traces.push({
+        index, type: f.filter, disabled: true, supported: true,
+        behaviour: BEHAVIOUR[f.filter] ?? 'unknown', config,
         metadataConsumed: [], input: inputIds, output: inputIds,
+        orderingBefore: inputIds, orderingAfter: inputIds, removedAnswerIds: [],
         outcomes: current.map((w) => ({ answerId: w.id, disposition: 'retained', reason: 'filter disabled — skipped' })),
         reorder: false, reason: 'Filter is disabled in the configuration; not evaluated.',
-        confidence: certain ? 'high' : 'low',
+        confidence: complete ? 'high' : 'low',
       });
       return;
     }
@@ -403,12 +399,15 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
     const fn = REGISTRY[f.filter];
     if (!fn) {
       unsupportedFilters.push(f.filter);
-      certain = false;
+      if (complete) stoppedAtFilterIndex = index; // first unsupported step
+      complete = false;
       const warning = `Unsupported filter "${f.filter}" at step ${index}: RADAR cannot evaluate it; results beyond this step are partial.`;
       warnings.push(warning);
-      steps.push({
-        index, type: f.filter, disabled: false, supported: false, config,
+      traces.push({
+        index, type: f.filter, disabled: false, supported: false,
+        behaviour: 'unknown', config,
         metadataConsumed: [], input: inputIds, output: inputIds,
+        orderingBefore: inputIds, orderingAfter: inputIds, removedAnswerIds: [],
         outcomes: current.map((w) => ({ answerId: w.id, disposition: 'unsupported', reason: 'filter not evaluated by RADAR' })),
         reorder: false, reason: warning, confidence: 'low', warning,
       });
@@ -417,11 +416,15 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
 
     const res = fn(current, config, scenario);
     if (res.warning) warnings.push(`Step ${index} (${f.filter}): ${res.warning}`);
-    steps.push({
-      index, type: f.filter, disabled: false, supported: true, config,
-      metadataConsumed: res.metadataConsumed, input: inputIds,
-      output: res.output.map((w) => w.id), outcomes: res.outcomes, reorder: res.reorder,
-      reason: res.reason, confidence: certain ? res.confidence : 'low',
+    const outputIds = res.output.map((w) => w.id);
+    traces.push({
+      index, type: f.filter, disabled: false, supported: true,
+      behaviour: BEHAVIOUR[f.filter] ?? 'unknown', config,
+      metadataConsumed: res.metadataConsumed, input: inputIds, output: outputIds,
+      orderingBefore: inputIds, orderingAfter: outputIds,
+      removedAnswerIds: inputIds.filter((id) => !outputIds.includes(id)),
+      outcomes: res.outcomes, reorder: res.reorder,
+      reason: res.reason, confidence: complete ? res.confidence : 'low',
       warning: res.warning,
     });
 
@@ -429,25 +432,72 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
     current = res.output;
   });
 
-  const survivors = current.map((w) => w.id);
-  const lastStep = steps[steps.length - 1];
+  const eligibleAnswerIds = current.map((w) => w.id);
+  const lastTrace = traces[traces.length - 1];
   const selected =
-    lastStep && lastStep.supported && lastStep.type === 'select_first_n' && survivors.length === 1
-      ? survivors[0]
-      : survivors.length === 1
-        ? survivors[0]
+    lastTrace && lastTrace.supported && lastTrace.type === 'select_first_n' && eligibleAnswerIds.length === 1
+      ? eligibleAnswerIds[0]
+      : eligibleAnswerIds.length === 1
+        ? eligibleAnswerIds[0]
         : undefined;
 
-  const expectedDistribution = computeDistribution(weightedSet, weightingMethod, current, byId);
+  const expectedDistribution = computeDistribution(weightedSet, weightingMethod, current);
+  const explanation = buildExplanation(
+    record, identity, byId, selected, eligibleAnswerIds, expectedDistribution, complete, stoppedAtFilterIndex, record.filters, unsupportedFilters,
+  );
 
-  return { scenario, identity, answers, steps, survivors, selected, expectedDistribution, certain, warnings, unsupportedFilters };
+  return {
+    scenario, identity, answers, traces, eligibleAnswerIds, selected,
+    expectedDistribution, complete, stoppedAtFilterIndex, explanation, warnings, unsupportedFilters,
+  };
+}
+
+/** Human-readable steering explanation (NS1 guide §25 `explanation`). Composed from
+ *  the trace; adds no new evaluation semantics. */
+function buildExplanation(
+  record: NS1Record,
+  identity: DerivedIdentity,
+  byId: Map<string, Work>,
+  selected: string | undefined,
+  eligible: string[],
+  dist: ExpectedDistribution | undefined,
+  complete: boolean,
+  stoppedAtFilterIndex: number | undefined,
+  filters: NS1Filter[],
+  unsupportedFilters: string[],
+): string {
+  const parts: string[] = [];
+  const src = identity.sourceUsed === 'ecs'
+    ? `the EDNS Client Subnet ${identity.evaluatedAddress}`
+    : `the resolver IP ${identity.evaluatedAddress}`;
+  const geo = [identity.country && `country ${identity.country}`, identity.asn && `ASN ${identity.asn}`].filter(Boolean).join(', ');
+  parts.push(`Evaluated ${record.domain} ${record.type} using ${src}${geo ? ` (${geo})` : ''}; identity confidence ${identity.confidence}.`);
+
+  if (selected) {
+    const w = byId.get(selected);
+    parts.push(`Selected delivery platform: ${w?.platform ?? w?.label ?? selected}.`);
+  } else if (eligible.length > 1) {
+    parts.push(`${eligible.length} answers remain eligible; NS1 returns one probabilistically.`);
+  } else if (eligible.length === 0) {
+    parts.push('No answers remain eligible.');
+  }
+
+  if (dist) {
+    const shares = dist.shares.filter((s) => s.share > 0).map((s) => `${s.deliveryPlatform ?? s.label} ${(s.share * 100).toFixed(0)}%`).join(', ');
+    if (shares) parts.push(`Expected delivery-platform distribution (probabilistic): ${shares}.`);
+  }
+
+  if (!complete) {
+    const at = stoppedAtFilterIndex !== undefined ? filters[stoppedAtFilterIndex]?.filter : unsupportedFilters[0];
+    parts.push(`Evaluation is INCOMPLETE: unsupported filter "${at}" at step ${stoppedAtFilterIndex}; RADAR makes no definitive steering claim beyond that step.`);
+  }
+  return parts.join(' ');
 }
 
 function computeDistribution(
   weightedSet: Work[] | undefined,
   method: ExpectedDistribution['method'] | undefined,
   survivors: Work[],
-  _byId: Map<string, Work>,
 ): ExpectedDistribution | undefined {
   const disclaimers = [
     'Weighted Shuffle is probabilistic: NS1 randomly orders answers per resolution weighted by these values; it does NOT guarantee exact per-viewer traffic percentages.',

@@ -9,7 +9,9 @@
 
 import type { NS1Record } from './ns1.js';
 
-export type Confidence = 'high' | 'medium' | 'low';
+// 'unknown' = insufficient information (NS1 guide §9.4). deriveIdentity currently
+// emits high/medium/low; 'unknown' is available in the contract for callers/adapters.
+export type Confidence = 'high' | 'medium' | 'low' | 'unknown';
 export type IdentitySource = 'ecs' | 'resolver';
 
 /** What actually arrives at the authoritative DNS server (nothing else). */

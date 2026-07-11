@@ -29,15 +29,24 @@ export interface AnswerOutcome {
   reason: string;
 }
 
-export interface FilterStepTrace {
+/** How a filter acts on the answer list (NS1 guide §8.1). */
+export type FilterBehaviour = 'eliminate' | 'reorder' | 'select' | 'group' | 'modify' | 'unknown';
+
+/** One filter's execution trace. Field names follow the NS1 Developer Guide §8.1;
+ *  every input answer is accounted for by exactly one outcome. */
+export interface FilterTrace {
   index: number;
   type: string;
   disabled: boolean;
   supported: boolean;
+  behaviour: FilterBehaviour;
   config: Record<string, unknown>;
   metadataConsumed: string[];
   input: string[]; // answer ids entering, in order
   output: string[]; // answer ids leaving, in order
+  orderingBefore: string[]; // = input order
+  orderingAfter: string[]; // = output order
+  removedAnswerIds: string[]; // answers eliminated by this step (input − output)
   outcomes: AnswerOutcome[];
   reorder: boolean;
   reason: string;
@@ -59,16 +68,22 @@ export interface ExpectedDistribution {
   disclaimers: string[];
 }
 
-/** The complete, explainable evaluation output (brief §9). */
+/** The complete, explainable evaluation output. Field names follow the NS1
+ *  Developer Guide §25 (`traces`, `eligibleAnswerIds`, `complete`,
+ *  `stoppedAtFilterIndex`, `explanation`); `expectedDistribution` is RADAR's richer,
+ *  explicitly-probabilistic form of the guide's minimal share map. `scenario`,
+ *  `answers`, `selected` and `unsupportedFilters` are additive RADAR conveniences. */
 export interface EvaluationResult {
   scenario: Scenario;
   identity: DerivedIdentity;
   answers: TracedAnswer[];
-  steps: FilterStepTrace[];
-  survivors: string[];
+  traces: FilterTrace[];
+  eligibleAnswerIds: string[];
   selected?: string;
   expectedDistribution?: ExpectedDistribution;
-  certain: boolean;
+  complete: boolean;
+  stoppedAtFilterIndex?: number;
+  explanation: string;
   warnings: string[];
   unsupportedFilters: string[];
 }
