@@ -59,11 +59,11 @@ component + one end-to-end for the first vertical slice.
 
 ## Consequences
 
-- A tested, source-agnostic evaluation engine is the core asset (`packages/domain`).
+- A tested, source-agnostic evaluation engine is the core asset (`packages/radar-engine`).
 - NS1 remains authoritative for live config; RADAR shows data freshness everywhere and
   stores explicit snapshots in Postgres.
 - The read-only, no-proxy, adapter-isolated design keeps v1 safe and the write/rollback
   future additive.
 
-See [ns1-assumptions.md](../ns1-assumptions.md), [threat-model.md](../threat-model.md),
+See [ns1-assumptions.md](../ns1/assumptions.md), [threat-model.md](../threat-model.md),
 [role-permission-matrix.md](../role-permission-matrix.md).

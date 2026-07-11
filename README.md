@@ -24,7 +24,7 @@ pool or cache selection to NS1.
   vs resolver-IP identity; separates NS1 delivery-platform selection from Cloudflare pool
   selection.
 - Foundation: [ADR-0001](docs/adr/0001-architecture.md), the
-  [NS1 assumptions register](docs/ns1-assumptions.md) (grounded on the official NS1 Go
+  [NS1 assumptions register](docs/ns1/assumptions.md) (grounded on the official NS1 Go
   SDK — the IBM developer portal blocks automated access), the
   [threat model](docs/threat-model.md), and the
   [role/permission matrix](docs/role-permission-matrix.md).
