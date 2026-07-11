@@ -11,10 +11,17 @@ import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
+import type { DatabaseHealthCheck } from './database/health.js';
 
 const CORRELATION_HEADER = 'x-correlation-id';
 
-export async function buildApp(config: Config, deps: AuthDeps = {}): Promise<FastifyInstance> {
+/** Injectable dependencies for the app factory. Everything is optional so tests can wire
+ *  fakes (a local JWKS, a stub database probe) without external services. */
+export interface BuildDeps extends AuthDeps {
+  databaseHealth?: DatabaseHealthCheck;
+}
+
+export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
   const app = Fastify({
     bodyLimit: config.MAX_BODY_BYTES,
     trustProxy: true,
@@ -106,7 +113,11 @@ export async function buildApp(config: Config, deps: AuthDeps = {}): Promise<Fas
     await app.register(swaggerUi, { routePrefix: '/api/v1/docs' });
   }
 
-  await app.register(healthRoutes, { prefix: '/api/v1/health', authMode: config.authMode });
+  await app.register(healthRoutes, {
+    prefix: '/api/v1/health',
+    authMode: config.authMode,
+    databaseHealth: deps.databaseHealth,
+  });
   await app.register(meRoutes, { prefix: '/api/v1' });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.

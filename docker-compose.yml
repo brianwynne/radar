@@ -22,6 +22,20 @@ services:
       timeout: 3s
       retries: 10
 
+  # One-shot schema migration. Runs to completion before radar-api starts; a single
+  # runner (advisory-locked) is authoritative, so replicas never migrate concurrently.
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://radar:radar@postgres:5432/radar
+    command: ["node", "dist/database/migrate.js"]
+    restart: "no"
+
   radar-api:
     build:
       context: .
@@ -29,6 +43,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       RADAR_MODE: ${RADAR_MODE:-mock}
       DATABASE_URL: postgres://radar:radar@postgres:5432/radar

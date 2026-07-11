@@ -2,6 +2,7 @@
 // invalid configuration fails fast (readiness depends on this loading cleanly).
 import { z } from 'zod';
 import type { RadarRole } from './auth/permissions.js';
+import { loadDatabaseConfig, type DatabaseConfig } from './database/config.js';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -72,6 +73,10 @@ export interface Config {
   allowDevAuthInProduction: boolean;
   devUser: { id: string; name: string; email: string; role: RadarRole };
   oidc?: OidcConfig;
+  /** Present when DATABASE_URL is configured. Its absence is a startup error in
+   *  server.ts (the API cannot function without persistence); leaving it optional here
+   *  keeps configuration-only unit tests independent of a database. */
+  database?: DatabaseConfig;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -127,6 +132,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   const authMode: AuthMode = devAuth ? 'dev' : oidc ? 'oidc' : 'none';
 
+  // Validate database configuration when DATABASE_URL is supplied. Invalid values (e.g.
+  // pool sizes) fail fast here; server.ts requires the result to be present to start.
+  const database = env.DATABASE_URL ? loadDatabaseConfig(env) : undefined;
+
   return {
     NODE_ENV: p.NODE_ENV,
     API_HOST: p.API_HOST,
@@ -138,5 +147,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     allowDevAuthInProduction,
     devUser: { id: p.RADAR_DEV_USER_ID, name: p.RADAR_DEV_USER_NAME, email: p.RADAR_DEV_USER_EMAIL, role: p.RADAR_DEV_ROLE },
     oidc,
+    database,
   };
 }
