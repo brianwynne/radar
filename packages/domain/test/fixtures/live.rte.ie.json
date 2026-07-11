@@ -1,0 +1,40 @@
+{
+  "_radar_note": "DEMO / MOCK fixture — NOT real RTÉ or NS1 data. IPs and ASNs are illustrative. Schema follows the NS1 Connect API record object (github.com/ns1/ns1-go rest/model). Do not treat values as production configuration.",
+  "id": "demo-live-rte-ie-a",
+  "zone": "rte.ie",
+  "domain": "live.rte.ie",
+  "type": "A",
+  "ttl": 30,
+  "use_client_subnet": true,
+  "answers": [
+    {
+      "id": "ans-realta",
+      "answer": ["192.0.2.10"],
+      "meta": { "up": true, "note": "Réalta", "weight": 70, "priority": 1, "country": ["IE"], "asn": [5466, 15502, 25441] }
+    },
+    {
+      "id": "ans-fastly",
+      "answer": ["192.0.2.20"],
+      "meta": { "up": true, "note": "Fastly", "weight": 20, "priority": 1 }
+    },
+    {
+      "id": "ans-akamai",
+      "answer": ["192.0.2.30"],
+      "meta": { "up": true, "note": "Akamai", "weight": 10, "priority": 1 }
+    },
+    {
+      "id": "ans-cloudfront",
+      "answer": ["192.0.2.40"],
+      "meta": { "up": true, "note": "CloudFront standby", "weight": 100, "priority": 2 }
+    }
+  ],
+  "filters": [
+    { "filter": "up" },
+    { "filter": "geotarget_country" },
+    { "filter": "netfence_asn" },
+    { "filter": "priority" },
+    { "filter": "weighted_shuffle" },
+    { "filter": "select_first_n", "config": { "N": 1 } }
+  ],
+  "regions": {}
+}

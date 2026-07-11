@@ -1,0 +1,86 @@
+# RADAR — container-first, platform-independent stack (ADR-0001).
+# radar-web and radar-api are stateless; PostgreSQL is the only durable state.
+#
+# Status: postgres + mock-ns1 are runnable now; the radar-api and radar-web build
+# contexts (apps/api, apps/web) land in the next increment. This file is the target
+# topology and is intentionally complete so the shape is reviewable.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: radar
+      POSTGRES_PASSWORD: radar
+      POSTGRES_DB: radar
+    ports:
+      - "5432:5432"
+    volumes:
+      - radar_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U radar -d radar"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  radar-api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      RADAR_MODE: ${RADAR_MODE:-mock}
+      DATABASE_URL: postgres://radar:radar@postgres:5432/radar
+      API_PORT: "3000"
+      NS1_API_BASE: ${NS1_API_BASE:-https://api.nsone.net/v1/}
+      RADAR_DEV_AUTH: ${RADAR_DEV_AUTH:-true}
+      RADAR_DEV_ROLE: ${RADAR_DEV_ROLE:-viewing_engineer}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    secrets:
+      - ns1_api_key
+    read_only: true
+    tmpfs:
+      - /tmp
+    user: "10001:10001"
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  radar-web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    depends_on:
+      - radar-api
+    ports:
+      - "8080:8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
+    cap_drop: ["ALL"]
+    security_opt:
+      - no-new-privileges:true
+
+  # Dev-only fixture-backed NS1 stand-in (profile: mock).
+  mock-ns1:
+    build:
+      context: .
+      dockerfile: apps/mock-ns1/Dockerfile
+    profiles: ["mock"]
+    ports:
+      - "8090:8090"
+
+volumes:
+  radar_pgdata:
+
+secrets:
+  ns1_api_key:
+    file: ./secrets/ns1_api_key.txt
