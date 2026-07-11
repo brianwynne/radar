@@ -9,11 +9,12 @@ import { randomUUID } from 'node:crypto';
 import type { Config } from './config.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
-import { registerAuth } from './auth/plugin.js';
+import { registerAuth, type AuthDeps } from './auth/plugin.js';
+import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 
 const CORRELATION_HEADER = 'x-correlation-id';
 
-export async function buildApp(config: Config): Promise<FastifyInstance> {
+export async function buildApp(config: Config, deps: AuthDeps = {}): Promise<FastifyInstance> {
   const app = Fastify({
     bodyLimit: config.MAX_BODY_BYTES,
     trustProxy: true,
@@ -49,9 +50,15 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     reply.header(CORRELATION_HEADER, req.id);
   });
 
-  // Authentication: attaches request.principal (a fixed dev principal in dev-auth mode,
-  // otherwise null → fail closed). Never trusts request headers/query/cookies.
-  registerAuth(app, config);
+  // Authentication: attaches request.principal per the configured mode. In OIDC mode,
+  // resolve the JWKS key source (discovery or explicit override) unless a verifier was
+  // injected (tests inject a local key set so Microsoft is never contacted).
+  let authDeps = deps;
+  if (config.authMode === 'oidc' && !deps.oidcVerifier && config.oidc) {
+    const getKey = await resolveJwks(config.oidc);
+    authDeps = { ...deps, oidcVerifier: createOidcVerifier(config.oidc, getKey) };
+  }
+  registerAuth(app, config, authDeps);
 
   // Consistent, safe error responses carrying the correlation id; internal detail hidden.
   app.setErrorHandler((err, req, reply) => {
@@ -81,6 +88,16 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
         { name: 'health', description: 'Liveness and readiness' },
         { name: 'identity', description: 'Authenticated principal' },
       ],
+      components: {
+        securitySchemes: {
+          bearerAuth: {
+            type: 'http',
+            scheme: 'bearer',
+            bearerFormat: 'JWT',
+            description: 'OIDC access token (Microsoft Entra ID in production).',
+          },
+        },
+      },
     },
   });
 
@@ -89,7 +106,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await app.register(swaggerUi, { routePrefix: '/api/v1/docs' });
   }
 
-  await app.register(healthRoutes, { prefix: '/api/v1/health' });
+  await app.register(healthRoutes, { prefix: '/api/v1/health', authMode: config.authMode });
   await app.register(meRoutes, { prefix: '/api/v1' });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.

@@ -15,6 +15,7 @@ const meSchema = {
   tags: ['identity'],
   summary: 'Current principal',
   description: 'Returns the authenticated caller’s identity, roles and effective permissions. Never returns credentials or tokens.',
+  security: [{ bearerAuth: [] }],
   response: {
     200: {
       type: 'object',

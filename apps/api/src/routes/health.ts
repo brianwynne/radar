@@ -1,4 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
+import type { AuthMode } from '../config.js';
+
+interface HealthOptions {
+  authMode: AuthMode;
+}
 
 const liveSchema = {
   tags: ['health'],
@@ -29,10 +34,12 @@ const readySchema = {
   },
 } as const;
 
-/** Liveness and readiness (mounted under /api/v1/health). In this skeleton readiness
- *  confirms only that the API started and configuration loaded; downstream checks
- *  (database, NS1) are added when those subsystems land. */
-export const healthRoutes: FastifyPluginAsync = async (app) => {
+/** Liveness and readiness (mounted under /api/v1/health). Readiness confirms the API
+ *  started and configuration loaded, and reports the active authentication mode
+ *  ('development' | 'oidc' | 'unconfigured'). Downstream checks (database, NS1) are
+ *  added when those subsystems land. */
+export const healthRoutes: FastifyPluginAsync<HealthOptions> = async (app, opts) => {
+  const auth = opts.authMode === 'dev' ? 'development' : opts.authMode === 'oidc' ? 'oidc' : 'unconfigured';
   app.get('/live', { schema: liveSchema }, async () => ({ status: 'live' }));
-  app.get('/ready', { schema: readySchema }, async () => ({ status: 'ready', checks: { config: 'ok' } }));
+  app.get('/ready', { schema: readySchema }, async () => ({ status: 'ready', checks: { config: 'ok', auth } }));
 };

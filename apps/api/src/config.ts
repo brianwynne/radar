@@ -19,10 +19,47 @@ const schema = z.object({
   RADAR_DEV_USER_EMAIL: z.string().default('dev-engineer@example.invalid'),
   // Least-privilege application default; .env.example may demonstrate a higher role.
   RADAR_DEV_ROLE: z.enum(['NOC_VIEWER', 'VIEWING_ENGINEER', 'ENGINEER']).default('NOC_VIEWER'),
+
+  // OIDC (production; Microsoft Entra ID or any standards-compliant provider).
+  OIDC_ENABLED: z.string().optional(),
+  OIDC_ISSUER_URL: z.string().optional(),
+  OIDC_AUDIENCE: z.string().optional(),
+  OIDC_ALLOWED_TENANT_ID: z.string().optional(),
+  OIDC_JWKS_URI: z.string().optional(), // explicit override; otherwise discovered
+  OIDC_SUBJECT_CLAIM: z.string().default('oid'),
+  OIDC_FALLBACK_SUBJECT_CLAIM: z.string().default('sub'),
+  OIDC_DISPLAY_NAME_CLAIM: z.string().default('name'),
+  OIDC_EMAIL_CLAIM: z.string().default('preferred_username'),
+  OIDC_ROLES_CLAIM: z.string().default('roles'),
+  OIDC_TENANT_CLAIM: z.string().default('tid'),
+  OIDC_ROLE_NOC_VIEWER: z.string().default('RADAR.NOCViewer'),
+  OIDC_ROLE_VIEWING_ENGINEER: z.string().default('RADAR.ViewingEngineer'),
+  OIDC_ROLE_ENGINEER: z.string().default('RADAR.Engineer'),
 });
 
 const TRUTHY = new Set(['true', '1', 'yes', 'on']);
 const parseBool = (v: string | undefined): boolean => v !== undefined && TRUTHY.has(v.toLowerCase());
+
+export type AuthMode = 'dev' | 'oidc' | 'none';
+
+export interface OidcConfig {
+  issuerUrl: string;
+  audience: string;
+  allowedTenantId: string;
+  jwksUri?: string;
+  claims: {
+    subject: string;
+    fallbackSubject: string;
+    displayName: string;
+    email: string;
+    roles: string;
+    tenant: string;
+  };
+  /** External app-role name → locked RADAR role. */
+  roleMap: Record<string, RadarRole>;
+  /** Trusted signing algorithms (allow-list; not taken from the token header). */
+  algorithms: string[];
+}
 
 export interface Config {
   NODE_ENV: 'development' | 'production' | 'test';
@@ -30,9 +67,11 @@ export interface Config {
   API_PORT: number;
   LOG_LEVEL: 'fatal' | 'error' | 'warn' | 'info' | 'debug' | 'trace' | 'silent';
   MAX_BODY_BYTES: number;
+  authMode: AuthMode;
   devAuth: boolean;
   allowDevAuthInProduction: boolean;
   devUser: { id: string; name: string; email: string; role: RadarRole };
+  oidc?: OidcConfig;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -53,14 +92,51 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
 
+  // Authentication precedence: dev-auth wins and disables OIDC entirely; otherwise
+  // OIDC if enabled; otherwise none (protected routes 401). Never a fallback chain.
+  let oidc: OidcConfig | undefined;
+  if (!devAuth && parseBool(p.OIDC_ENABLED)) {
+    const missing: string[] = [];
+    if (!p.OIDC_ISSUER_URL) missing.push('OIDC_ISSUER_URL');
+    if (!p.OIDC_AUDIENCE) missing.push('OIDC_AUDIENCE');
+    if (!p.OIDC_ALLOWED_TENANT_ID) missing.push('OIDC_ALLOWED_TENANT_ID');
+    if (missing.length > 0) {
+      throw new Error(`OIDC is enabled but its configuration is incomplete: missing ${missing.join(', ')}.`);
+    }
+    oidc = {
+      issuerUrl: p.OIDC_ISSUER_URL as string,
+      audience: p.OIDC_AUDIENCE as string,
+      allowedTenantId: p.OIDC_ALLOWED_TENANT_ID as string,
+      jwksUri: p.OIDC_JWKS_URI,
+      claims: {
+        subject: p.OIDC_SUBJECT_CLAIM,
+        fallbackSubject: p.OIDC_FALLBACK_SUBJECT_CLAIM,
+        displayName: p.OIDC_DISPLAY_NAME_CLAIM,
+        email: p.OIDC_EMAIL_CLAIM,
+        roles: p.OIDC_ROLES_CLAIM,
+        tenant: p.OIDC_TENANT_CLAIM,
+      },
+      roleMap: {
+        [p.OIDC_ROLE_NOC_VIEWER]: 'NOC_VIEWER',
+        [p.OIDC_ROLE_VIEWING_ENGINEER]: 'VIEWING_ENGINEER',
+        [p.OIDC_ROLE_ENGINEER]: 'ENGINEER',
+      },
+      algorithms: ['RS256'], // Entra signs with RS256; allow-list is fixed, not token-driven.
+    };
+  }
+
+  const authMode: AuthMode = devAuth ? 'dev' : oidc ? 'oidc' : 'none';
+
   return {
     NODE_ENV: p.NODE_ENV,
     API_HOST: p.API_HOST,
     API_PORT: p.API_PORT,
     LOG_LEVEL: p.LOG_LEVEL,
     MAX_BODY_BYTES: p.MAX_BODY_BYTES,
+    authMode,
     devAuth,
     allowDevAuthInProduction,
     devUser: { id: p.RADAR_DEV_USER_ID, name: p.RADAR_DEV_USER_NAME, email: p.RADAR_DEV_USER_EMAIL, role: p.RADAR_DEV_ROLE },
+    oidc,
   };
 }

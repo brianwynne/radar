@@ -24,7 +24,7 @@ describe('health endpoints', () => {
   it('GET /api/v1/health/ready confirms config loaded', async () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/health/ready' });
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ status: 'ready', checks: { config: 'ok' } });
+    expect(res.json()).toEqual({ status: 'ready', checks: { config: 'ok', auth: 'unconfigured' } });
   });
 });
 
