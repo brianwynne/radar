@@ -19,7 +19,10 @@ export const ZONE_RTE_IE: unknown = {
   _radar_note: SYNTHETIC,
   zone: 'rte.ie',
   ttl: 3600,
-  records: [{ domain: 'live.rte.ie', type: 'A', ttl: 30, short_answers: ['192.0.2.10'] }],
+  records: [
+    { domain: 'live.rte.ie', type: 'A', ttl: 30, short_answers: ['192.0.2.10'] },
+    { domain: 'vod.rte.ie', type: 'A', ttl: 30, short_answers: ['192.0.2.10'] },
+  ],
 };
 
 /** GET /v1/zones/rte.ie/live.rte.ie/A — the first-vertical-slice record (guide §28):
@@ -61,6 +64,31 @@ export const RECORD_LIVE_RTE_IE_A: unknown = {
     { filter: 'geotarget_country' },
     { filter: 'netfence_asn', config: { remove_no_asn: false } },
     { filter: 'netfence_prefix', config: { remove_no_ip_prefixes: false } },
+    { filter: 'weighted_shuffle' },
+    { filter: 'select_first_n', config: { N: 1 } },
+  ],
+  regions: {},
+};
+
+/** GET /v1/zones/rte.ie/vod.rte.ie/A — a second synthetic record whose Filter Chain
+ *  contains an UNSUPPORTED filter (shed_load), so RADAR reports a PARTIAL evaluation
+ *  rather than inventing behaviour (guide §17). Used by the Steering Matrix. */
+export const RECORD_VOD_RTE_IE_A: unknown = {
+  _radar_note: SYNTHETIC,
+  id: 'demo-vod-rte-ie-a',
+  zone: 'rte.ie',
+  domain: 'vod.rte.ie',
+  type: 'A',
+  ttl: 30,
+  use_client_subnet: true,
+  answers: [
+    { id: 'ans-realta', answer: ['192.0.2.10'], meta: { up: true, note: 'Réalta', weight: 70, country: ['IE'], asn: [5466] } },
+    { id: 'ans-fastly', answer: ['192.0.2.20'], meta: { up: true, note: 'Fastly', weight: 30 } },
+  ],
+  filters: [
+    { filter: 'up' },
+    // Not in the RADAR engine registry → unsupported → partial evaluation.
+    { filter: 'shed_load', config: { threshold: 0.9 } },
     { filter: 'weighted_shuffle' },
     { filter: 'select_first_n', config: { N: 1 } },
   ],

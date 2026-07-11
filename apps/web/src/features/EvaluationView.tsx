@@ -4,6 +4,7 @@
 // distribution — with the required disclaimers. No evaluation logic lives here.
 import type { Confidence, ExplainResponse, FilterTrace, TracedAnswer } from '../api/types';
 import { ProvenanceLine } from '../components/Provenance';
+import { networkPathForAsn } from '../topology/model';
 
 const confidenceBadge: Record<Confidence, string> = { high: 'ok', medium: 'info', low: 'warn', unknown: 'neutral' };
 
@@ -85,6 +86,12 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
           <div className="kv">
             <span>Confidence</span>
             <span className={`badge ${confidenceBadge[ev.identity.confidence]}`}>{ev.identity.confidence}</span>
+          </div>
+          <div className="kv">
+            <span>Network path</span>
+            <span>
+              {networkPathForAsn(request.scenario.asn).label} <span className="badge neutral">CONFIGURED</span>
+            </span>
           </div>
           {ev.identity.notes.length > 0 && (
             <ul className="notes">

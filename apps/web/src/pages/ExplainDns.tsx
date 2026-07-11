@@ -1,6 +1,8 @@
-// Explain DNS Decision — the core RADAR workflow. A Viewing Engineer enters a DNS-request
-// scenario; RADAR calls /api/v1/dns/explain and renders a filter-by-filter explanation.
-import { useState, type FormEvent } from 'react';
+// Explain DNS Decision — the core RADAR workflow. A Viewing Engineer enters (or arrives
+// from the Steering Matrix with) a DNS-request scenario; RADAR calls /api/v1/dns/explain
+// and renders a filter-by-filter explanation.
+import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import type { ExplainRequest, ExplainResponse } from '../api/types';
 import { EvaluationView } from '../features/EvaluationView';
@@ -54,19 +56,21 @@ function toRequest(f: FormState): ExplainRequest {
 }
 
 export function ExplainDns() {
-  const [form, setForm] = useState<FormState>(DEFAULT);
+  const location = useLocation();
+  const prefill = (location.state as { prefill?: FormState } | null)?.prefill;
+  const [form, setForm] = useState<FormState>(prefill ?? DEFAULT);
   const [result, setResult] = useState<ExplainResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const autoRan = useRef(false);
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
+  async function runExplain(f: FormState): Promise<void> {
     setLoading(true);
     setError(null);
     try {
-      setResult(await api.explain(toRequest(form)));
+      setResult(await api.explain(toRequest(f)));
     } catch (err) {
       setError(err instanceof ApiError ? `${err.code}: ${err.message}` : 'Evaluation failed.');
       setResult(null);
@@ -74,6 +78,19 @@ export function ExplainDns() {
       setLoading(false);
     }
   }
+
+  // Arriving from the Steering Matrix pre-fills and immediately runs the evaluation.
+  useEffect(() => {
+    if (prefill && !autoRan.current) {
+      autoRan.current = true;
+      void runExplain(prefill);
+    }
+  }, [prefill]);
+
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    void runExplain(form);
+  };
 
   return (
     <div>

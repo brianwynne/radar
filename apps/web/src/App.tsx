@@ -4,6 +4,9 @@ import { AppShell } from './components/AppShell';
 import { Dashboard } from './pages/Dashboard';
 import { Ns1Explorer } from './pages/Ns1Explorer';
 import { ExplainDns } from './pages/ExplainDns';
+import { Steering } from './pages/Steering';
+import { Topology } from './pages/Topology';
+import { Activity, Settings } from './pages/Placeholders';
 
 export function App() {
   const { loading, unauthenticated, error } = useAuth();
@@ -28,8 +31,12 @@ export function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<Dashboard />} />
-        <Route path="explorer" element={<Ns1Explorer />} />
         <Route path="explain" element={<ExplainDns />} />
+        <Route path="steering" element={<Steering />} />
+        <Route path="topology" element={<Topology />} />
+        <Route path="explorer" element={<Ns1Explorer />} />
+        <Route path="activity" element={<Activity />} />
+        <Route path="settings" element={<Settings />} />
         <Route path="*" element={<div className="center-note">Page not found.</div>} />
       </Route>
     </Routes>

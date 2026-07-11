@@ -115,6 +115,20 @@ describe('DNS explain — evaluation contract', () => {
     await app.close();
   });
 
+  it('reports a PARTIAL evaluation with no definitive completeness for a record with an unsupported filter', async () => {
+    const app = await makeApp('VIEWING_ENGINEER');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/dns/explain',
+      payload: { ...explainBody, domain: 'vod.rte.ie' },
+    });
+    expect(res.statusCode).toBe(200);
+    const ev = res.json().evaluation;
+    expect(ev.complete).toBe(false);
+    expect(ev.unsupportedFilters).toContain('shed_load');
+    await app.close();
+  });
+
   it('validates the request body (400 on a missing scenario field)', async () => {
     const app = await makeApp('VIEWING_ENGINEER');
     const res = await app.inject({

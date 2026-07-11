@@ -116,13 +116,13 @@ describe('RBAC-aware navigation (cosmetic; API still enforces)', () => {
     stubApi(NOC);
     const noc = renderAt('/');
     await screen.findByText(/NOC Overview/i);
-    expect(screen.queryByRole('link', { name: 'Explain DNS' })).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Explain' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'NS1 Explorer' })).toBeNull();
     noc.unmount();
 
     stubApi(VE);
     renderAt('/');
-    expect(await screen.findByRole('link', { name: 'Explain DNS' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Explain' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'NS1 Explorer' })).toBeInTheDocument();
   });
 });
