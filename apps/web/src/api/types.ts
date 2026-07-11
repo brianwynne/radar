@@ -175,6 +175,26 @@ export interface ActivityResponse {
   items: ActivityItem[];
 }
 
+export interface AuditEventItem {
+  id: string;
+  occurredAt: string;
+  actorSubject?: string;
+  actorRoles: string[];
+  authenticationMethod?: string;
+  action: string;
+  resourceType?: string;
+  resourceKey?: string;
+  outcome: string;
+  correlationId?: string;
+  details: Record<string, unknown>;
+}
+
+export interface AuditListResponse {
+  provenance: { source: string; readOnly: boolean; retrievedAt: string };
+  count: number;
+  items: AuditEventItem[];
+}
+
 export interface SnapshotMetadata {
   mode?: string;
   synthetic?: boolean;

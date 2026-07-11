@@ -12,6 +12,7 @@ import { meRoutes } from './routes/me.js';
 import { ns1Routes } from './routes/ns1.js';
 import { dnsRoutes } from './routes/dns.js';
 import { snapshotRoutes } from './routes/snapshots.js';
+import { auditRoutes } from './routes/audit.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 import type { DatabaseHealthCheck } from './database/health.js';
@@ -106,6 +107,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
         { name: 'ns1', description: 'Read-only NS1 configuration (GET-only)' },
         { name: 'dns', description: 'DNS steering explanation (read-only evaluation)' },
         { name: 'snapshots', description: 'Configuration snapshots and version history' },
+        { name: 'audit', description: 'RADAR audit history (read-only)' },
       ],
       components: {
         securitySchemes: {
@@ -138,6 +140,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(ns1Routes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1 });
   await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1 });
   await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database });
+  await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());

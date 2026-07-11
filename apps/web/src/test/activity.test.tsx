@@ -20,60 +20,65 @@ function customFetch(handler: (path: string) => { status: number; body: unknown 
     }),
   );
 }
+const renderAppAt = (path: string) =>
+  render(
+    <MemoryRouter initialEntries={[path]}>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </MemoryRouter>,
+  );
 
-describe('Activity screen', () => {
-  it('shows a loading state, then rows rendered from the API', async () => {
+describe('Activity — RADAR audit tab (default)', () => {
+  it('shows RADAR audit events from /api/v1/audit, not hard-coded', async () => {
     stubApi(VE);
     renderAt('/activity');
-    expect(screen.getByText(/Loading/i)).toBeInTheDocument(); // a loading state is shown first
-    // Rows come from the API response (not a component fixture).
-    expect(await screen.findByText('brian@rte.ie')).toBeInTheDocument();
-    expect(screen.getByText('radar-read-only')).toBeInTheDocument();
-    expect(screen.getByText(/fixture-derived/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'RADAR Activity' })).toHaveClass('active');
+    expect(await screen.findByText('rte.ie/live.rte.ie/A')).toBeInTheDocument(); // resource from the API
+    expect(screen.getByText('dev')).toBeInTheDocument(); // authentication method
+    expect(screen.getByText('corr-1')).toBeInTheDocument(); // correlation id
+    // These are RADAR actions, not NS1 activity.
+    expect(screen.getByText('snapshot.create')).toBeInTheDocument();
+    expect(screen.queryByText('brian@rte.ie')).toBeNull();
   });
 
-  it('shows the mock/synthetic disclosure', async () => {
+  it('filters RADAR audit by action', async () => {
     stubApi(VE);
     renderAt('/activity');
-    expect(await screen.findByText(/MOCK MODE — data is SYNTHETIC/i)).toBeInTheDocument();
+    await screen.findByText('snapshot.create');
+    await userEvent.type(screen.getByPlaceholderText('snapshot.create'), 'auth.login');
+    expect(screen.queryByText('snapshot.create')).toBeNull();
+    expect(screen.getByText('auth.login')).toBeInTheDocument();
   });
 
-  it('filters rows by action', async () => {
+  it('empty and error states', async () => {
+    customFetch((p) => (p.endsWith('/api/v1/audit') ? { status: 200, body: { provenance: {}, count: 0, items: [] } } : { status: 200, body: {} }));
+    renderAppAt('/activity');
+    expect(await screen.findByText(/No RADAR audit events recorded/i)).toBeInTheDocument();
+    vi.unstubAllGlobals();
+    customFetch((p) => (p.endsWith('/api/v1/audit') ? { status: 502, body: { code: 'NS1_UPSTREAM_UNAVAILABLE', message: 'x' } } : { status: 200, body: {} }));
+    renderAppAt('/activity');
+    expect(await screen.findByText(/NS1_UPSTREAM_UNAVAILABLE/)).toBeInTheDocument();
+  });
+});
+
+describe('Activity — NS1 tab is separate and mock-labelled', () => {
+  it('switches to NS1 activity, keeping the mock/synthetic disclosure', async () => {
     stubApi(VE);
     renderAt('/activity');
-    await screen.findByText('brian@rte.ie');
-    await userEvent.type(screen.getByPlaceholderText('update / view'), 'view');
-    expect(screen.queryByText('brian@rte.ie')).toBeNull(); // the "update" row is filtered out
-    expect(screen.getByText('radar-read-only')).toBeInTheDocument(); // the "view" row remains
+    await screen.findByText('snapshot.create'); // RADAR tab first
+    await userEvent.click(screen.getByRole('button', { name: 'NS1 Activity' }));
+    expect(await screen.findByText('brian@rte.ie')).toBeInTheDocument(); // NS1 activity actor
+    expect(screen.getByText(/fixture-derived/i)).toBeInTheDocument(); // NS1 mapping note
+    // The global mock banner remains visible.
+    expect(screen.getByText(/MOCK MODE — data is SYNTHETIC/i)).toBeInTheDocument();
   });
+});
 
-  it('denies a NOC viewer (no audit.read)', async () => {
+describe('Activity — permission', () => {
+  it('denies a NOC viewer', async () => {
     stubApi(NOC);
     renderAt('/activity');
-    expect(await screen.findByText(/do not have permission to view the activity log/i)).toBeInTheDocument();
-  });
-
-  it('shows an empty state when there is no activity', async () => {
-    customFetch((p) => (p.endsWith('/ns1/activity') ? { status: 200, body: { provenance: {}, mappingNote: '', count: 0, items: [] } } : { status: 200, body: {} }));
-    render(
-      <MemoryRouter initialEntries={['/activity']}>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </MemoryRouter>,
-    );
-    expect(await screen.findByText(/No activity recorded/i)).toBeInTheDocument();
-  });
-
-  it('shows an error state on upstream failure', async () => {
-    customFetch((p) => (p.endsWith('/ns1/activity') ? { status: 502, body: { code: 'NS1_UPSTREAM_UNAVAILABLE', message: 'nope' } } : { status: 200, body: {} }));
-    render(
-      <MemoryRouter initialEntries={['/activity']}>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </MemoryRouter>,
-    );
-    expect(await screen.findByText(/NS1_UPSTREAM_UNAVAILABLE/)).toBeInTheDocument();
+    expect(await screen.findByText(/do not have permission to view activity/i)).toBeInTheDocument();
   });
 });

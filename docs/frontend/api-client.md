@@ -15,6 +15,7 @@ Requests are same-origin (`/api/...`), proxied to radar-api by Vite (dev) or ngi
 | `api.record(zone, domain, type)` | `GET …/:zone/:domain/:type` | `RecordResponse` |
 | `api.rawRecord(zone, domain, type)` | `GET …/:type/raw` | `RawRecordResponse` |
 | `api.activity(limit?)` | `GET /api/v1/ns1/activity` | `ActivityResponse` |
+| `api.audit(limit?)` | `GET /api/v1/audit` | `AuditListResponse` |
 | `api.explain(body)` | `POST /api/v1/dns/explain` | `ExplainResponse` |
 | `api.snapshots(zone, domain, type)` | `GET …/:type/snapshots` | `SnapshotHistory` |
 | `api.captureSnapshot(zone, domain, type, label?)` | `POST …/:type/snapshots` | `SnapshotCaptureResponse` |

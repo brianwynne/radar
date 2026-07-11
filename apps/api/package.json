@@ -12,8 +12,8 @@
     "migrate:dev": "tsx src/database/migrate.ts",
     "test": "vitest run --exclude \"**/*.integration.test.ts\"",
     "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
-    "test:integration": "vitest run integration",
-    "test:integration:postgres": "vitest run integration",
+    "test:integration": "vitest run integration --no-file-parallelism",
+    "test:integration:postgres": "vitest run integration --no-file-parallelism",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\""
   },

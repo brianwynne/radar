@@ -2,6 +2,7 @@
 // reverse proxy (prod) or the Vite dev proxy. No NS1 key ever reaches the browser.
 import type {
   ActivityResponse,
+  AuditListResponse,
   CompareCurrentResponse,
   CompareResponse,
   ExplainRequest,
@@ -66,6 +67,7 @@ export const api = {
   explain: (body: ExplainRequest) =>
     request<ExplainResponse>('/api/v1/dns/explain', { method: 'POST', body: JSON.stringify(body) }),
   activity: (limit?: number) => request<ActivityResponse>(`/api/v1/ns1/activity${limit ? `?limit=${limit}` : ''}`),
+  audit: (limit?: number) => request<AuditListResponse>(`/api/v1/audit${limit ? `?limit=${limit}` : ''}`),
   snapshots: (zone: string, domain: string, type: string) =>
     request<SnapshotHistory>(`/api/v1/ns1/zones/${enc(zone)}/${enc(domain)}/${enc(type)}/snapshots`),
   captureSnapshot: (zone: string, domain: string, type: string, label?: string) =>

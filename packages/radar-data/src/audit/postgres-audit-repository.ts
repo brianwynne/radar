@@ -78,7 +78,16 @@ export class PostgresAuditRepository implements AuditRepository {
     eq('action', query.action);
     eq('resource_type', query.resourceType);
     eq('resource_key', query.resourceKey);
+    eq('outcome', query.outcome);
     eq('correlation_id', query.correlationId);
+    if (query.occurredAfter !== undefined) {
+      params.push(query.occurredAfter);
+      where.push(`occurred_at >= $${params.length}`);
+    }
+    if (query.occurredBefore !== undefined) {
+      params.push(query.occurredBefore);
+      where.push(`occurred_at <= $${params.length}`);
+    }
     const limit = Math.min(Math.max(Math.trunc(query.limit ?? 100), 1), 500);
     params.push(limit);
     const clause = where.length > 0 ? `WHERE ${where.join(' AND ')}` : '';

@@ -97,7 +97,12 @@ export interface AuditQuery {
   action?: string;
   resourceType?: string;
   resourceKey?: string;
+  outcome?: string;
   correlationId?: string;
+  /** Only events at or after this instant. */
+  occurredAfter?: Date;
+  /** Only events at or before this instant. */
+  occurredBefore?: Date;
   /** Page size, 1..500 (default 100). */
   limit?: number;
 }

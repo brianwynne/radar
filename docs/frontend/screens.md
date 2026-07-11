@@ -10,7 +10,7 @@ come from `/api/v1/me`.
 | Steering | `/steering` | `steering.summary.read` | Effective steering matrix; rows generated from `/api/v1/dns/explain`. |
 | Topology | `/topology` | `topology.summary.read` | Configured delivery topology and the NS1/Cloudflare boundary. |
 | NS1 Explorer | `/explorer[/:zone[/:domain/:type]]` | `ns1.detail.read` (raw: `ns1.raw.read`) | Zone/record discovery + inspection; URL-addressable; normalised vs raw. |
-| Activity | `/activity` | `audit.read` | Read-only NS1 activity log (normalised) with a safe raw/details panel. |
+| Activity | `/activity` | `audit.read` | Two tabs: RADAR audit trail (`/api/v1/audit`) and the NS1 activity log. |
 | Settings | `/settings` | `mapping.manage` | Placeholder — future editable mappings/thresholds shown as disabled controls. |
 
 ## Role access (via permissions, not role-name checks)
@@ -60,12 +60,20 @@ other) and a field-change table — distinguishing the **stored snapshot** from 
 control — RADAR is read-only to NS1.
 
 ## Activity screen
-Read-only NS1 account activity log via `GET /api/v1/ns1/activity` (requires `audit.read`;
-a NOC viewer is denied — cosmetic notice plus API 403). A compact operational table (time,
-actor, action, resource, outcome, detail) with a per-row expandable **raw** panel (safe —
-credential-like fields are stripped server-side). Filter by actor/action/resource; shows
-the mock/synthetic banner, provenance, data freshness, and the fixture-derived mapping
-note. Loading, empty and error states. Mock events are never presented as live.
+Requires `audit.read` (NOC denied — cosmetic notice plus API 403). Two clearly separated
+tabs:
+
+- **RADAR Activity** (`GET /api/v1/audit`) — RADAR's own audit trail (e.g. snapshot
+  captures): time, actor, action, resource, outcome, authentication method, correlation id,
+  and an expandable safe details panel. Filter by actor / action / resource / outcome /
+  date range.
+- **NS1 Activity** (`GET /api/v1/ns1/activity`) — the NS1 account activity log
+  (normalised), with the mock/synthetic banner, provenance, and fixture-derived mapping
+  note preserved; per-row expandable raw panel (credential-like fields stripped
+  server-side).
+
+RADAR audit events and NS1 account activity are kept distinct. Loading, empty and error
+states on both. Mock events are never presented as live.
 
 ## Steering screen
 Columns: Scenario, Country, ASN, Network, Prefix condition, Identity source, Eligible

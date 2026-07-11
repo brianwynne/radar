@@ -145,6 +145,15 @@ export const COMPARE_CURRENT_BODY = {
   provenance: PROV,
 };
 
+export const AUDIT_LIST_BODY = {
+  provenance: { source: 'radar', readOnly: true, retrievedAt: '2026-07-07T15:42:00Z' },
+  count: 2,
+  items: [
+    { id: 'e-1', occurredAt: '2026-07-07T15:40:00Z', actorSubject: 'dev-engineer', actorRoles: ['ENGINEER'], authenticationMethod: 'dev', action: 'snapshot.create', resourceType: 'record', resourceKey: 'rte.ie/live.rte.ie/A', outcome: 'success', correlationId: 'corr-1', details: { snapshotId: '11111111-1111-1111-1111-111111111111', rawChecksum: 'sha256:aaaa' } },
+    { id: 'e-0', occurredAt: '2026-07-07T15:39:00Z', actorSubject: 'ops@rte.ie', actorRoles: ['ENGINEER'], authenticationMethod: 'oidc', action: 'auth.login', outcome: 'success', correlationId: 'corr-2', details: {} },
+  ],
+};
+
 export function stubApi(principal: Principal): void {
   vi.stubGlobal(
     'fetch',
@@ -156,6 +165,7 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;
+      else if (p.endsWith('/api/v1/audit')) body = AUDIT_LIST_BODY;
       else if (p.endsWith('/snapshots/compare')) body = COMPARE_BODY;
       else if (p.endsWith('/compare-current')) body = COMPARE_CURRENT_BODY;
       else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+\/snapshots$/.test(p)) {
