@@ -81,6 +81,17 @@ but authorisation has not — the principal has empty roles, `/me` returns 200 w
 permissions, and any permissioned route returns **403**. RADAR never assigns a default
 role (not even `NOC_VIEWER`).
 
+### Signing-algorithm policy
+
+- **RS256 is the only currently supported algorithm**, because Microsoft Entra ID is the
+  production provider and signs with RS256.
+- Supporting another provider that uses a different signing algorithm requires an
+  **explicit, reviewed change to the validator configuration** (the allow-list), not a
+  runtime toggle.
+- RADAR **must never accept an algorithm selected solely by an incoming token header**.
+  The validator's allow-list is authoritative; a token claiming a different `alg` is
+  rejected.
+
 ### Authentication precedence (never a fallback chain)
 
 1. `RADAR_DEV_AUTH=true` → only the fixed dev principal; OIDC is not attempted; the
