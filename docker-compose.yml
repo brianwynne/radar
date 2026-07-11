@@ -53,6 +53,10 @@ services:
       radar-migrate:
         condition: service_completed_successfully
     environment:
+      # This is a DEVELOPMENT stack: NODE_ENV=development permits RADAR_DEV_AUTH. The
+      # image itself bakes NODE_ENV=production, so production deployments keep dev-auth
+      # disabled (the config safety gate refuses to start dev-auth under production).
+      NODE_ENV: ${NODE_ENV:-development}
       RADAR_MODE: ${RADAR_MODE:-mock}
       DATABASE_URL: postgres://radar:radar@postgres:5432/radar
       API_PORT: "3000"

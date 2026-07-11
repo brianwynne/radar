@@ -88,11 +88,14 @@ jobs:
         run: docker run --rm --entrypoint sh radar-api:ci -c 'test ! -d /repo/node_modules/typescript'
       - name: TypeScript sources not shipped (dist only)
         run: docker run --rm --entrypoint sh radar-api:ci -c 'test ! -d /repo/apps/api/src'
-      - name: @radar/data migrations shipped for the runtime
+      - name: 'Data-package migrations shipped for the runtime'
         run: docker run --rm --entrypoint sh radar-api:ci -c 'test -f /repo/packages/radar-data/migrations/0001_init.sql'
       - name: Liveness smoke test (server starts; does not auto-migrate)
         run: |
+          # The image bakes NODE_ENV=production; run the smoke test as development so
+          # dev-auth is permitted (production forbids dev-auth by design).
           docker run -d --name smoke \
+            -e NODE_ENV='development' \
             -e DATABASE_URL='postgres://u:p@127.0.0.1:1/db' \
             -e RADAR_DEV_AUTH='true' \
             -p 3000:3000 radar-api:ci
