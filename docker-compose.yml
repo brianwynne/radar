@@ -76,10 +76,12 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/v1/health || exit 1"]
+      # 127.0.0.1 (not localhost — musl may resolve to ::1) and the real liveness path.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/v1/health/live || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 5
+      start_period: 10s
 
   radar-web:
     build:

@@ -101,7 +101,7 @@ jobs:
             -p 3000:3000 radar-api:ci
           ok=""
           for i in $(seq 1 20); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/v1/health/live || true)
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/v1/health/live || true)
             echo "attempt $i: $code"
             if [ "$code" = "200" ]; then ok=1; break; fi
             sleep 2
@@ -132,8 +132,8 @@ jobs:
       - name: Poll liveness then readiness (database reachable)
         run: |
           for i in $(seq 1 40); do
-            live=$(docker compose exec -T radar-api wget -qO- http://localhost:3000/api/v1/health/live || true)
-            ready=$(docker compose exec -T radar-api wget -qO- http://localhost:3000/api/v1/health/ready || true)
+            live=$(docker compose exec -T radar-api wget -qO- http://127.0.0.1:3000/api/v1/health/live || true)
+            ready=$(docker compose exec -T radar-api wget -qO- http://127.0.0.1:3000/api/v1/health/ready || true)
             echo "attempt $i: live=$live ready=$ready"
             if echo "$ready" | grep -q '"database":"ok"'; then
               echo "radar-api ready with database ok"
