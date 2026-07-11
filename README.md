@@ -17,7 +17,7 @@ pool or cache selection to NS1.
 ## Status (increment 1)
 
 **Built & tested now:**
-- `packages/domain` — the source-agnostic delivery model and the **NS1 Filter Chain
+- `packages/radar-engine` — the source-agnostic delivery model and the **NS1 Filter Chain
   evaluation engine** (the core). Pure, deterministic, 11 passing tests. Accounts for
   every answer at every supported stage; flags unsupported filters as partial evaluation;
   reports expected Weighted Shuffle distribution as **probabilistic**; distinguishes ECS
@@ -36,7 +36,7 @@ the running Docker Compose vertical slice and end-to-end test.
 ## Run the engine tests now
 
 ```bash
-cd packages/domain
+cd packages/radar-engine
 npm install
 npm test
 ```
@@ -61,7 +61,7 @@ docker compose up --build  # (radar-api / radar-web land next increment)
 ## Repository layout
 
 ```
-packages/domain/   Source-agnostic model + NS1 evaluation engine (tested)
+packages/radar-engine/   Source-agnostic model + NS1 evaluation engine (tested)
 apps/api/          radar-api — Fastify, OIDC, RBAC, Postgres, NS1 GET-only adapter (next)
 apps/web/          radar-web — React + Vite graph UI (next)
 apps/mock-ns1/     Dev-only fixture-backed NS1 stand-in (next)

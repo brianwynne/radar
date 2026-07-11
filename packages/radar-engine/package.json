@@ -1,8 +1,8 @@
 {
-  "name": "@radar/domain",
+  "name": "@radar/engine",
   "version": "0.1.0",
   "private": true,
-  "description": "RADAR source-agnostic delivery model and NS1 Filter Chain evaluation engine",
+  "description": "RADAR pure core — DNS identity model, NS1 Filter Chain evaluation, steering explanation and simulation. No React/Fastify/PostgreSQL/HTTP dependencies.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

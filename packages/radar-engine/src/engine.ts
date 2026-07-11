@@ -10,18 +10,15 @@
 // register with a confidence level; unsupported filters degrade the trace to
 // partial and stop RADAR claiming certainty (principle 5.4).
 
+import type { NS1Answer, NS1Record } from './ns1.js';
+import { deriveIdentity, type Confidence, type Scenario } from './identity.js';
 import type {
   AnswerOutcome,
-  Confidence,
-  DerivedIdentity,
   EvaluationResult,
   ExpectedDistribution,
   FilterStepTrace,
-  NS1Answer,
-  NS1Record,
-  Scenario,
   TracedAnswer,
-} from './types.js';
+} from './model.js';
 
 /** Internal working answer with a stable id carried across steps. */
 interface Work {
@@ -73,6 +70,11 @@ function asnMeta(v: unknown): number[] | 'feed' | undefined {
   if (isFeed(v)) return 'feed';
   if (Array.isArray(v)) return v.map((x) => Number(x));
   return [Number(v)];
+}
+/** Country meta as an upper-cased string list (feed-driven country → []). */
+function countryList(v: unknown): string[] {
+  const cs = listMeta(v);
+  return Array.isArray(cs) ? cs.map((s) => s.toUpperCase()) : [];
 }
 
 /** IPv4 CIDR containment (v1). IPv6 is not evaluated — flagged in the register. */
@@ -218,7 +220,7 @@ const geotarget_country: FilterFn = (input, _c, ctx) => {
     };
   }
   const country = ctx.country.toUpperCase();
-  const match = (w: Work) => (listMeta(w.raw.meta?.country) || []).map((s) => s.toUpperCase()).includes(country);
+  const match = (w: Work) => countryList(w.raw.meta?.country).includes(country);
   const matching = input.filter(match);
   const rest = input.filter((w) => !match(w));
   const output = [...matching, ...rest];
@@ -255,7 +257,7 @@ const geofence_country: FilterFn = (input, config, ctx) => {
   const output: Work[] = [];
   const outcomes: AnswerOutcome[] = [];
   for (const w of input) {
-    const cs = (listMeta(w.raw.meta?.country) || []).map((s) => s.toUpperCase());
+    const cs = countryList(w.raw.meta?.country);
     if (cs.length === 0) {
       if (removeNoLoc) {
         outcomes.push({ answerId: w.id, disposition: 'removed', reason: 'no country metadata & remove_no_location=true' });
@@ -352,47 +354,6 @@ const REGISTRY: Record<string, FilterFn> = {
   weighted_shuffle,
   select_first_n,
 };
-
-/* --------------------------------------------------------------- identity */
-
-export function deriveIdentity(record: NS1Record, ctx: Scenario): DerivedIdentity {
-  const notes: string[] = [];
-  let sourceUsed: 'ecs' | 'resolver';
-  let evaluatedAddress: string;
-
-  if (ctx.ecsPresent && record.use_client_subnet === false) {
-    sourceUsed = 'resolver';
-    evaluatedAddress = ctx.resolverIp;
-    notes.push('ECS supplied but record use_client_subnet=false → NS1 evaluates on the resolver IP.');
-  } else if (ctx.ecsPresent && ctx.ecsPrefix) {
-    sourceUsed = 'ecs';
-    evaluatedAddress = ctx.ecsPrefix;
-    notes.push('EDNS Client Subnet present and honoured (use_client_subnet not disabled).');
-  } else {
-    sourceUsed = 'resolver';
-    evaluatedAddress = ctx.resolverIp;
-    notes.push('No ECS: country/ASN describe the recursive resolver, not necessarily the viewer.');
-  }
-
-  const hasGeo = ctx.country !== undefined && ctx.asn !== undefined;
-  let confidence: Confidence;
-  if (!hasGeo) confidence = 'low';
-  else confidence = sourceUsed === 'ecs' ? 'high' : 'medium';
-
-  if (ctx.country === undefined || ctx.asn === undefined)
-    notes.push('Country/ASN not fully resolved for the evaluated address (a geo/ASN resolution adapter replaces the supplied values in a later version).');
-
-  return {
-    sourceUsed,
-    evaluatedAddress,
-    country: ctx.country,
-    asn: ctx.asn,
-    network: ctx.network,
-    prefix: ctx.ecsPresent ? ctx.ecsPrefix : ctx.clientPrefix,
-    confidence,
-    notes,
-  };
-}
 
 /* ---------------------------------------------------------------- evaluate */
 
