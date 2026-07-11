@@ -122,13 +122,13 @@ jobs:
           mkdir -p secrets
           echo "ci-not-a-real-key" > secrets/ns1_api_key.txt
       - name: Build images
-        run: docker compose build postgres radar-migrate radar-api
+        run: docker compose build postgres radar-migrate radar-api radar-web
       - name: Start database
         run: docker compose up -d postgres
       - name: Run the migration job (must exit zero)
         run: docker compose run --rm radar-migrate
-      - name: Start the API
-        run: docker compose up -d radar-api
+      - name: Start the API and web
+        run: docker compose up -d radar-api radar-web
       - name: Poll liveness then readiness (database reachable)
         run: |
           for i in $(seq 1 40); do
@@ -145,6 +145,20 @@ jobs:
           docker compose ps
           docker compose logs --no-color
           exit 1
+      - name: Smoke-test the web SPA and its API proxy
+        run: |
+          ok=""
+          for i in $(seq 1 20); do
+            html=$(curl -fsS http://127.0.0.1:8080/ || true)
+            proxied=$(curl -fsS http://127.0.0.1:8080/api/v1/health/live || true)
+            echo "attempt $i: proxied=$proxied"
+            if echo "$html" | grep -q 'id="root"' && echo "$proxied" | grep -q '"live"'; then
+              echo "radar-web serves the SPA and proxies /api"; ok=1; break
+            fi
+            sleep 3
+          done
+          if [ -z "$ok" ]; then docker compose ps; docker compose logs --no-color radar-web; fi
+          test -n "$ok"
       - name: Migration job is idempotent on re-run
         run: docker compose run --rm radar-migrate | tee /dev/stderr | grep -q "No pending migrations"
       - name: Tear down with volumes removed
