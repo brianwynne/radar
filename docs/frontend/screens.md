@@ -10,7 +10,7 @@ come from `/api/v1/me`.
 | Steering | `/steering` | `steering.summary.read` | Effective steering matrix; rows generated from `/api/v1/dns/explain`. |
 | Topology | `/topology` | `topology.summary.read` | Configured delivery topology and the NS1/Cloudflare boundary. |
 | NS1 Explorer | `/explorer[/:zone[/:domain/:type]]` | `ns1.detail.read` (raw: `ns1.raw.read`) | Zone/record discovery + inspection; URL-addressable; normalised vs raw. |
-| Activity | `/activity` | `audit.read` | Placeholder — NS1 activity log + RADAR audit (not surfaced in v1). |
+| Activity | `/activity` | `audit.read` | Read-only NS1 activity log (normalised) with a safe raw/details panel. |
 | Settings | `/settings` | `mapping.manage` | Placeholder — future editable mappings/thresholds shown as disabled controls. |
 
 ## Role access (via permissions, not role-name checks)
@@ -42,6 +42,14 @@ see its records (`GET /ns1/zones/:zone`), and select one — the selection is
 record" button links back. Recently-viewed records are offered as quick chips
 (localStorage, read-only client state). Normalised vs Raw views; **Raw is gated on
 `ns1.raw.read`**. Loading, empty (no records) and error states throughout.
+
+## Activity screen
+Read-only NS1 account activity log via `GET /api/v1/ns1/activity` (requires `audit.read`;
+a NOC viewer is denied — cosmetic notice plus API 403). A compact operational table (time,
+actor, action, resource, outcome, detail) with a per-row expandable **raw** panel (safe —
+credential-like fields are stripped server-side). Filter by actor/action/resource; shows
+the mock/synthetic banner, provenance, data freshness, and the fixture-derived mapping
+note. Loading, empty and error states. Mock events are never presented as live.
 
 ## Steering screen
 Columns: Scenario, Country, ASN, Network, Prefix condition, Identity source, Eligible

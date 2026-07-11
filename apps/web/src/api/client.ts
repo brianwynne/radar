@@ -1,6 +1,7 @@
 // Thin typed client over the radar-api REST routes. Same-origin: /api is served by the
 // reverse proxy (prod) or the Vite dev proxy. No NS1 key ever reaches the browser.
 import type {
+  ActivityResponse,
   ExplainRequest,
   ExplainResponse,
   Ns1Status,
@@ -59,4 +60,5 @@ export const api = {
     request<RawRecordResponse>(`/api/v1/ns1/zones/${enc(zone)}/${enc(domain)}/${enc(type)}/raw`),
   explain: (body: ExplainRequest) =>
     request<ExplainResponse>('/api/v1/dns/explain', { method: 'POST', body: JSON.stringify(body) }),
+  activity: (limit?: number) => request<ActivityResponse>(`/api/v1/ns1/activity${limit ? `?limit=${limit}` : ''}`),
 };

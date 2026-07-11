@@ -155,3 +155,22 @@ export interface RawRecordResponse {
   provenance: Provenance;
   raw: Record<string, unknown>;
 }
+
+export interface ActivityItem {
+  id?: string;
+  occurredAt?: string;
+  actor?: string;
+  action?: string;
+  resourceType?: string;
+  resourceKey?: string;
+  outcome?: string;
+  detail?: string;
+  raw: Record<string, unknown>;
+}
+
+export interface ActivityResponse {
+  provenance: Provenance;
+  mappingNote: string;
+  count: number;
+  items: ActivityItem[];
+}

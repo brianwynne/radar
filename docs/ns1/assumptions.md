@@ -38,6 +38,14 @@ Monitoring jobs, data sources, feeds, notifier lists, filter-metadata definition
 detailed account permissions: exact paths/schemas unconfirmed. Modelled as **optional**
 methods on the read client, disabled until a captured response verifies them.
 
+**Activity log fields (`GET /v1/account/activity`) — FIXTURE-PENDING.** The endpoint is
+verified (§4.4) but its exact wire fields are not. `apps/api/src/ns1/activity.ts`
+normalises only plausible, confirmed-shaped fields (timestamp, actor/API-key **identity**,
+action, resource type/key, outcome, safe detail) by trying candidate key names; it invents
+no semantics. The original entry is preserved under each item's `raw`, with credential-like
+keys stripped. The response carries a `mappingNote` labelling the mapping fixture-derived.
+Tighten the mapping once a real (sanitised) activity capture is checked in.
+
 ## ECS / identity (guide §9 — verified; engine matches)
 
 - Address selection: ECS enabled on the record **and** resolver sends ECS → filters use

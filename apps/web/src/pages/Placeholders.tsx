@@ -1,23 +1,6 @@
 // Honest placeholders for navigation destinations not yet built. They state clearly that
 // the feature is not implemented in v1 rather than showing invented data.
 
-export function Activity() {
-  return (
-    <div>
-      <div className="page-head">
-        <h1>Activity</h1>
-        <p>NS1 activity log and RADAR audit trail.</p>
-      </div>
-      <div className="card">
-        <div className="notice info">
-          Not yet surfaced in v1. This screen will show the NS1 account activity log (GET /v1/account/activity) and
-          RADAR&apos;s own audit events. No activity data is displayed until those sources are wired.
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function Settings() {
   return (
     <div>

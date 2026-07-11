@@ -98,6 +98,16 @@ export const ZONE_BODY = {
 export const RECORD_BODY = { id: 'demo', zone: 'rte.ie', domain: 'live.rte.ie', type: 'A', ttl: 30, use_client_subnet: true, answers: [{ id: 'ans-realta', answer: ['192.0.2.10'] }], filters: [{ filter: 'up' }] };
 export const RAW_BODY = { ...RECORD_BODY, _radar_note: 'SYNTHETIC / MOCK NS1 data — not real RTÉ or NS1 configuration.' };
 
+export const ACTIVITY_BODY = {
+  provenance: PROV,
+  mappingNote: 'Field mapping is fixture-derived; unconfirmed NS1 fields appear only under raw.',
+  count: 2,
+  items: [
+    { id: 'act-1', occurredAt: '2026-07-01T09:15:00Z', actor: 'brian@rte.ie', action: 'update', resourceType: 'record', resourceKey: 'live.rte.ie/A', outcome: 'success', detail: 'weight adjusted', raw: { id: 'act-1' } },
+    { id: 'act-2', occurredAt: '2026-07-01T08:40:00Z', actor: 'radar-read-only', action: 'view', resourceType: 'zone', resourceKey: 'rte.ie', outcome: 'success', raw: { id: 'act-2' } },
+  ],
+};
+
 export function stubApi(principal: Principal): void {
   vi.stubGlobal(
     'fetch',
@@ -108,6 +118,7 @@ export function stubApi(principal: Principal): void {
       if (p.endsWith('/api/v1/me')) body = principal;
       else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
+      else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;
       else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+\/raw$/.test(p)) body = { provenance: PROV, raw: RAW_BODY };
       else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+$/.test(p)) body = { provenance: PROV, record: RECORD_BODY };
       else if (/\/ns1\/zones\/[^/]+$/.test(p)) body = { provenance: PROV, zone: ZONE_BODY };

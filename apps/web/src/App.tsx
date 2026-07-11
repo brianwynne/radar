@@ -6,7 +6,8 @@ import { Ns1Explorer } from './pages/Ns1Explorer';
 import { ExplainDns } from './pages/ExplainDns';
 import { Steering } from './pages/Steering';
 import { Topology } from './pages/Topology';
-import { Activity, Settings } from './pages/Placeholders';
+import { Activity } from './pages/Activity';
+import { Settings } from './pages/Placeholders';
 
 export function App() {
   const { loading, unauthenticated, error } = useAuth();

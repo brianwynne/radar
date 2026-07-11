@@ -95,8 +95,10 @@ export const RECORD_VOD_RTE_IE_A: unknown = {
   regions: {},
 };
 
-/** GET /v1/account/activity */
+/** GET /v1/account/activity — synthetic entries. Exact NS1 wire fields are FIXTURE-
+ *  PENDING; these use plausible names so the normaliser has something to map. */
 export const ACTIVITY: unknown = [
-  { _radar_note: SYNTHETIC, id: 'act-1', action: 'update', resource_type: 'record', resource_id: 'live.rte.ie/A' },
-  { _radar_note: SYNTHETIC, id: 'act-2', action: 'update', resource_type: 'zone', resource_id: 'rte.ie' },
+  { _radar_note: SYNTHETIC, id: 'act-1', timestamp: '2026-07-01T09:15:00Z', user: 'brian@rte.ie', action: 'update', resource_type: 'record', resource_id: 'live.rte.ie/A', status: 'success', note: 'weight adjusted' },
+  { _radar_note: SYNTHETIC, id: 'act-2', timestamp: '2026-07-01T08:40:00Z', api_key_name: 'radar-read-only', action: 'view', resource_type: 'zone', resource_id: 'rte.ie', status: 'success' },
+  { _radar_note: SYNTHETIC, id: 'act-3', timestamp: '2026-06-30T22:05:00Z', user: 'ops@rte.ie', action: 'update', resource_type: 'record', resource_id: 'vod.rte.ie/A', status: 'success', note: 'filter chain edited' },
 ];

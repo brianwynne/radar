@@ -2,12 +2,21 @@
 // route and no generic proxy. Every payload carries provenance identifying the mode and,
 // in mock mode, that the data is synthetic/non-production. RBAC is enforced server-side.
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
+import { z } from 'zod';
 import type { Ns1ReadClient } from '../ns1/client.js';
 import type { Ns1Config } from '../ns1/config.js';
 import { Ns1Error } from '../ns1/errors.js';
 import { normaliseRecord } from '../ns1/normalise.js';
+import { filterActivity, normaliseActivity } from '../ns1/activity.js';
 import { requirePermission } from '../auth/guards.js';
 import { buildProvenance, sendNs1Error } from './ns1-helpers.js';
+
+const activityQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(500).optional(),
+  actor: z.string().max(200).optional(),
+  action: z.string().max(200).optional(),
+  resource: z.string().max(200).optional(),
+});
 
 export interface Ns1RouteOptions {
   client: Ns1ReadClient;
@@ -75,6 +84,44 @@ export const ns1Routes: FastifyPluginAsync<Ns1RouteOptions> = async (app, opts) 
       return read(req, reply, ns1, `/v1/zones/${zone}/${domain}/${type}`, async () => ({
         raw: await client.getRecord(zone, domain, type, req.id),
       }));
+    },
+  );
+
+  // Read-only NS1 activity log. Normalised (fixture-derived) with credential-like fields
+  // stripped; the original entry is preserved under each item's `raw`.
+  app.get(
+    '/activity',
+    {
+      preHandler: requirePermission('audit.read'),
+      schema: {
+        tags: ['ns1'],
+        summary: 'Read-only NS1 account activity log',
+        description:
+          'GET /v1/account/activity, normalised. Field mapping is fixture-derived; unconfirmed fields appear only under each item\'s raw object. Never exposes the NS1 key, tokens, headers or secrets. Optional filters: limit, actor, action, resource.',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    async (req, reply) => {
+      const parsed = activityQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        const message = parsed.error.issues.map((i) => `${i.path.join('.') || '(query)'}: ${i.message}`).join('; ');
+        return reply.code(400).send({ code: 'INVALID_REQUEST', message, correlationId: req.id });
+      }
+      const { limit, actor, action, resource } = parsed.data;
+      const retrievedAt = new Date().toISOString();
+      try {
+        const raw = await client.getActivity({ limit }, req.id);
+        const items = filterActivity(normaliseActivity(raw), { actor, action, resource });
+        return {
+          provenance: buildProvenance(ns1, '/v1/account/activity', retrievedAt),
+          mappingNote: "Field mapping is fixture-derived; unconfirmed NS1 fields appear only under each item's raw object.",
+          count: items.length,
+          items,
+        };
+      } catch (err) {
+        if (err instanceof Ns1Error) return sendNs1Error(req, reply, err);
+        throw err;
+      }
     },
   );
 };
