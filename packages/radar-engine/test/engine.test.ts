@@ -33,20 +33,20 @@ const share = (r: ReturnType<typeof evaluate>, platform: string): number | undef
 describe('identity derivation (guide §9)', () => {
   it('uses ECS when present and honoured, with high confidence', () => {
     const r = evaluate(record, irishEcs);
-    expect(r.identity.sourceUsed).toBe('ecs');
+    expect(r.identity.source).toBe('ecs');
     expect(r.identity.evaluatedAddress).toBe('185.2.100.0/24');
     expect(r.identity.confidence).toBe('high');
   });
 
   it('falls back to resolver IP and flags it when ECS is absent', () => {
     const r = evaluate(record, { ...irishEcs, ecsPresent: false, ecsPrefix: undefined });
-    expect(r.identity.sourceUsed).toBe('resolver');
+    expect(r.identity.source).toBe('resolver');
     expect(r.identity.notes.join(' ')).toMatch(/resolver/i);
   });
 
   it('ignores ECS when the record disables use_client_subnet', () => {
     const r = evaluate({ ...record, use_client_subnet: false }, irishEcs);
-    expect(r.identity.sourceUsed).toBe('resolver');
+    expect(r.identity.source).toBe('resolver');
     expect(r.identity.notes.join(' ')).toMatch(/use_client_subnet=false/);
   });
 });

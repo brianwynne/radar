@@ -467,7 +467,7 @@ function buildExplanation(
   unsupportedFilters: string[],
 ): string {
   const parts: string[] = [];
-  const src = identity.sourceUsed === 'ecs'
+  const src = identity.source === 'ecs'
     ? `the EDNS Client Subnet ${identity.evaluatedAddress}`
     : `the resolver IP ${identity.evaluatedAddress}`;
   const geo = [identity.country && `country ${identity.country}`, identity.asn && `ASN ${identity.asn}`].filter(Boolean).join(', ');

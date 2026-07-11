@@ -37,7 +37,7 @@ export interface Scenario extends DnsRequest {
 
 /** What was actually evaluated, and how it was derived (brief §8). */
 export interface DerivedIdentity {
-  sourceUsed: IdentitySource;
+  source: IdentitySource;
   evaluatedAddress: string;
   country?: string;
   asn?: number;
@@ -52,31 +52,31 @@ export interface DerivedIdentity {
  *  the country/ASN attributed to it. */
 export function deriveIdentity(record: NS1Record, ctx: Scenario): DerivedIdentity {
   const notes: string[] = [];
-  let sourceUsed: IdentitySource;
+  let source: IdentitySource;
   let evaluatedAddress: string;
 
   if (ctx.ecsPresent && record.use_client_subnet === false) {
-    sourceUsed = 'resolver';
+    source = 'resolver';
     evaluatedAddress = ctx.resolverIp;
     notes.push('ECS supplied but record use_client_subnet=false → NS1 evaluates on the resolver IP.');
   } else if (ctx.ecsPresent && ctx.ecsPrefix) {
-    sourceUsed = 'ecs';
+    source = 'ecs';
     evaluatedAddress = ctx.ecsPrefix;
     notes.push('EDNS Client Subnet present and honoured (use_client_subnet not disabled).');
   } else {
-    sourceUsed = 'resolver';
+    source = 'resolver';
     evaluatedAddress = ctx.resolverIp;
     notes.push('No ECS: country/ASN describe the recursive resolver, not necessarily the viewer.');
   }
 
   const hasGeo = ctx.country !== undefined && ctx.asn !== undefined;
-  const confidence: Confidence = !hasGeo ? 'low' : sourceUsed === 'ecs' ? 'high' : 'medium';
+  const confidence: Confidence = !hasGeo ? 'low' : source === 'ecs' ? 'high' : 'medium';
 
   if (!hasGeo)
     notes.push('Country/ASN not fully resolved for the evaluated address (a geo/ASN resolution adapter replaces the supplied values in a later version).');
 
   return {
-    sourceUsed,
+    source,
     evaluatedAddress,
     country: ctx.country,
     asn: ctx.asn,
