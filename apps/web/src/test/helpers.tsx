@@ -133,6 +133,17 @@ export const COMPARE_BODY = {
   diffCount: 1,
   diff: [{ path: 'answers[0].meta.weight', kind: 'changed', before: 70, after: 60 }],
 };
+export const COMPARE_CURRENT_BODY = {
+  snapshot: { id: SNAPSHOT_SUMMARY.id, label: 'before change', capturedAt: '2026-07-01T10:00:01Z', retrievedAt: '2026-07-01T10:00:00Z', sourceMode: 'mock', synthetic: true, rawChecksum: 'sha256:aaaa', structuralChecksum: 'sha256:bbbb' },
+  current: { retrievedAt: '2026-07-07T15:42:00Z', sourceMode: 'mock', synthetic: true, rawChecksum: 'sha256:cccc', structuralChecksum: 'sha256:dddd' },
+  rawChecksumEqual: false,
+  structuralChecksumEqual: false,
+  identical: false,
+  summary: { ttlChanged: true, ecsChanged: false, answersAdded: 0, answersRemoved: 1, answersChanged: 2, filtersAdded: 0, filtersRemoved: 0, filtersChanged: 1, filtersReordered: false, otherChanges: 1 },
+  changes: [{ path: 'ttl', kind: 'changed', before: 30, after: 60 }, { path: 'answers[0].meta.weight', kind: 'changed', before: 70, after: 60 }],
+  warnings: ['Current record was read in mock mode (synthetic, non-production).'],
+  provenance: PROV,
+};
 
 export function stubApi(principal: Principal): void {
   vi.stubGlobal(
@@ -146,6 +157,7 @@ export function stubApi(principal: Principal): void {
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;
       else if (p.endsWith('/snapshots/compare')) body = COMPARE_BODY;
+      else if (p.endsWith('/compare-current')) body = COMPARE_CURRENT_BODY;
       else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+\/snapshots$/.test(p)) {
         if (init?.method === 'POST') {
           status = 201;

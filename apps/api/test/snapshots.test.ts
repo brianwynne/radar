@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import type { Database } from '../src/database/repositories.js';
+import { diffJson, summariseRecordDiff } from '../src/ns1/snapshot.js';
 import type { AuditEvent, AuditRepository, ConfigurationSnapshot, SnapshotRepository } from '@radar/data';
 
 /** In-memory database double (route-logic tests; real persistence is covered by the
@@ -133,5 +134,76 @@ describe('snapshots — compare', () => {
     expect((await app.inject({ method: 'POST', url: '/api/v1/snapshots/compare', payload: { a: 'x' } })).statusCode).toBe(400);
     const missing = await app.inject({ method: 'POST', url: '/api/v1/snapshots/compare', payload: { a: a.id, b: '00000000-0000-0000-0000-0000000000ff' } });
     expect(missing.statusCode).toBe(404);
+  });
+});
+
+describe('summariseRecordDiff (record-aware classification)', () => {
+  const base = {
+    ttl: 30,
+    use_client_subnet: true,
+    answers: [{ id: 'a', answer: ['1'] }, { id: 'b', answer: ['2'] }],
+    filters: [{ filter: 'up' }, { filter: 'weighted_shuffle' }],
+  };
+  const sum = (before: unknown, after: unknown) => summariseRecordDiff(before, after, diffJson(before, after));
+
+  it('identical → all zero/false', () => {
+    expect(sum(base, base)).toEqual({ ttlChanged: false, ecsChanged: false, answersAdded: 0, answersRemoved: 0, answersChanged: 0, filtersAdded: 0, filtersRemoved: 0, filtersChanged: 0, filtersReordered: false, otherChanges: 0 });
+  });
+  it('detects a TTL change', () => expect(sum(base, { ...base, ttl: 60 }).ttlChanged).toBe(true));
+  it('detects an ECS-setting change', () => expect(sum(base, { ...base, use_client_subnet: false }).ecsChanged).toBe(true));
+  it('detects an added answer', () => expect(sum(base, { ...base, answers: [...base.answers, { id: 'c', answer: ['3'] }] }).answersAdded).toBe(1));
+  it('detects a removed answer', () => expect(sum(base, { ...base, answers: [base.answers[0]] }).answersRemoved).toBe(1));
+  it('detects a changed answer (metadata)', () => expect(sum(base, { ...base, answers: [{ id: 'a', answer: ['1'], meta: { weight: 5 } }, base.answers[1]] }).answersChanged).toBe(1));
+  it('detects an added filter', () => expect(sum(base, { ...base, filters: [...base.filters, { filter: 'select_first_n' }] }).filtersAdded).toBe(1));
+  it('detects a removed filter', () => expect(sum(base, { ...base, filters: [base.filters[0]] }).filtersRemoved).toBe(1));
+  it('detects a reordered filter chain', () => {
+    const s = sum(base, { ...base, filters: [base.filters[1], base.filters[0]] });
+    expect(s.filtersReordered).toBe(true);
+    expect(s.filtersAdded).toBe(0);
+    expect(s.filtersRemoved).toBe(0);
+  });
+  it('detects a filter config change', () => expect(sum(base, { ...base, filters: [{ filter: 'up' }, { filter: 'weighted_shuffle', config: { x: 1 } }] }).filtersChanged).toBe(1));
+  it('classifies an unknown-field change as a structural (other) change', () => expect(sum(base, { ...base, regions: { eu: {} } }).otherChanges).toBeGreaterThan(0));
+});
+
+describe('snapshots — compare-current', () => {
+  const seed = (db: Database, canonicalPayload: unknown, structuralChecksum: string) =>
+    db.snapshots.create({ sourceSystem: 'ns1', resourceKind: 'record', resourceKey: 'rte.ie/live.rte.ie/A', retrievedAt: new Date(), rawPayload: {}, canonicalPayload, rawChecksum: 'sha256:seed', structuralChecksum, metadata: { mode: 'mock', synthetic: true } });
+
+  it('403 without snapshot.read, 401 unauthenticated, 404 for unknown', async () => {
+    const dummy = '00000000-0000-0000-0000-0000000000ff';
+    expect((await (await makeApp('NOC_VIEWER', fakeDatabase().db)).inject({ method: 'POST', url: `/api/v1/snapshots/${dummy}/compare-current` })).statusCode).toBe(403);
+    expect((await (await makeApp(null, fakeDatabase().db)).inject({ method: 'POST', url: `/api/v1/snapshots/${dummy}/compare-current` })).statusCode).toBe(401);
+    expect((await (await makeApp('VIEWING_ENGINEER', fakeDatabase().db)).inject({ method: 'POST', url: `/api/v1/snapshots/${dummy}/compare-current` })).statusCode).toBe(404);
+  });
+
+  it('fetches the current record server-side; identical when unchanged; ignores any submitted payload; creates no new snapshot', async () => {
+    const { db, snaps } = fakeDatabase();
+    const app = await makeApp('ENGINEER', db);
+    const id = (await app.inject({ method: 'POST', url: CAP })).json().snapshot.id; // capture the current record
+    const res = await app.inject({ method: 'POST', url: `/api/v1/snapshots/${id}/compare-current`, payload: { current: { spoofed: true } } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.identical).toBe(true);
+    expect(body.rawChecksumEqual).toBe(true); // server-fetched, not from the submitted body
+    expect(body.current.sourceMode).toBe('mock');
+    expect(body.current.synthetic).toBe(true);
+    expect(body.summary).toMatchObject({ answersAdded: 0, answersRemoved: 0, filtersReordered: false });
+    expect(snaps).toHaveLength(1); // no new snapshot created by comparison
+  });
+
+  it('detects changes and identical=false when the snapshot differs from the current record', async () => {
+    const { db } = fakeDatabase();
+    const app = await makeApp('VIEWING_ENGINEER', db);
+    const snap = await seed(db, { ttl: 999, use_client_subnet: false, answers: [], filters: [] }, 'sha256:different');
+    const res = await app.inject({ method: 'POST', url: `/api/v1/snapshots/${snap.id}/compare-current` });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.identical).toBe(false);
+    expect(body.summary.ttlChanged).toBe(true);
+    expect(body.summary.ecsChanged).toBe(true);
+    expect(body.summary.answersAdded).toBeGreaterThan(0); // current has answers; the seed had none
+    expect(body.summary.filtersAdded).toBeGreaterThan(0);
+    expect(body.snapshot.id).toBe(snap.id);
   });
 });

@@ -20,6 +20,7 @@ Requests are same-origin (`/api/...`), proxied to radar-api by Vite (dev) or ngi
 | `api.captureSnapshot(zone, domain, type, label?)` | `POST …/:type/snapshots` | `SnapshotCaptureResponse` |
 | `api.snapshot(id)` | `GET /api/v1/snapshots/:id` | `{ snapshot }` |
 | `api.compareSnapshots(a, b)` | `POST /api/v1/snapshots/compare` | `CompareResponse` |
+| `api.compareCurrent(id)` | `POST /api/v1/snapshots/:id/compare-current` | `CompareCurrentResponse` |
 
 ## Errors
 Non-2xx responses throw `ApiError { status, code, message }`. Callers map:

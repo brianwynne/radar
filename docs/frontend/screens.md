@@ -44,9 +44,20 @@ record" button links back. Recently-viewed records are offered as quick chips
 `ns1.raw.read`**. Loading, empty (no records) and error states throughout.
 
 The selected record also shows a **Snapshots** panel (`snapshot.read`): version history
-(captured time, creator, label, checksum, synthetic tag), a **Capture snapshot** action
-(`snapshot.create` — reads the record and persists it; RADAR never writes to NS1), and a
-**Compare** of any two snapshots showing a field-level diff (or "identical").
+(captured time — links to detail — creator, label, checksum, synthetic tag), a **Capture
+snapshot** action (`snapshot.create` — reads the record and persists it; RADAR never writes
+to NS1), and a **Compare** of any two snapshots showing a field-level diff (or "identical").
+
+## Snapshot detail (`/snapshots/:snapshotId`, `snapshot.read`)
+Full metadata (resource identity, creator, capture/retrieval time, source mode, synthetic
+status, raw + structural checksums, warnings) and tabs: **Summary**, **Canonical payload**,
+and **Raw payload** (raw requires `ns1.raw.read`; canonical requires `snapshot.read`).
+**Compare with current** fetches the live/mock record server-side and shows an
+identical/changed state, per-dimension summary cards (TTL, ECS, answers, filters + reorder,
+other) and a field-change table — distinguishing the **stored snapshot** from the
+**current record** with mock/synthetic provenance on both. A prominent notice states
+**"Comparison only — no NS1 change has been made."** There is **no Restore/Apply/Rollback**
+control — RADAR is read-only to NS1.
 
 ## Activity screen
 Read-only NS1 account activity log via `GET /api/v1/ns1/activity` (requires `audit.read`;

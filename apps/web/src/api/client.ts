@@ -2,6 +2,7 @@
 // reverse proxy (prod) or the Vite dev proxy. No NS1 key ever reaches the browser.
 import type {
   ActivityResponse,
+  CompareCurrentResponse,
   CompareResponse,
   ExplainRequest,
   ExplainResponse,
@@ -75,4 +76,6 @@ export const api = {
   snapshot: (id: string) => request<{ snapshot: SnapshotDetail }>(`/api/v1/snapshots/${enc(id)}`),
   compareSnapshots: (a: string, b: string) =>
     request<CompareResponse>('/api/v1/snapshots/compare', { method: 'POST', body: JSON.stringify({ a, b }) }),
+  compareCurrent: (id: string) =>
+    request<CompareCurrentResponse>(`/api/v1/snapshots/${enc(id)}/compare-current`, { method: 'POST', body: JSON.stringify({}) }),
 };

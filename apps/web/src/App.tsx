@@ -7,6 +7,7 @@ import { ExplainDns } from './pages/ExplainDns';
 import { Steering } from './pages/Steering';
 import { Topology } from './pages/Topology';
 import { Activity } from './pages/Activity';
+import { SnapshotDetail } from './pages/SnapshotDetail';
 import { Settings } from './pages/Placeholders';
 
 export function App() {
@@ -39,6 +40,7 @@ export function App() {
         <Route path="explorer/:zone" element={<Ns1Explorer />} />
         <Route path="explorer/:zone/:domain/:type" element={<Ns1Explorer />} />
         <Route path="activity" element={<Activity />} />
+        <Route path="snapshots/:snapshotId" element={<SnapshotDetail />} />
         <Route path="settings" element={<Settings />} />
         <Route path="*" element={<div className="center-note">Page not found.</div>} />
       </Route>

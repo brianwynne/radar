@@ -9,7 +9,7 @@ import type { Ns1ReadClient } from '../ns1/client.js';
 import type { Ns1Config } from '../ns1/config.js';
 import type { Database } from '../database/repositories.js';
 import { Ns1Error } from '../ns1/errors.js';
-import { canonicalise, diffJson, rawChecksum, structuralChecksum } from '../ns1/snapshot.js';
+import { canonicalise, diffJson, rawChecksum, structuralChecksum, summariseRecordDiff } from '../ns1/snapshot.js';
 import { requirePermission } from '../auth/guards.js';
 import { buildProvenance, sendNs1Error } from './ns1-helpers.js';
 
@@ -137,5 +137,71 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
     const diff = diffJson(a.canonicalPayload, b.canonicalPayload);
     const identical = a.structuralChecksum !== undefined && a.structuralChecksum === b.structuralChecksum;
     return { a: summary(a), b: summary(b), identical, diffCount: diff.length, diff };
+  });
+
+  // Compare a stored snapshot with the CURRENT NS1 record (fetched server-side). This is
+  // a read-only comparison — no snapshot is created and NS1 is never modified.
+  app.post('/snapshots/:snapshotId/compare-current', { preHandler: requirePermission('snapshot.read'), schema: doc('Compare a snapshot with the current record') }, async (req, reply) => {
+    if (!requireDb(database, req, reply)) return reply;
+    const { snapshotId } = req.params as { snapshotId: string };
+    if (!UUID.test(snapshotId)) return reply.code(404).send({ code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found.', correlationId: req.id });
+    const snap = await database.snapshots.getById(snapshotId);
+    if (!snap) return reply.code(404).send({ code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found.', correlationId: req.id });
+
+    const parts = snap.resourceKey.split('/');
+    if (snap.resourceKind !== 'record' || parts.length !== 3 || parts.some((p) => p.length === 0)) {
+      return reply.code(422).send({ code: 'UNSUPPORTED_RESOURCE', message: 'This snapshot cannot be compared with a current record.', correlationId: req.id });
+    }
+    const [zone, domain, type] = parts;
+    const retrievedAt = new Date().toISOString();
+
+    let currentRaw: unknown;
+    try {
+      currentRaw = await client.getRecord(zone, domain, type, req.id); // server-side fetch; request body is ignored
+    } catch (err) {
+      if (err instanceof Ns1Error) return sendNs1Error(req, reply, err);
+      throw err;
+    }
+    if (!currentRaw || typeof currentRaw !== 'object' || Array.isArray(currentRaw)) {
+      return sendNs1Error(req, reply, new Ns1Error('NS1_INVALID_RESPONSE'));
+    }
+
+    const currentCanonical = canonicalise(currentRaw);
+    const currentRawSum = rawChecksum(currentRaw);
+    const currentStructSum = structuralChecksum(currentRaw);
+    const changes = diffJson(snap.canonicalPayload, currentCanonical);
+    const identical = snap.structuralChecksum !== undefined && snap.structuralChecksum === currentStructSum;
+    const md = snap.metadata as { mode?: string; synthetic?: boolean };
+
+    const warnings: string[] = [];
+    if (ns1.mode === 'mock') warnings.push('Current record was read in mock mode (synthetic, non-production).');
+    if (md.mode && md.mode !== ns1.mode) warnings.push(`Snapshot was captured in "${md.mode}" mode but the current record was read in "${ns1.mode}" mode.`);
+
+    return {
+      snapshot: {
+        id: snap.id,
+        label: snap.label,
+        capturedAt: snap.createdAt,
+        retrievedAt: snap.retrievedAt,
+        sourceMode: md.mode ?? null,
+        synthetic: Boolean(md.synthetic),
+        rawChecksum: snap.rawChecksum,
+        structuralChecksum: snap.structuralChecksum,
+      },
+      current: {
+        retrievedAt,
+        sourceMode: ns1.mode,
+        synthetic: ns1.mode === 'mock',
+        rawChecksum: currentRawSum,
+        structuralChecksum: currentStructSum,
+      },
+      rawChecksumEqual: snap.rawChecksum === currentRawSum,
+      structuralChecksumEqual: identical,
+      identical,
+      summary: summariseRecordDiff(snap.canonicalPayload, currentCanonical, changes),
+      changes,
+      warnings,
+      provenance: buildProvenance(ns1, `/v1/zones/${zone}/${domain}/${type}`, retrievedAt),
+    };
   });
 };

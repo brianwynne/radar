@@ -11,6 +11,7 @@ background workers.
 | `GET  /api/v1/ns1/zones/:zone/:domain/:type/snapshots` | `snapshot.read` | History for the record (summaries, newest first). |
 | `GET  /api/v1/snapshots/:snapshotId` | `snapshot.read` | Snapshot detail (with payloads). |
 | `POST /api/v1/snapshots/compare` | `snapshot.read` | Structural diff of two snapshots. |
+| `POST /api/v1/snapshots/:snapshotId/compare-current` | `snapshot.read` | Diff a snapshot against the **current** record. |
 
 All require authentication; RBAC is enforced server-side. OpenAPI at `/api/v1/openapi.json`.
 
@@ -40,3 +41,24 @@ SNAPSHOT_NOT_FOUND`.
 structural checksums match. `diff` is a compact list of `{ path, kind (added|removed|
 changed), before?, after? }` computed over the canonical payloads. Invalid ids → `400`;
 missing snapshots → `404`.
+
+## Compare with current
+`POST /api/v1/snapshots/:snapshotId/compare-current` is a **read-only** comparison of a
+stored snapshot against the **current** NS1 record — it is **not** a rollback and creates
+no new snapshot. Behaviour:
+
+1. Load the snapshot; derive `zone/domain/type` from its `resourceKey` (`resourceKind`
+   must be `record`).
+2. Fetch the current record **server-side** via the read-only NS1 client (the request
+   body is ignored — a caller cannot supply a substitute "current" payload).
+3. Canonicalise it with the same logic used at capture and diff against the stored
+   canonical payload.
+
+Returns `snapshot` + `current` source metadata (mode, synthetic, checksums, timestamps),
+`rawChecksumEqual`, `structuralChecksumEqual`, `identical`, a **record-aware `summary`**
+(`ttlChanged`, `ecsChanged`, `answers{Added,Removed,Changed}`, `filters{Added,Removed,
+Changed}`, `filtersReordered`, `otherChanges` — answer and filter order preserved),
+`changes[]` (structured field diff), `warnings`, and `provenance`. Errors: snapshot
+missing → `404`; current record missing → `404`; malformed resource identity → `422`;
+upstream unavailable → `503`/`504`; `403` without `snapshot.read`; `401` unauthenticated.
+No NS1 mutation occurs; no Restore/Apply exists.

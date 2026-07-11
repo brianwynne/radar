@@ -2,6 +2,7 @@
 // snapshot.read to view; snapshot.create to capture. Capture stores the record via the
 // backend (raw + canonical + checksums, atomic audit); RADAR never writes to NS1.
 import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { SyntheticTag } from '../components/Provenance';
@@ -139,7 +140,9 @@ export function SnapshotsPanel({ zone, domain, type }: { zone: string; domain: s
                   <td>
                     <input type="checkbox" aria-label={`select ${s.id}`} checked={selected.includes(s.id)} onChange={() => toggle(s.id)} />
                   </td>
-                  <td>{new Date(s.retrievedAt).toLocaleString()}</td>
+                  <td>
+                    <Link to={`/snapshots/${s.id}`}>{new Date(s.retrievedAt).toLocaleString()}</Link>
+                  </td>
                   <td>{s.createdBySubject ?? '—'}</td>
                   <td>{s.label ?? '—'}</td>
                   <td className="mono" title={s.rawChecksum}>

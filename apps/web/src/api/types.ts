@@ -226,3 +226,43 @@ export interface CompareResponse {
   diffCount: number;
   diff: JsonDiffEntry[];
 }
+
+export interface RecordDiffSummary {
+  ttlChanged: boolean;
+  ecsChanged: boolean;
+  answersAdded: number;
+  answersRemoved: number;
+  answersChanged: number;
+  filtersAdded: number;
+  filtersRemoved: number;
+  filtersChanged: number;
+  filtersReordered: boolean;
+  otherChanges: number;
+}
+
+export interface CompareCurrentResponse {
+  snapshot: {
+    id: string;
+    label?: string;
+    capturedAt: string;
+    retrievedAt: string;
+    sourceMode: string | null;
+    synthetic: boolean;
+    rawChecksum: string;
+    structuralChecksum?: string;
+  };
+  current: {
+    retrievedAt: string;
+    sourceMode: string;
+    synthetic: boolean;
+    rawChecksum: string;
+    structuralChecksum: string;
+  };
+  rawChecksumEqual: boolean;
+  structuralChecksumEqual: boolean;
+  identical: boolean;
+  summary: RecordDiffSummary;
+  changes: JsonDiffEntry[];
+  warnings: string[];
+  provenance: Provenance;
+}
