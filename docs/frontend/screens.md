@@ -31,10 +31,13 @@ to six ISPs (Eir, Virgin Media, Vodafone, Three, Sky, Digiweb); each shows:
 `ISP/ASN → Identity source → NS1 steering result (filter chain) → Eligible platforms →
 Expected DNS distribution → Preferred Réalta network path → Cloudflare Load Balancer`.
 
-This is **expected steering derived from configuration, not measured traffic** — PNI/INEX/
-transit utilisation and actual CDN traffic share show *Telemetry not connected*. Events only
-exist for **meaningful** changes (the server's stable fingerprint excludes timestamps and
-the random Weighted-Shuffle *ordering*). On a new event: the affected ISP is highlighted for
+This is **expected steering derived from configuration, not measured traffic**. Each card now
+also shows **read-only network-path telemetry** for the ISP's preferred PNI/INEX/transit path
+(observed utilisation + status vs configured capacity/target, with freshness/stale/unavailable
+handled honestly and an "informational only — not modifying NS1 steering" notice); **actual
+CDN traffic share** stays *Telemetry not connected*. Events only exist for **meaningful**
+changes (the server's stable fingerprint excludes timestamps and the random Weighted-Shuffle
+*ordering*). On a new event: the affected ISP is highlighted for
 10 s (respecting `prefers-reduced-motion`; unaffected ISPs are not), the previous→current
 state, the attributed **reason** and the checksum-before/after are shown, and the change is
 added to **Recent Steering Changes** — which is backed by the **persisted** events, so a
@@ -57,9 +60,19 @@ Steering row opens this screen pre-filled and auto-run.
 ## Topology screen
 Two sections — **Platform steering (NS1)**: DNS Request → Resolver → NS1 → platforms; and
 **Réalta origin selection (Cloudflare)**: Réalta → Cloudflare LB → pools → Origin — with an
-explicit boundary note. Diagram and accessible List views, zoom/fit, configured capacity
-and network-path panels (all labelled configured; utilisation *Telemetry not connected*).
+explicit boundary note. Diagram and accessible List views, zoom/fit, and a configured-capacity
+panel. The **Network paths** panel now shows read-only, informational **live utilisation** per
+PNI/INEX/transit path (observed utilisation + status vs configured capacity/target, freshness,
+and — with `ns1.detail.read` — interface mapping/thresholds/source); capacity/target stay
+labelled CONFIGURED, and pool/cache utilisation elsewhere remains *Telemetry not connected*.
 Role-aware detail; Engineers additionally see disabled management controls.
+
+## NOC Dashboard — network path utilisation
+The Dashboard adds a **Network path utilisation** panel (`topology.summary.read`) showing the
+same read-only telemetry table (path, status, observed utilisation, configured capacity/target,
+freshness; engineering columns with `ns1.detail.read`) and the informational "not modifying NS1
+steering" notice. Delivery-platform health and viewer distribution remain *Telemetry not
+connected*.
 
 ## NS1 Explorer screen
 Read-only discovery across every record the API exposes. Pick a zone (`GET /ns1/zones`),

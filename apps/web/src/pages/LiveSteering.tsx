@@ -11,6 +11,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { useNetworkPaths } from '../telemetry/use-network-paths';
+import { PathTelemetryInline } from '../telemetry/NetworkPathTelemetry';
 import type { LiveSteeringConfig, LiveSteeringEvent, LiveSteeringState } from '../api/types';
 
 const DEFAULT_INTERVAL = 30;
@@ -47,6 +49,7 @@ export function LiveSteering() {
   const canView = hasPermission('steering.summary.read');
   const showDetail = hasPermission('ns1.detail.read');
   const reduceMotion = useMemo(prefersReducedMotion, []);
+  const telemetry = useNetworkPaths(60_000); // read-only, informational; refreshed hourly-ish
 
   const [config, setConfig] = useState<LiveSteeringConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -206,6 +209,7 @@ export function LiveSteering() {
       </div>
 
       {configError && <div className="notice danger">{configError}</div>}
+      {telemetry.notice && telemetry.mode !== 'disabled' && <div className="notice info">{telemetry.notice}</div>}
 
       <div className="card">
         <div className="isp-picker">
@@ -271,8 +275,12 @@ export function LiveSteering() {
                     <div className="seg realta"><span className="seg-label">Preferred Réalta path</span>{s.preferredPath ?? isp.preferredPath} <span className="badge neutral">CONFIGURED</span></div>
                     <div className="seg cloudflare"><span className="seg-label">Downstream</span>Cloudflare Load Balancer</div>
                   </div>
+                  {(() => {
+                    const sample = telemetry.byName.get(s.preferredPath ?? isp.preferredPath ?? '');
+                    return sample ? <PathTelemetryInline sample={sample} detail={showDetail} /> : null;
+                  })()}
                   <div className="muted" style={{ fontSize: '0.76rem', marginTop: '0.4rem' }}>
-                    PNI / INEX / transit utilisation &amp; actual CDN traffic share: <b>Telemetry not connected</b> · evaluated {new Date(s.evaluatedAt).toLocaleTimeString()}
+                    Actual CDN traffic share: <b>Telemetry not connected</b> · evaluated {new Date(s.evaluatedAt).toLocaleTimeString()}
                     {!s.complete && ' · partial evaluation — no definitive platform'}
                   </div>
                   {highlighted && c?.lastEvent && (

@@ -25,6 +25,8 @@ Requests are same-origin (`/api/...`), proxied to radar-api by Vite (dev) or ngi
 | `api.liveSteeringConfig()` | `GET /api/v1/live-steering/config` | `LiveSteeringConfig` |
 | `api.liveSteeringState(q?)` | `GET /api/v1/live-steering/state` | `LiveSteeringStateResponse` |
 | `api.liveSteeringEvents(q?)` | `GET /api/v1/live-steering/events` | `LiveSteeringEventsResponse` |
+| `api.telemetryNetworkPaths(q?)` | `GET /api/v1/telemetry/network-paths` | `NetworkPathsResponse` |
+| `api.telemetryNetworkPath(id)` | `GET /api/v1/telemetry/network-paths/:id` | `NetworkPathResponse` |
 
 ## Errors
 Non-2xx responses throw `ApiError { status, code, message }`. Callers map:

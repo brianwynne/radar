@@ -11,6 +11,7 @@ import { createSteeringStore } from './database/steering-store.js';
 import { PostgresPollerLock } from './database/poller-lock.js';
 import { createNs1Client } from './ns1/index.js';
 import { createChangeDetectionService } from './change-detection/index.js';
+import { createTelemetryClient } from './telemetry/index.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -33,12 +34,16 @@ async function main(): Promise<void> {
       })
     : undefined;
 
+  const telemetryClient = createTelemetryClient(config.telemetry);
+
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
     database,
     steeringStore,
     ns1Client,
     changeDetection,
+    telemetryClient,
+    telemetryMode: config.telemetry.mode,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },

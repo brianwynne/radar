@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { RadarRole } from './auth/permissions.js';
 import { loadDatabaseConfig, type DatabaseConfig } from './database/config.js';
 import { loadNs1Config, type Ns1Config } from './ns1/config.js';
+import { loadTelemetryConfig, type TelemetryConfig } from './telemetry/config.js';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -86,6 +87,8 @@ export interface Config {
   ns1: Ns1Config;
   /** Change-detection service (off by default; needs a database to run). */
   changeDetection: { enabled: boolean; intervalMs: number };
+  /** Network-path telemetry (disabled by default; mock or read-only Prometheus). */
+  telemetry: TelemetryConfig;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -149,6 +152,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // read-only key present) happens here so misconfiguration fails startup.
   const ns1 = loadNs1Config(env);
 
+  // Network telemetry: disabled by default; prometheus-mode validation (base URL, query,
+  // HTTPS outside development) happens here so misconfiguration fails startup.
+  const telemetry = loadTelemetryConfig(env);
+
   return {
     NODE_ENV: p.NODE_ENV,
     API_HOST: p.API_HOST,
@@ -163,5 +170,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     database,
     ns1,
     changeDetection: { enabled: parseBool(p.CHANGE_DETECTION_ENABLED), intervalMs: p.CHANGE_DETECTION_INTERVAL_MS },
+    telemetry,
   };
 }

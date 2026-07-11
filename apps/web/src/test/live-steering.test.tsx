@@ -73,10 +73,20 @@ function mkEvent(id: string, ispId: string, prev: LiveSteeringState, curr: LiveS
   };
 }
 
+const TELEMETRY = (mode: 'mock' | 'disabled') => ({
+  provenance: { source: 'radar', telemetryMode: mode, readOnly: true, informationalOnly: true, notice: 'Network telemetry is currently informational. RADAR is not automatically modifying NS1 steering.', retrievedAt: '2026-07-11T15:42:00Z' },
+  count: 2,
+  items: [
+    { pathId: 'eir-pni', pathName: 'Eir PNI', pathType: 'PNI', status: mode === 'disabled' ? 'telemetry_not_connected' : 'healthy', stale: false, freshness: { ageSeconds: mode === 'disabled' ? null : 3, staleAfterSeconds: 120, fresh: mode !== 'disabled' }, configuredCapacityBps: 100e9, configuredTargetPercent: 70, observedInboundBps: mode === 'disabled' ? null : 18e9, observedOutboundBps: mode === 'disabled' ? null : 52e9, observedUtilisationPercent: mode === 'disabled' ? null : 52, observedAt: mode === 'disabled' ? null : '2026-07-11T15:41:57Z', source: mode, provenance: { source: mode, synthetic: mode === 'mock', readOnly: true, informationalOnly: true, note: 'x' } },
+    { pathId: 'virgin-liberty-pni', pathName: 'Virgin / Liberty PNI', pathType: 'PNI', status: mode === 'disabled' ? 'telemetry_not_connected' : 'above_target', stale: false, freshness: { ageSeconds: mode === 'disabled' ? null : 3, staleAfterSeconds: 120, fresh: mode !== 'disabled' }, configuredCapacityBps: 100e9, configuredTargetPercent: 70, observedInboundBps: mode === 'disabled' ? null : 25e9, observedOutboundBps: mode === 'disabled' ? null : 74e9, observedUtilisationPercent: mode === 'disabled' ? null : 74, observedAt: mode === 'disabled' ? null : '2026-07-11T15:41:57Z', source: mode, provenance: { source: mode, synthetic: mode === 'mock', readOnly: true, informationalOnly: true, note: 'x' } },
+  ],
+});
+
 interface StubOpts {
   state?: (ispId: string) => LiveSteeringState | undefined;
   events?: (callIndex: number) => LiveSteeringEvent[];
   eventsFail?: () => boolean;
+  telemetryMode?: 'mock' | 'disabled';
 }
 
 function stub(principal: Principal, opts: StubOpts = {}) {
@@ -91,6 +101,7 @@ function stub(principal: Principal, opts: StubOpts = {}) {
       const j = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
       if (p.endsWith('/api/v1/me')) return j(principal);
       if (p.endsWith('/ns1/config')) return j({ mode: 'mock', synthetic: true, readOnly: true });
+      if (p.endsWith('/telemetry/network-paths')) return j(TELEMETRY(opts.telemetryMode ?? 'mock'));
       if (p.endsWith('/live-steering/config')) return j(CONFIG);
       if (p.endsWith('/live-steering/state')) {
         const isp = new URL(url, 'http://x').searchParams.get('isp') ?? '';
@@ -227,5 +238,28 @@ describe('Live Steering', () => {
     stub(noAccess);
     renderAt('/live-steering');
     expect(await screen.findByText(/Live evaluation requires/i)).toBeInTheDocument();
+  });
+
+  it('shows fresh network-path telemetry per ISP (replacing the not-connected placeholder)', async () => {
+    stub(VE, { telemetryMode: 'mock' });
+    renderAt('/live-steering');
+    const eirCard = (await screen.findByRole('heading', { name: /Eir AS5466/ })).closest('.isp-card')!;
+    // Fresh observed utilisation for the Eir PNI path appears on the Eir card…
+    expect(await within(eirCard as HTMLElement).findByText(/52\.0%/)).toBeInTheDocument();
+    expect(within(eirCard as HTMLElement).getByText('healthy')).toBeInTheDocument();
+    // …while actual CDN traffic share remains explicitly not connected.
+    expect(within(eirCard as HTMLElement).getByText(/Actual CDN traffic share/)).toBeInTheDocument();
+    // The informational, not-controlling notice is shown.
+    expect(screen.getByText(/not automatically modifying NS1 steering/i)).toBeInTheDocument();
+  });
+
+  it('keeps "Telemetry not connected" when telemetry is disabled', async () => {
+    stub(VE, { telemetryMode: 'disabled' });
+    renderAt('/live-steering');
+    const eirCard = (await screen.findByRole('heading', { name: /Eir AS5466/ })).closest('.isp-card')!;
+    // Both the path-utilisation line and the CDN-share line stay "Telemetry not connected".
+    expect((await within(eirCard as HTMLElement).findAllByText('Telemetry not connected')).length).toBeGreaterThanOrEqual(1);
+    // The informational notice is not shown when telemetry is disabled.
+    expect(screen.queryByText(/not automatically modifying NS1 steering/i)).not.toBeInTheDocument();
   });
 });

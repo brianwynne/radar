@@ -383,3 +383,73 @@ export interface LiveSteeringEventsResponse {
   count: number;
   items: LiveSteeringEvent[];
 }
+
+// --- Network-path telemetry (read-only, informational) -----------------------
+
+export type PathType = 'PNI' | 'INEX' | 'transit';
+export type TelemetrySource = 'mock' | 'prometheus' | 'disabled';
+export type TelemetryStatus =
+  | 'healthy'
+  | 'above_target'
+  | 'warning'
+  | 'critical'
+  | 'unavailable'
+  | 'stale'
+  | 'telemetry_not_connected';
+
+export interface TelemetryFreshness {
+  ageSeconds: number | null;
+  staleAfterSeconds: number;
+  fresh: boolean;
+}
+
+export interface TelemetrySampleProvenance {
+  source: TelemetrySource;
+  synthetic: boolean;
+  readOnly: true;
+  informationalOnly: true;
+  note: string;
+}
+
+export interface NetworkPathSample {
+  pathId: string;
+  pathName: string;
+  pathType: PathType;
+  status: TelemetryStatus;
+  stale: boolean;
+  freshness: TelemetryFreshness;
+  configuredCapacityBps: number;
+  configuredTargetPercent: number;
+  observedInboundBps: number | null;
+  observedOutboundBps: number | null;
+  observedUtilisationPercent: number | null;
+  observedAt: string | null;
+  source: TelemetrySource;
+  provenance: TelemetrySampleProvenance;
+  // Engineering detail (present only with ns1.detail.read).
+  interfaceIdentity?: string;
+  direction?: 'inbound' | 'outbound';
+  warningThresholdPercent?: number;
+  criticalThresholdPercent?: number;
+  warnings?: string[];
+}
+
+export interface TelemetryProvenance {
+  source: 'radar';
+  telemetryMode: TelemetrySource;
+  readOnly: true;
+  informationalOnly: true;
+  notice: string;
+  retrievedAt: string;
+}
+
+export interface NetworkPathsResponse {
+  provenance: TelemetryProvenance;
+  count: number;
+  items: NetworkPathSample[];
+}
+
+export interface NetworkPathResponse {
+  provenance: TelemetryProvenance;
+  item: NetworkPathSample;
+}

@@ -5,6 +5,8 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { CAPACITY, NETWORK_PATHS, PLATFORMS, REALTA_CHAIN } from '../topology/model';
+import { useNetworkPaths } from '../telemetry/use-network-paths';
+import { NetworkPathTelemetryTable } from '../telemetry/NetworkPathTelemetry';
 
 function Node({ label, cat, className }: { label: string; cat: string; className: string }) {
   return (
@@ -91,6 +93,7 @@ export function Topology() {
   const { hasPermission } = useAuth();
   const detailed = hasPermission('ns1.detail.read'); // Viewing Engineer and above
   const canManage = hasPermission('topology.manage'); // Engineer
+  const telemetry = useNetworkPaths(60_000); // read-only, informational
   const [view, setView] = useState<'diagram' | 'list'>('diagram');
   const [zoom, setZoom] = useState(1);
 
@@ -131,18 +134,18 @@ export function Topology() {
 
       <div className="card">
         <h3>Network paths</h3>
-        {NETWORK_PATHS.map((p) => (
-          <div className="kv" key={p.id}>
-            <span>
-              {p.label} <span className="badge neutral">{p.provenance}</span>
-            </span>
-            <span className="muted">
-              {p.note}
-              {detailed && p.target ? ` · target ${p.target}` : ''} · Utilisation: <b>Telemetry not connected</b> · future:{' '}
-              {p.telemetryFutureSource}
-            </span>
-          </div>
-        ))}
+        {telemetry.notice && telemetry.mode !== 'disabled' && <div className="notice info">{telemetry.notice}</div>}
+        {telemetry.error ? (
+          <div className="notice danger">{telemetry.error}</div>
+        ) : telemetry.loading ? (
+          <span className="muted">Loading telemetry…</span>
+        ) : (
+          <NetworkPathTelemetryTable paths={telemetry.paths} detail={detailed} />
+        )}
+        <div className="notice info" style={{ marginTop: '0.5rem' }}>
+          Capacity and target are CONFIGURED (manually maintained); utilisation is observed and read-only. Future source per
+          path: {NETWORK_PATHS.map((p) => `${p.label} — ${p.telemetryFutureSource}`).join('; ')}.
+        </div>
         {detailed && (
           <div className="notice info" style={{ marginTop: '0.5rem' }}>
             ASN → path mapping is CONFIGURED (manually maintained): Eir AS5466/15502/25441 → Eir PNI; AS6830 → Virgin /

@@ -154,6 +154,17 @@ export const AUDIT_LIST_BODY = {
   ],
 };
 
+export const TELEMETRY_BODY = {
+  provenance: { source: 'radar', telemetryMode: 'mock', readOnly: true, informationalOnly: true, notice: 'Network telemetry is currently informational. RADAR is not automatically modifying NS1 steering.', retrievedAt: '2026-07-11T15:42:00Z' },
+  count: 4,
+  items: [
+    { pathId: 'eir-pni', pathName: 'Eir PNI', pathType: 'PNI', status: 'healthy', stale: false, freshness: { ageSeconds: 3, staleAfterSeconds: 120, fresh: true }, configuredCapacityBps: 100e9, configuredTargetPercent: 70, observedInboundBps: 18e9, observedOutboundBps: 52e9, observedUtilisationPercent: 52, observedAt: '2026-07-11T15:41:57Z', source: 'mock', provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, note: 'MOCK / SYNTHETIC — not production telemetry.' } },
+    { pathId: 'virgin-liberty-pni', pathName: 'Virgin / Liberty PNI', pathType: 'PNI', status: 'above_target', stale: false, freshness: { ageSeconds: 3, staleAfterSeconds: 120, fresh: true }, configuredCapacityBps: 100e9, configuredTargetPercent: 70, observedInboundBps: 25e9, observedOutboundBps: 74e9, observedUtilisationPercent: 74, observedAt: '2026-07-11T15:41:57Z', source: 'mock', provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, note: 'MOCK / SYNTHETIC — not production telemetry.' } },
+    { pathId: 'inex', pathName: 'INEX', pathType: 'INEX', status: 'warning', stale: false, freshness: { ageSeconds: 3, staleAfterSeconds: 120, fresh: true }, configuredCapacityBps: 40e9, configuredTargetPercent: 70, observedInboundBps: 11e9, observedOutboundBps: 33e9, observedUtilisationPercent: 84, observedAt: '2026-07-11T15:41:57Z', source: 'mock', provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, note: 'MOCK / SYNTHETIC — not production telemetry.' } },
+    { pathId: 'transit', pathName: 'Transit', pathType: 'transit', status: 'critical', stale: false, freshness: { ageSeconds: 3, staleAfterSeconds: 120, fresh: true }, configuredCapacityBps: 20e9, configuredTargetPercent: 70, observedInboundBps: 6e9, observedOutboundBps: 19e9, observedUtilisationPercent: 95, observedAt: '2026-07-11T15:41:57Z', source: 'mock', provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, note: 'MOCK / SYNTHETIC — not production telemetry.' } },
+  ],
+};
+
 export function stubApi(principal: Principal): void {
   vi.stubGlobal(
     'fetch',
@@ -162,6 +173,7 @@ export function stubApi(principal: Principal): void {
       let status = 200;
       let body: unknown = {};
       if (p.endsWith('/api/v1/me')) body = principal;
+      else if (p.endsWith('/telemetry/network-paths')) body = TELEMETRY_BODY;
       else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;

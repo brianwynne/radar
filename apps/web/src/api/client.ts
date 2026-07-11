@@ -10,6 +10,8 @@ import type {
   LiveSteeringConfig,
   LiveSteeringEventsResponse,
   LiveSteeringStateResponse,
+  NetworkPathResponse,
+  NetworkPathsResponse,
   Ns1Status,
   Principal,
   RawRecordResponse,
@@ -103,4 +105,13 @@ export const api = {
     const qs = p.toString();
     return request<LiveSteeringEventsResponse>(`/api/v1/live-steering/events${qs ? `?${qs}` : ''}`);
   },
+  telemetryNetworkPaths: (q: { pathType?: string; status?: string; stale?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (q.pathType) p.set('pathType', q.pathType);
+    if (q.status) p.set('status', q.status);
+    if (q.stale !== undefined) p.set('stale', String(q.stale));
+    const qs = p.toString();
+    return request<NetworkPathsResponse>(`/api/v1/telemetry/network-paths${qs ? `?${qs}` : ''}`);
+  },
+  telemetryNetworkPath: (pathId: string) => request<NetworkPathResponse>(`/api/v1/telemetry/network-paths/${enc(pathId)}`),
 };

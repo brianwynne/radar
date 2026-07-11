@@ -17,11 +17,19 @@ measured. Each is badged `CONFIGURED` or `MANUALLY MAINTAINED`. Examples:
 - External Pool 1 & 2: 4 caches each, ~700 Gb/s outbound — *manually maintained*.
 - Preferred PNI utilisation target: 70% — *configured*.
 
-## 3. Telemetry not connected
-Every node/link that would have a measured utilisation shows **Utilisation: Telemetry not
-connected** plus its **expected future source** (Varnish telemetry, router/interface
-telemetry, Cloudflare API, network/monitoring adapter). The UI **never generates a sample
-utilisation percentage**.
+## 3. Telemetry: observed vs not-connected
+**Network-path telemetry** (PNI / INEX / transit) is now **observed and read-only** where a
+source is configured: the UI shows the observed utilisation with a status badge, kept
+**distinct** from the CONFIGURED capacity/target, and is honest about absence —
+*Telemetry not connected* (disabled), **STALE** (old value, shown flagged), *Unavailable* (no
+fresh value). It is labelled **informational only — RADAR is not modifying NS1 steering**, and
+mock data is tagged MOCK / SYNTHETIC. The UI **never generates a sample utilisation
+percentage**.
+
+Everything else that would have a measured value still shows **Telemetry not connected** plus
+its **expected future source** (Varnish telemetry, Cloudflare API, …): pool/cache utilisation,
+delivery-platform health, observed viewer distribution, and **actual CDN traffic share** on
+Live Steering.
 
 ## Derived vs asserted
 - **Identity** (country/ASN/network path) is *derived/configured*, labelled accordingly

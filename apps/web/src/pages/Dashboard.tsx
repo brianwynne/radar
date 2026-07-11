@@ -5,11 +5,16 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { useNetworkPaths } from '../telemetry/use-network-paths';
+import { NetworkPathTelemetryTable } from '../telemetry/NetworkPathTelemetry';
 
 export function Dashboard() {
   const { principal, hasPermission } = useAuth();
   const [zones, setZones] = useState<number | null>(null);
   const [zonesError, setZonesError] = useState<string | null>(null);
+  const canSeePaths = hasPermission('topology.summary.read');
+  const showDetail = hasPermission('ns1.detail.read');
+  const telemetry = useNetworkPaths(canSeePaths ? 60_000 : undefined);
 
   useEffect(() => {
     if (!hasPermission('ns1.detail.read')) return;
@@ -58,6 +63,20 @@ export function Dashboard() {
           <div className="notice info">Telemetry not connected — RADAR currently shows configured/derived data only, not measured traffic.</div>
         </div>
       </div>
+
+      {canSeePaths && (
+        <div className="card">
+          <h3>Network path utilisation</h3>
+          {telemetry.mode && telemetry.mode !== 'disabled' && telemetry.notice && <div className="notice info">{telemetry.notice}</div>}
+          {telemetry.error ? (
+            <div className="notice danger">{telemetry.error}</div>
+          ) : telemetry.loading ? (
+            <span className="muted">Loading telemetry…</span>
+          ) : (
+            <NetworkPathTelemetryTable paths={telemetry.paths} detail={showDetail} />
+          )}
+        </div>
+      )}
     </div>
   );
 }

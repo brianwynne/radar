@@ -21,9 +21,24 @@ never on a blind timer, and never for an unaffected ISP.
 ## Per-ISP card
 `ISP/ASN → Identity source → NS1 steering result (filter chain) → Eligible platforms →
 Expected DNS distribution → Preferred Réalta path (CONFIGURED) → Cloudflare Load Balancer`.
-Measured delivery is always **Telemetry not connected** (PNI/INEX/transit utilisation and
-actual CDN traffic share). Partial evaluations show *— (partial)* and never assert a
-platform.
+Partial evaluations show *— (partial)* and never assert a platform.
+
+### Network-path telemetry (read-only, informational)
+Below the path, the card joins the ISP's preferred path (`Eir PNI` / `Virgin / Liberty PNI` /
+`INEX` / `Transit`) to read-only utilisation from `GET /api/v1/telemetry/network-paths` (via
+`useNetworkPaths`, refreshed ~hourly). It shows the observed utilisation + status badge, and
+the **configured** capacity/target (kept distinct from observed), freshness and source.
+Honesty rules:
+
+- **disabled** → *Telemetry not connected*;
+- **stale** → last value shown with a **STALE** label;
+- **unavailable** → *Unavailable* (no invented value);
+- **fresh** → observed utilisation + status (healthy / above target / warning / critical).
+
+Engineering detail (interface, thresholds, warnings) shows only with `ns1.detail.read`. A
+notice states *"Network telemetry is currently informational. RADAR is not automatically
+modifying NS1 steering."* **Actual CDN traffic share** remains **Telemetry not connected**
+(RADAR does not ingest delivered-traffic telemetry).
 
 ## Change highlight
 On a new event the affected card gets the `changed` class for 10 s and a notice with the
