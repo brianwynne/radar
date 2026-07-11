@@ -15,6 +15,11 @@ export default tseslint.config(
     rules: {
       // TypeScript already resolves identifiers/globals; the core rule is redundant here.
       'no-undef': 'off',
+      // Honour the `_`-prefix convention for intentionally-unused params/vars/catch args.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
+      ],
     },
   },
 );

@@ -3,6 +3,7 @@
 import { z } from 'zod';
 import type { RadarRole } from './auth/permissions.js';
 import { loadDatabaseConfig, type DatabaseConfig } from './database/config.js';
+import { loadNs1Config, type Ns1Config } from './ns1/config.js';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -77,6 +78,8 @@ export interface Config {
    *  server.ts (the API cannot function without persistence); leaving it optional here
    *  keeps configuration-only unit tests independent of a database. */
   database?: DatabaseConfig;
+  /** NS1 read-only client configuration (mock by default; live requires a read-only key). */
+  ns1: Ns1Config;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -136,6 +139,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // pool sizes) fail fast here; server.ts requires the result to be present to start.
   const database = env.DATABASE_URL ? loadDatabaseConfig(env) : undefined;
 
+  // NS1 client config: mock by default (no credential); live-mode validation (HTTPS +
+  // read-only key present) happens here so misconfiguration fails startup.
+  const ns1 = loadNs1Config(env);
+
   return {
     NODE_ENV: p.NODE_ENV,
     API_HOST: p.API_HOST,
@@ -148,5 +155,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     devUser: { id: p.RADAR_DEV_USER_ID, name: p.RADAR_DEV_USER_NAME, email: p.RADAR_DEV_USER_EMAIL, role: p.RADAR_DEV_ROLE },
     oidc,
     database,
+    ns1,
   };
 }
