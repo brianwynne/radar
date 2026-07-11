@@ -5,6 +5,7 @@ coverage/
 *.tsbuildinfo
 .env
 .env.local
+secrets/
 *.log
 .DS_Store
 /tmp/

@@ -7,7 +7,7 @@
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: radar
       POSTGRES_PASSWORD: radar
@@ -51,7 +51,9 @@ services:
       API_PORT: "3000"
       NS1_API_BASE: ${NS1_API_BASE:-https://api.nsone.net/v1/}
       RADAR_DEV_AUTH: ${RADAR_DEV_AUTH:-true}
-      RADAR_DEV_ROLE: ${RADAR_DEV_ROLE:-viewing_engineer}
+      # Must be one of NOC_VIEWER | VIEWING_ENGINEER | ENGINEER (config validation is
+      # case-sensitive); default to the least-privilege role.
+      RADAR_DEV_ROLE: ${RADAR_DEV_ROLE:-NOC_VIEWER}
       LOG_LEVEL: ${LOG_LEVEL:-info}
     secrets:
       - ns1_api_key

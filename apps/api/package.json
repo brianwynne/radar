@@ -11,6 +11,7 @@
     "migrate": "node dist/database/migrate.js",
     "migrate:dev": "tsx src/database/migrate.ts",
     "test": "vitest run",
+    "test:integration": "vitest run integration",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\""
   },

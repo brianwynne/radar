@@ -62,8 +62,25 @@ replica:
 The runner (`apps/api/src/database/migrate.ts`) wraps application in a PostgreSQL
 **advisory lock** so concurrent runners cannot migrate simultaneously.
 
-## Testing without Docker
+## Testing
 
-Repository and migration tests run against **`pg-mem`** (in-memory PostgreSQL), applying
-the real `0001_init.sql`, so schema/code drift is caught without a live database. CI and
-local `docker compose` still exercise real PostgreSQL.
+Two tiers, deliberately distinct:
+
+- **Authoritative — real PostgreSQL.** `packages/radar-data/test/integration/` and
+  `apps/api/test/*.integration.test.ts` run against a real server and are the
+  authoritative proof of the persistence layer. They validate: migrations apply, the
+  runner is idempotent, `pg_advisory_lock` mutual exclusion, repository round trips,
+  exact nested/unicode JSONB preservation, column types + every declared index,
+  NOT NULL enforcement, transaction rollback/commit semantics, and readiness against a
+  reachable and an unreachable database. They **self-skip unless `PG_INTEGRATION_URL`**
+  is set, and run in the `postgres-integration` CI job against a pinned `postgres:17`
+  service container. Run locally with `npm run test:integration -w @radar/data` /
+  `-w @radar/api` and `PG_INTEGRATION_URL` pointing at a disposable database.
+- **Fast supplementary — `pg-mem`.** The default `npm test` suite uses in-memory
+  PostgreSQL applying the real `0001_init.sql` for quick feedback. It is **not**
+  authoritative PostgreSQL integration coverage — pg-mem emulates, and its behaviour can
+  differ (e.g. its stricter AST-coverage guard).
+
+The `docker-compose` CI job additionally builds the workspace-aware image and starts
+`postgres → migrate → radar-api` in order, asserting the API reports the database
+reachable and that a re-run of the migration job is a no-op.
