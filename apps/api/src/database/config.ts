@@ -14,7 +14,8 @@ export interface DatabaseConfig {
 }
 
 const schema = z.object({
-  DATABASE_URL: z.string({ required_error: 'DATABASE_URL is required' }).min(1, 'DATABASE_URL is required'),
+  // zod 4: a string `error` sets the default message for all issues (missing or empty).
+  DATABASE_URL: z.string({ error: 'DATABASE_URL is required' }).min(1, 'DATABASE_URL is required'),
   DATABASE_POOL_MIN: z.coerce.number().int().min(0).default(0),
   DATABASE_POOL_MAX: z.coerce.number().int().positive().max(100).default(10),
   DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5000),

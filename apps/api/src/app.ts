@@ -1,7 +1,7 @@
 // radar-api application factory. Builds a configured Fastify instance with structured
 // logging, correlation IDs, secure headers, request-size limits and OpenAPI. It wires
 // no business or NS1 logic (that arrives in later commits) and holds no durable state.
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyError, type FastifyInstance } from 'fastify';
 import helmet from '@fastify/helmet';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
@@ -68,7 +68,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   registerAuth(app, config, authDeps);
 
   // Consistent, safe error responses carrying the correlation id; internal detail hidden.
-  app.setErrorHandler((err, req, reply) => {
+  app.setErrorHandler((err: FastifyError, req, reply) => {
     const status = typeof err.statusCode === 'number' && err.statusCode >= 400 ? err.statusCode : 500;
     if (status >= 500) req.log.error({ err, route: req.url }, 'unhandled request error');
     void reply.code(status).send({

@@ -14,7 +14,6 @@ if (!URL) {
   if (process.env.REQUIRE_REAL_PG === '1') {
     throw new Error('TEST_DATABASE_URL is required (REQUIRE_REAL_PG=1) but is not set — refusing to silently skip.');
   }
-  // eslint-disable-next-line no-console
   console.warn('\n[integration] SKIPPING real-PostgreSQL readiness suite: set TEST_DATABASE_URL to run it.\n');
 }
 

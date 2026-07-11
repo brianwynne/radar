@@ -3,11 +3,11 @@
 # (persistence). We install the npm workspace at the root so the symlink resolves, build
 # @radar/data then @radar/api, and copy both packages' dist plus @radar/data's migrations
 # into the runtime image. The same image serves the API (default CMD) and the one-shot
-# migrate command (see docker-compose `migrate` service).
+# migrate command (see docker-compose `radar-migrate` service).
 # NOTE: not verified in this environment (no Docker); validate `docker compose up --build`
 # on a Docker-capable host.
 
-FROM node:18-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /repo
 # Manifests first for cached installs.
 COPY package.json package-lock.json ./
@@ -19,7 +19,7 @@ COPY packages/radar-data packages/radar-data
 COPY apps/api apps/api
 RUN npm run build -w @radar/data && npm run build -w @radar/api
 
-FROM node:18-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /repo
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./

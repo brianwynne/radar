@@ -18,10 +18,10 @@ jobs:
     name: Build & unit tests (pg-mem)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       - run: npm ci
       - run: npm run build
@@ -55,10 +55,10 @@ jobs:
       DATABASE_URL: postgres://radar_test:radar_test_password@localhost:5432/radar_test
       REQUIRE_REAL_PG: '1'
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
       - run: npm ci
       - run: npm run build
@@ -75,7 +75,7 @@ jobs:
     name: API image build & smoke test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Build image (root lockfile, @radar/data built and resolvable)
         run: docker build -f apps/api/Dockerfile -t radar-api:ci .
       - name: Runs as a non-root user
@@ -116,7 +116,7 @@ jobs:
     name: Docker Compose vertical slice
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Provide the compose secret placeholder (never a real key)
         run: |
           mkdir -p secrets

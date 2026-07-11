@@ -25,7 +25,6 @@ if (!URL) {
       'TEST_DATABASE_URL is required (REQUIRE_REAL_PG=1) but is not set — refusing to silently skip real-PostgreSQL validation.',
     );
   }
-  // eslint-disable-next-line no-console
   console.warn('\n[integration] SKIPPING real-PostgreSQL suite: set TEST_DATABASE_URL to run it.\n');
 }
 

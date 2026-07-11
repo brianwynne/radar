@@ -6,7 +6,6 @@ import {
   UnsecuredJWT,
   createLocalJWKSet,
   type JWTVerifyGetKey,
-  type KeyLike,
 } from 'jose';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
@@ -19,18 +18,20 @@ const TENANT = 'tenant-rte';
 const KID = 'test-key-1';
 
 let getKey: JWTVerifyGetKey;
-let signingKey: KeyLike;
-let otherKey: KeyLike;
+// jose 6 removed the `KeyLike` type alias; generated keys are Web Crypto `CryptoKey`s.
+let signingKey: CryptoKey;
+let otherKey: CryptoKey;
 
 beforeAll(async () => {
-  const kp = await generateKeyPair('RS256');
+  // jose 6 generates non-extractable keys by default; exportJWK needs an extractable key.
+  const kp = await generateKeyPair('RS256', { extractable: true });
   signingKey = kp.privateKey;
   const jwk = await exportJWK(kp.publicKey);
   jwk.kid = KID;
   jwk.alg = 'RS256';
   jwk.use = 'sig';
   getKey = createLocalJWKSet({ keys: [jwk] });
-  otherKey = (await generateKeyPair('RS256')).privateKey;
+  otherKey = (await generateKeyPair('RS256', { extractable: true })).privateKey;
 });
 
 const oidcEnv: Record<string, string> = {
@@ -47,7 +48,7 @@ const verifier = () => createOidcVerifier(cfg().oidc!, getKey);
 
 async function token(
   claims: Record<string, unknown>,
-  opts: { key?: KeyLike; issuer?: string; audience?: string; expired?: boolean } = {},
+  opts: { key?: CryptoKey; issuer?: string; audience?: string; expired?: boolean } = {},
 ): Promise<string> {
   const s = new SignJWT({ tid: TENANT, oid: 'user-oid-1', name: 'Test User', preferred_username: 'test@rte.ie', ...claims })
     .setProtectedHeader({ alg: 'RS256', kid: KID })

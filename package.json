@@ -16,6 +16,6 @@
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "engines": {
-    "node": ">=18 <21"
+    "node": ">=20.19.0"
   }
 }
