@@ -2,12 +2,16 @@
 // reverse proxy (prod) or the Vite dev proxy. No NS1 key ever reaches the browser.
 import type {
   ActivityResponse,
+  CompareResponse,
   ExplainRequest,
   ExplainResponse,
   Ns1Status,
   Principal,
   RawRecordResponse,
   RecordResponse,
+  SnapshotCaptureResponse,
+  SnapshotDetail,
+  SnapshotHistory,
   ZoneResponse,
   ZonesResponse,
 } from './types';
@@ -61,4 +65,14 @@ export const api = {
   explain: (body: ExplainRequest) =>
     request<ExplainResponse>('/api/v1/dns/explain', { method: 'POST', body: JSON.stringify(body) }),
   activity: (limit?: number) => request<ActivityResponse>(`/api/v1/ns1/activity${limit ? `?limit=${limit}` : ''}`),
+  snapshots: (zone: string, domain: string, type: string) =>
+    request<SnapshotHistory>(`/api/v1/ns1/zones/${enc(zone)}/${enc(domain)}/${enc(type)}/snapshots`),
+  captureSnapshot: (zone: string, domain: string, type: string, label?: string) =>
+    request<SnapshotCaptureResponse>(`/api/v1/ns1/zones/${enc(zone)}/${enc(domain)}/${enc(type)}/snapshots`, {
+      method: 'POST',
+      body: JSON.stringify(label ? { label } : {}),
+    }),
+  snapshot: (id: string) => request<{ snapshot: SnapshotDetail }>(`/api/v1/snapshots/${enc(id)}`),
+  compareSnapshots: (a: string, b: string) =>
+    request<CompareResponse>('/api/v1/snapshots/compare', { method: 'POST', body: JSON.stringify({ a, b }) }),
 };

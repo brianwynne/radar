@@ -7,6 +7,7 @@ import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { ProvenanceLine } from '../components/Provenance';
 import { addRecent, getRecent, type RecordRef } from '../ns1/recent';
+import { SnapshotsPanel } from '../features/Snapshots';
 import type { Provenance } from '../api/types';
 
 type View = 'normalised' | 'raw';
@@ -205,6 +206,8 @@ export function Ns1Explorer() {
           )}
         </div>
       )}
+
+      {zone && domain && type && hasPermission('snapshot.read') && <SnapshotsPanel zone={zone} domain={domain} type={type} />}
     </div>
   );
 }

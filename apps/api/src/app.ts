@@ -11,9 +11,11 @@ import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { ns1Routes } from './routes/ns1.js';
 import { dnsRoutes } from './routes/dns.js';
+import { snapshotRoutes } from './routes/snapshots.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 import type { DatabaseHealthCheck } from './database/health.js';
+import type { Database } from './database/repositories.js';
 import { createNs1Client } from './ns1/index.js';
 import type { Ns1ReadClient } from './ns1/index.js';
 
@@ -25,6 +27,7 @@ const CORRELATION_HEADER = 'x-correlation-id';
 export interface BuildDeps extends AuthDeps {
   databaseHealth?: DatabaseHealthCheck;
   ns1Client?: Ns1ReadClient;
+  database?: Database;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -102,6 +105,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
         { name: 'identity', description: 'Authenticated principal' },
         { name: 'ns1', description: 'Read-only NS1 configuration (GET-only)' },
         { name: 'dns', description: 'DNS steering explanation (read-only evaluation)' },
+        { name: 'snapshots', description: 'Configuration snapshots and version history' },
       ],
       components: {
         securitySchemes: {
@@ -133,6 +137,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   const ns1Client = deps.ns1Client ?? createNs1Client(config.ns1);
   await app.register(ns1Routes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1 });
   await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1 });
+  await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());

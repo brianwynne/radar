@@ -108,6 +108,32 @@ export const ACTIVITY_BODY = {
   ],
 };
 
+export const SNAPSHOT_SUMMARY = {
+  id: '11111111-1111-1111-1111-111111111111',
+  sourceSystem: 'ns1',
+  resourceKind: 'record',
+  resourceKey: 'rte.ie/live.rte.ie/A',
+  retrievedAt: '2026-07-01T10:00:00Z',
+  createdAt: '2026-07-01T10:00:01Z',
+  createdBySubject: 'dev-engineer',
+  label: 'before change',
+  rawChecksum: 'sha256:aaaaaaaaaaaaaaaa',
+  structuralChecksum: 'sha256:bbbbbbbbbbbbbbbb',
+  metadata: { mode: 'mock', synthetic: true, warnings: ['mock'] },
+};
+export const SNAPSHOT_DETAIL = { ...SNAPSHOT_SUMMARY, rawPayload: { domain: 'live.rte.ie' }, canonicalPayload: { domain: 'live.rte.ie' } };
+export const SNAPSHOT_HISTORY = {
+  count: 2,
+  snapshots: [SNAPSHOT_SUMMARY, { ...SNAPSHOT_SUMMARY, id: '22222222-2222-2222-2222-222222222222', label: 'after change', rawChecksum: 'sha256:cccccccccccccccc' }],
+};
+export const COMPARE_BODY = {
+  a: SNAPSHOT_SUMMARY,
+  b: { ...SNAPSHOT_SUMMARY, id: '22222222-2222-2222-2222-222222222222' },
+  identical: false,
+  diffCount: 1,
+  diff: [{ path: 'answers[0].meta.weight', kind: 'changed', before: 70, after: 60 }],
+};
+
 export function stubApi(principal: Principal): void {
   vi.stubGlobal(
     'fetch',
@@ -119,6 +145,13 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;
+      else if (p.endsWith('/snapshots/compare')) body = COMPARE_BODY;
+      else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+\/snapshots$/.test(p)) {
+        if (init?.method === 'POST') {
+          status = 201;
+          body = { provenance: PROV, snapshot: SNAPSHOT_DETAIL };
+        } else body = SNAPSHOT_HISTORY;
+      } else if (/\/api\/v1\/snapshots\/[^/]+$/.test(p)) body = { snapshot: SNAPSHOT_DETAIL };
       else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+\/raw$/.test(p)) body = { provenance: PROV, raw: RAW_BODY };
       else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+$/.test(p)) body = { provenance: PROV, record: RECORD_BODY };
       else if (/\/ns1\/zones\/[^/]+$/.test(p)) body = { provenance: PROV, zone: ZONE_BODY };

@@ -41,6 +41,14 @@ Migration `0001_init.sql` creates:
 `schema_migrations` (created by the runner) tracks applied migrations: `version` (primary
 key), `filename`, `checksum` (SHA-256), `applied_at`, and `execution_ms`.
 
+### Snapshot capture (atomic)
+Capturing an NS1 record (`POST …/snapshots`) writes a `configuration_snapshots` row (raw
++ canonical + SHA-256 checksums + metadata) **and** an `audit_events` row
+(`action: snapshot.create`) inside **one transaction** via `Database.transaction`
+(`apps/api/src/database/repositories.ts`) — both commit or neither does. Reads use the
+pool-backed repositories directly. RADAR never writes to NS1; a snapshot is a RADAR-side
+record of what NS1 returned.
+
 ## Connection pool
 
 One bounded, application-wide pool (`apps/api/src/database/pool.ts`), configured from

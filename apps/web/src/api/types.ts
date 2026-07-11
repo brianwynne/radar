@@ -174,3 +174,55 @@ export interface ActivityResponse {
   count: number;
   items: ActivityItem[];
 }
+
+export interface SnapshotMetadata {
+  mode?: string;
+  synthetic?: boolean;
+  warnings?: string[];
+  [k: string]: unknown;
+}
+
+export interface SnapshotSummary {
+  id: string;
+  sourceSystem: string;
+  resourceKind: string;
+  resourceKey: string;
+  sourceEndpoint?: string;
+  retrievedAt: string;
+  createdAt: string;
+  createdBySubject?: string;
+  label?: string;
+  rawChecksum: string;
+  structuralChecksum?: string;
+  metadata: SnapshotMetadata;
+}
+
+export interface SnapshotDetail extends SnapshotSummary {
+  rawPayload: unknown;
+  canonicalPayload: unknown;
+}
+
+export interface SnapshotHistory {
+  count: number;
+  snapshots: SnapshotSummary[];
+}
+
+export interface SnapshotCaptureResponse {
+  provenance: Provenance;
+  snapshot: SnapshotDetail;
+}
+
+export interface JsonDiffEntry {
+  path: string;
+  kind: 'added' | 'removed' | 'changed';
+  before?: unknown;
+  after?: unknown;
+}
+
+export interface CompareResponse {
+  a: SnapshotSummary;
+  b: SnapshotSummary;
+  identical: boolean;
+  diffCount: number;
+  diff: JsonDiffEntry[];
+}

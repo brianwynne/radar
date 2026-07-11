@@ -43,6 +43,11 @@ record" button links back. Recently-viewed records are offered as quick chips
 (localStorage, read-only client state). Normalised vs Raw views; **Raw is gated on
 `ns1.raw.read`**. Loading, empty (no records) and error states throughout.
 
+The selected record also shows a **Snapshots** panel (`snapshot.read`): version history
+(captured time, creator, label, checksum, synthetic tag), a **Capture snapshot** action
+(`snapshot.create` — reads the record and persists it; RADAR never writes to NS1), and a
+**Compare** of any two snapshots showing a field-level diff (or "identical").
+
 ## Activity screen
 Read-only NS1 account activity log via `GET /api/v1/ns1/activity` (requires `audit.read`;
 a NOC viewer is denied — cosmetic notice plus API 403). A compact operational table (time,

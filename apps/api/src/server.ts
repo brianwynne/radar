@@ -6,6 +6,7 @@ import { loadConfig } from './config.js';
 import { redactDatabaseUrl } from './database/config.js';
 import { createPool } from './database/pool.js';
 import { databaseHealthCheck } from './database/health.js';
+import { createDatabase } from './database/repositories.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -14,7 +15,10 @@ async function main(): Promise<void> {
   }
 
   const pool = createPool(config.database);
-  const app = await buildApp(config, { databaseHealth: databaseHealthCheck(pool) });
+  const app = await buildApp(config, {
+    databaseHealth: databaseHealthCheck(pool),
+    database: createDatabase(pool),
+  });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
     'database pool configured',
