@@ -7,10 +7,13 @@ on:
 
 # PostgreSQL major version is pinned and kept in step with docker-compose.yml
 # (postgres:17). Update both together.
+#
+# Test credentials below are throwaway values for an isolated CI service and are not
+# secrets. Real secrets would use repository secrets; none are needed here.
 
 jobs:
-  # Fast checks: build, typecheck, lint, and the pg-mem-backed unit suite. The real
-  # PostgreSQL integration tests self-skip here (PG_INTEGRATION_URL is unset).
+  # Fast checks: build, typecheck, lint, and the pg-mem-backed unit suite. No external
+  # services; the real-PostgreSQL suites are not run here.
   unit:
     name: Build & unit tests (pg-mem)
     runs-on: ubuntu-latest
@@ -24,9 +27,10 @@ jobs:
       - run: npm run build
       - run: npm run typecheck
       - run: npm run lint --workspaces --if-present
-      - run: npm test
+      - run: npm run test:unit
 
-  # Authoritative persistence validation against a real PostgreSQL server.
+  # Authoritative persistence validation against a real PostgreSQL server. REQUIRE_REAL_PG
+  # makes the suites FAIL (not skip) if TEST_DATABASE_URL is ever missing here.
   postgres-integration:
     name: Integration tests (real PostgreSQL)
     runs-on: ubuntu-latest
@@ -45,8 +49,11 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      PG_INTEGRATION_URL: postgres://radar_test:radar_test_password@localhost:5432/radar_test
+      # Disposable, isolated CI database — safe for destructive tests.
+      TEST_DATABASE_URL: postgres://radar_test:radar_test_password@localhost:5432/radar_test
+      # The migrate command reads DATABASE_URL (never the production one) — same isolated DB.
       DATABASE_URL: postgres://radar_test:radar_test_password@localhost:5432/radar_test
+      REQUIRE_REAL_PG: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,22 +62,53 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - run: npm run build
-      # Apply the checked-in migrations with the real runner (proves the runner and its
-      # advisory lock against real PostgreSQL).
-      - name: Apply migrations (real runner)
+      - name: Apply migrations with the real runner
         run: npm run migrate -w @radar/api
-      # Re-run to prove idempotency.
       - name: Migrations are idempotent
         run: npm run migrate -w @radar/api | tee /dev/stderr | grep -q "No pending migrations"
-      # Authoritative repository / migration / advisory-lock / transaction / JSONB tests.
-      - name: Persistence integration tests
-        run: npm run test:integration -w @radar/data
-      # Readiness against a real database and a genuinely unreachable one.
-      - name: Readiness integration tests
-        run: npm run test:integration -w @radar/api
+      - name: Real-PostgreSQL integration tests (must run, not skip)
+        run: npm run test:integration
 
-  # Prove the workspace-aware image builds and that Compose starts the database, the
-  # one-shot migration job and the API in the intended order.
+  # Build the workspace-aware API image and validate it (§11): non-root, no baked
+  # credentials, dev deps and TS sources absent, plus a liveness smoke test.
+  docker-image:
+    name: API image build & smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image (root lockfile, @radar/data built and resolvable)
+        run: docker build -f apps/api/Dockerfile -t radar-api:ci .
+      - name: Runs as a non-root user
+        run: docker run --rm --entrypoint sh radar-api:ci -c 'test "$(id -u)" != "0"'
+      - name: No database URL or credentials baked into the image
+        run: docker run --rm --entrypoint sh radar-api:ci -c 'test -z "$DATABASE_URL"'
+      - name: No .env copied into the image
+        run: docker run --rm --entrypoint sh radar-api:ci -c 'test ! -f /repo/apps/api/.env'
+      - name: Dev dependencies not retained (typescript absent)
+        run: docker run --rm --entrypoint sh radar-api:ci -c 'test ! -d /repo/node_modules/typescript'
+      - name: TypeScript sources not shipped (dist only)
+        run: docker run --rm --entrypoint sh radar-api:ci -c 'test ! -d /repo/apps/api/src'
+      - name: @radar/data migrations shipped for the runtime
+        run: docker run --rm --entrypoint sh radar-api:ci -c 'test -f /repo/packages/radar-data/migrations/0001_init.sql'
+      - name: Liveness smoke test (server starts; does not auto-migrate)
+        run: |
+          docker run -d --name smoke \
+            -e DATABASE_URL='postgres://u:p@127.0.0.1:1/db' \
+            -e RADAR_DEV_AUTH='true' \
+            -p 3000:3000 radar-api:ci
+          ok=""
+          for i in $(seq 1 20); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/v1/health/live || true)
+            echo "attempt $i: $code"
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 2
+          done
+          docker logs smoke || true
+          docker rm -f smoke
+          test -n "$ok"
+
+  # Prove Compose starts postgres -> radar-migrate (completes) -> radar-api (ready), in
+  # order, with volumes removed on teardown.
   docker-compose:
     name: Docker Compose vertical slice
     runs-on: ubuntu-latest
@@ -80,15 +118,22 @@ jobs:
         run: |
           mkdir -p secrets
           echo "ci-not-a-real-key" > secrets/ns1_api_key.txt
-      - name: Build and start postgres -> migrate -> radar-api (in order)
-        run: docker compose up -d --build postgres migrate radar-api
-      - name: Wait until radar-api readiness reports the database is reachable
+      - name: Build images
+        run: docker compose build postgres radar-migrate radar-api
+      - name: Start database
+        run: docker compose up -d postgres
+      - name: Run the migration job (must exit zero)
+        run: docker compose run --rm radar-migrate
+      - name: Start the API
+        run: docker compose up -d radar-api
+      - name: Poll liveness then readiness (database reachable)
         run: |
           for i in $(seq 1 40); do
-            body=$(docker compose exec -T radar-api wget -qO- http://localhost:3000/api/v1/health/ready || true)
-            echo "attempt $i: $body"
-            if echo "$body" | grep -q '"database":"ok"'; then
-              echo "radar-api readiness reports database ok"
+            live=$(docker compose exec -T radar-api wget -qO- http://localhost:3000/api/v1/health/live || true)
+            ready=$(docker compose exec -T radar-api wget -qO- http://localhost:3000/api/v1/health/ready || true)
+            echo "attempt $i: live=$live ready=$ready"
+            if echo "$ready" | grep -q '"database":"ok"'; then
+              echo "radar-api ready with database ok"
               exit 0
             fi
             sleep 3
@@ -98,7 +143,7 @@ jobs:
           docker compose logs --no-color
           exit 1
       - name: Migration job is idempotent on re-run
-        run: docker compose run --rm migrate | tee /dev/stderr | grep -q "No pending migrations"
-      - name: Tear down
+        run: docker compose run --rm radar-migrate | tee /dev/stderr | grep -q "No pending migrations"
+      - name: Tear down with volumes removed
         if: always()
         run: docker compose down -v

@@ -60,6 +60,10 @@ export interface SnapshotQuery {
   resourceKind?: string;
   resourceKey?: string;
   sourceSystem?: string;
+  /** Filter by exact raw-payload checksum. */
+  rawChecksum?: string;
+  /** Only snapshots retrieved at or after this instant. */
+  retrievedSince?: Date;
   /** Page size, 1..500 (default 100). */
   limit?: number;
 }

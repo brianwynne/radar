@@ -20,6 +20,9 @@ export {
   applyMigrations,
   loadMigrations,
   migrationsDir,
-  splitStatements,
+  migrationStatus,
+  migrationChecksum,
+  MigrationChecksumError,
   type MigrationFile,
+  type MigrationStatus,
 } from './migrations.js';

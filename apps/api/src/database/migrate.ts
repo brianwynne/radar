@@ -1,6 +1,11 @@
-// One-shot migration runner. Run explicitly (npm run migrate / a dedicated compose
-// service), never automatically from every API replica. A PostgreSQL advisory lock
-// serialises concurrent runners so two instances cannot migrate simultaneously.
+// One-shot migration runner. Run explicitly (npm run migrate / the radar-migrate compose
+// service), never automatically from every API replica.
+//
+// SESSION OWNERSHIP: `pg_advisory_lock` is session-scoped, so a SINGLE retained client
+// (one pg session) is used for the whole operation — lock acquisition, migration
+// inspection, migration execution and lock release. We deliberately do not take the lock
+// on a pooled query and then run migrations on unrelated pooled sessions. The lock is
+// released in `finally`, so it is released after success AND after failure.
 import { applyMigrations, loadMigrations } from '@radar/data';
 import { loadDatabaseConfig, redactDatabaseUrl } from './config.js';
 import { createPool } from './pool.js';

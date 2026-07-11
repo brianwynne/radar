@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { AuditEvent, AuditQuery, NewAuditEvent, Queryable } from '../types.js';
-import { orUndefined, toDate, toJson, toJsonArray } from '../mapping.js';
+import { orUndefined, toDate, toJson, toStringArray } from '../mapping.js';
 import type { AuditRepository } from './audit-repository.js';
 
 interface Row {
@@ -25,14 +25,14 @@ function mapRow(r: Row): AuditEvent {
     id: r.id,
     occurredAt: toDate(r.occurred_at),
     actorSubject: orUndefined(r.actor_subject),
-    actorRoles: toJsonArray<string>(r.actor_roles),
+    actorRoles: toStringArray(r.actor_roles),
     authenticationMethod: orUndefined(r.authentication_method),
     action: r.action,
     resourceType: orUndefined(r.resource_type),
     resourceKey: orUndefined(r.resource_key),
     outcome: r.outcome,
     correlationId: orUndefined(r.correlation_id),
-    details: toJson(r.details),
+    details: toJson<Record<string, unknown>>(r.details) ?? {},
   };
 }
 
@@ -47,12 +47,13 @@ export class PostgresAuditRepository implements AuditRepository {
       `INSERT INTO audit_events
          (id, actor_subject, actor_roles, authentication_method, action, resource_type,
           resource_key, outcome, correlation_id, details)
-       VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10::jsonb)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
        RETURNING ${COLUMNS}`,
       [
         id,
         input.actorSubject ?? null,
-        JSON.stringify(input.actorRoles ?? []),
+        // node-pg serialises a JS string[] to a PostgreSQL text[] literal for this column.
+        input.actorRoles ?? [],
         input.authenticationMethod ?? null,
         input.action,
         input.resourceType ?? null,

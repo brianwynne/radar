@@ -39,7 +39,7 @@ function mapRow(r: Row): ConfigurationSnapshot {
     canonicalPayload: toJson(r.canonical_payload),
     rawChecksum: r.raw_checksum,
     structuralChecksum: orUndefined(r.structural_checksum),
-    metadata: toJson(r.metadata),
+    metadata: toJson<Record<string, unknown>>(r.metadata) ?? {},
   };
 }
 
@@ -98,6 +98,14 @@ export class PostgresSnapshotRepository implements SnapshotRepository {
     if (query.sourceSystem) {
       params.push(query.sourceSystem);
       where.push(`source_system = $${params.length}`);
+    }
+    if (query.rawChecksum) {
+      params.push(query.rawChecksum);
+      where.push(`raw_checksum = $${params.length}`);
+    }
+    if (query.retrievedSince) {
+      params.push(query.retrievedSince);
+      where.push(`retrieved_at >= $${params.length}`);
     }
     const limit = Math.min(Math.max(Math.trunc(query.limit ?? 100), 1), 500);
     params.push(limit);

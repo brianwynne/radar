@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS audit_events (
   id                    uuid PRIMARY KEY,
   occurred_at           timestamptz NOT NULL DEFAULT now(),
   actor_subject         text,
-  actor_roles           jsonb NOT NULL DEFAULT '[]'::jsonb,
+  actor_roles           text[] NOT NULL DEFAULT '{}',
   authentication_method text,
   action                text NOT NULL,
   resource_type         text,

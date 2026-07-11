@@ -10,8 +10,10 @@
     "dev": "tsx watch src/server.ts",
     "migrate": "node dist/database/migrate.js",
     "migrate:dev": "tsx src/database/migrate.ts",
-    "test": "vitest run",
+    "test": "vitest run --exclude \"**/*.integration.test.ts\"",
+    "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
     "test:integration": "vitest run integration",
+    "test:integration:postgres": "vitest run integration",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\""
   },

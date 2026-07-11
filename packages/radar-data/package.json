@@ -15,8 +15,10 @@
   "files": ["dist", "migrations"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
+    "test": "vitest run --exclude \"**/integration/**\"",
+    "test:unit": "vitest run --exclude \"**/integration/**\"",
     "test:integration": "vitest run integration",
+    "test:integration:postgres": "vitest run integration",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

@@ -4,8 +4,10 @@ import type { DatabaseHealthCheck } from '../database/health.js';
 
 interface HealthOptions {
   authMode: AuthMode;
-  /** Optional readiness probe for the database. When omitted (e.g. configuration-only
-   *  tests), readiness reports the database as `not_wired` and stays ready. */
+  /** Readiness probe for the database. When omitted, readiness reports `not_wired` and
+   *  returns 503 (NOT ready) — a deployment must never report ready while PostgreSQL is
+   *  unwired. In production, server.ts always wires this (DATABASE_URL is required to
+   *  start); `not_wired` only arises in unit tests that build the app without a database. */
   databaseHealth?: DatabaseHealthCheck;
 }
 
@@ -58,14 +60,16 @@ export const healthRoutes: FastifyPluginAsync<HealthOptions> = async (app, opts)
 
   app.get('/ready', { schema: readySchema }, async (_req, reply) => {
     const checks: Record<string, string> = { config: 'ok', auth };
-    if (opts.databaseHealth) {
-      const db = await opts.databaseHealth();
-      checks.database = db.status === 'ok' ? 'ok' : 'unavailable';
-      if (db.status !== 'ok') {
-        return reply.code(503).send({ status: 'not_ready', checks });
-      }
-    } else {
+    if (!opts.databaseHealth) {
+      // Unwired database is never production-ready.
       checks.database = 'not_wired';
+      return reply.code(503).send({ status: 'not_ready', checks });
+    }
+    const db = await opts.databaseHealth();
+    // Only the coarse status is exposed — never a connection string or SQL error.
+    checks.database = db.status === 'ok' ? 'ok' : 'unavailable';
+    if (db.status !== 'ok') {
+      return reply.code(503).send({ status: 'not_ready', checks });
     }
     return { status: 'ready', checks };
   });

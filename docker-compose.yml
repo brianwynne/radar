@@ -1,9 +1,13 @@
 # RADAR — container-first, platform-independent stack (ADR-0001).
 # radar-web and radar-api are stateless; PostgreSQL is the only durable state.
 #
-# Status: postgres + mock-ns1 are runnable now; the radar-api and radar-web build
-# contexts (apps/api, apps/web) land in the next increment. This file is the target
-# topology and is intentionally complete so the shape is reviewable.
+# Status: postgres + radar-migrate + radar-api are runnable; the radar-web build context
+# (apps/web) lands in a later increment. This is a DEVELOPMENT topology.
+#
+# PRODUCTION NOTE: this file exposes the database port on the host for developer
+# convenience only. In production, PostgreSQL must NOT be published to the host/public
+# network — keep it on the internal compose/overlay network reachable only by
+# radar-migrate and radar-api. Credentials here are throwaway development values.
 
 services:
   postgres:
@@ -13,6 +17,7 @@ services:
       POSTGRES_PASSWORD: radar
       POSTGRES_DB: radar
     ports:
+      # DEVELOPMENT ONLY — do not expose the database in production examples.
       - "5432:5432"
     volumes:
       - radar_pgdata:/var/lib/postgresql/data
@@ -23,8 +28,10 @@ services:
       retries: 10
 
   # One-shot schema migration. Runs to completion before radar-api starts; a single
-  # runner (advisory-locked) is authoritative, so replicas never migrate concurrently.
-  migrate:
+  # runner (advisory-locked, one retained session) is authoritative, so replicas never
+  # migrate concurrently. Exits 0 on success and non-zero on failure. The API never runs
+  # migrations itself.
+  radar-migrate:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
@@ -43,7 +50,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      migrate:
+      radar-migrate:
         condition: service_completed_successfully
     environment:
       RADAR_MODE: ${RADAR_MODE:-mock}

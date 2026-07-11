@@ -64,11 +64,13 @@ describe('readiness reflects database health', () => {
     await app.close();
   });
 
-  it('reports database not_wired (and stays ready) when no probe is injected', async () => {
+  it('reports database not_wired and is NOT ready (503) when no probe is injected', async () => {
     const app = await buildApp(loadConfig(baseEnv));
     const res = await app.inject({ method: 'GET', url: '/api/v1/health/ready' });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().checks.database).toBe('not_wired');
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ status: 'not_ready', checks: { config: 'ok', auth: 'unconfigured', database: 'not_wired' } });
+    // Liveness remains healthy regardless.
+    expect((await app.inject({ method: 'GET', url: '/api/v1/health/live' })).statusCode).toBe(200);
     await app.close();
   });
 });

@@ -21,11 +21,12 @@ describe('health endpoints', () => {
     expect(res.json()).toEqual({ status: 'live' });
   });
 
-  it('GET /api/v1/health/ready confirms config loaded (database not wired here)', async () => {
+  it('GET /api/v1/health/ready is NOT ready (503) when the database is unwired', async () => {
+    // An unwired database must never report ready — see routes/health.ts.
     const res = await app.inject({ method: 'GET', url: '/api/v1/health/ready' });
-    expect(res.statusCode).toBe(200);
+    expect(res.statusCode).toBe(503);
     expect(res.json()).toEqual({
-      status: 'ready',
+      status: 'not_ready',
       checks: { config: 'ok', auth: 'unconfigured', database: 'not_wired' },
     });
   });
