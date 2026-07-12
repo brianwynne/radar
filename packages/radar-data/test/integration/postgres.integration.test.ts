@@ -18,7 +18,9 @@ import {
   PostgresCheckpointRepository,
   PostgresSteeringStateRepository,
   PostgresSteeringEventRepository,
+  PostgresDnsObservationRepository,
   type NewSteeringState,
+  type NewDnsObservation,
   type Queryable,
 } from '../../src/index.js';
 
@@ -54,7 +56,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
   const q = (): Queryable => pool as unknown as Queryable;
   const reset = () =>
     pool.query(
-      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, schema_migrations CASCADE',
+      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, dns_observations, schema_migrations CASCADE',
     );
   const migrate = async () => {
     const c = await pool.connect();
@@ -78,7 +80,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
 
     it('bootstraps schema_migrations, applies migrations in lexical order with timing', async () => {
       const applied = await migrate();
-      expect(applied).toEqual(['0001_init', '0002_live_steering']);
+      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations']);
       const cols = await pool.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'schema_migrations'`,
       );
@@ -162,9 +164,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
         }
       };
       const [a, b] = await Promise.all([runOnce(), runOnce()]);
-      expect([a.length, b.length].sort()).toEqual([0, 2]); // one applied both, the other found them applied
+      expect([a.length, b.length].sort()).toEqual([0, 3]); // one applied all, the other found them applied
       const count = await pool.query<{ n: number }>('SELECT count(*)::int n FROM schema_migrations');
-      expect(count.rows[0].n).toBe(2); // no duplicate
+      expect(count.rows[0].n).toBe(3); // no duplicate
     });
 
     it('releases the advisory lock after success and after failure', async () => {
@@ -467,6 +469,51 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
       expect(await repo.list({ since: new Date('2026-07-11T10:30:00.000Z') })).toHaveLength(1);
       expect(await repo.list({ before: new Date('2026-07-11T10:30:00.000Z') })).toHaveLength(1);
       expect(await repo.list({ limit: 1 })).toHaveLength(1);
+    });
+  });
+
+  // ----- DNS observation repository ----------------------------------------
+  describe('dns observation repository', () => {
+    beforeAll(async () => {
+      await reset();
+      await migrate();
+    });
+    afterEach(() => pool.query('TRUNCATE dns_observations'));
+
+    const obs = (over: Partial<NewDnsObservation> = {}): NewDnsObservation => ({
+      ispId: 'eir', ispName: 'Eir', asn: 5466, resolverIp: '192.0.2.11', zone: 'rte.ie', domain: 'live.rte.ie', recordType: 'A',
+      ecsRequested: true, ecsPrefix: '203.0.113.0/24', ecsHonoured: true, responseCode: 'NOERROR',
+      observedAnswers: [{ type: 'A', address: '192.0.2.10' }], predictedAnswers: [{ answerId: 'ans-realta', addresses: ['192.0.2.10'] }],
+      comparisonStatus: 'match', confidence: 'medium', ttl: 30, latencyMs: 12, recordChecksum: 'sha256:aaaa',
+      explanation: 'ok ✓', warnings: ['réalta note'], provenance: { source: 'radar', label: 'Observed DNS answer', differences: [] }, correlationId: 'corr-1',
+      ...over,
+    });
+
+    it('persists observations with JSONB round-trip, filters, bounds and latest-per-ISP; no secrets stored', async () => {
+      const repo = new PostgresDnsObservationRepository(q());
+      const created = await repo.create(obs());
+      expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(created.observedAnswers).toEqual([{ type: 'A', address: '192.0.2.10' }]);
+      expect(created.provenance).toEqual({ source: 'radar', label: 'Observed DNS answer', differences: [] });
+      expect(created.warnings).toEqual(['réalta note']); // unicode preserved
+
+      await repo.create(obs({ comparisonStatus: 'mismatch', responseCode: 'NXDOMAIN', observedAnswers: [] }));
+      await repo.create(obs({ ispId: 'virgin', ispName: 'Virgin', asn: 6830 }));
+
+      expect(await repo.list()).toHaveLength(3);
+      expect(await repo.list({ ispId: 'eir' })).toHaveLength(2);
+      expect(await repo.list({ comparisonStatus: 'mismatch' })).toHaveLength(1);
+      expect(await repo.list({ recordChecksum: 'sha256:aaaa' })).toHaveLength(3);
+      expect(await repo.list({ limit: 1 })).toHaveLength(1);
+      const all = await repo.list({});
+      expect(all[0].observedAt.getTime()).toBeGreaterThanOrEqual(all[1].observedAt.getTime()); // newest first
+
+      const latest = await repo.latestPerIsp();
+      expect(latest.map((r) => r.ispId).sort()).toEqual(['eir', 'virgin']); // one row per ISP
+
+      // No credential-like content is present in stored rows.
+      const dump = JSON.stringify(await repo.list());
+      expect(dump.toLowerCase()).not.toMatch(/token|secret|password|api[_-]?key/);
     });
   });
 

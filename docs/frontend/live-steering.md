@@ -40,6 +40,27 @@ notice states *"Network telemetry is currently informational. RADAR is not autom
 modifying NS1 steering."* **Actual CDN traffic share** remains **Telemetry not connected**
 (RADAR does not ingest delivered-traffic telemetry).
 
+### Three tiers (never merged)
+Each ISP card is now explicitly structured into three labelled tiers so prediction,
+observation and traffic are never confused:
+
+1. **Predicted DNS steering** — the persisted engine evaluation (identity, filter chain,
+   eligible platforms, expected distribution, preferred path) plus the informational
+   network-path and Réalta delivery context below.
+2. **Observed DNS answer** (`DnsObservationTier`, from `useDnsObservation` → `/dns-observation/
+   state`) — what a resolver actually returned: comparison status (match / partial / mismatch /
+   confidence-low / unavailable), observed answers, resolver queried, ECS used/not, confidence,
+   TTL, latency, freshness, and (with `ns1.detail.read`) the typed differences + explanation. A
+   **Run DNS observation** button (gated on `dns.observed.run`) triggers a manual observation.
+   When an observation changes (answer set, match status, ECS, resolver, TTL or confidence) the
+   tier highlights for 10s in a **distinct teal** style — separate from the steering-change
+   highlight — respecting `prefers-reduced-motion`, and it never claims traffic changed.
+3. **Actual traffic / experience** — **Telemetry not connected** (actual CDN share, POP
+   selection and QoE are not measured).
+
+A notice states RADAR shows these three separate tiers and that a single DNS observation is one
+sample, not proof of the distribution or of traffic.
+
 ### Réalta delivery context (cache pools + origin)
 When Réalta is an eligible platform for the ISP, the card also renders a compact **Réalta
 delivery context** from `GET /api/v1/telemetry/cache-pools` + `/origin` (via

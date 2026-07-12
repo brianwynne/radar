@@ -14,6 +14,10 @@ import type {
   CacheNodesResponse,
   CachePoolResponse,
   CachePoolsResponse,
+  DnsObservationConfigResponse,
+  DnsObservationHistoryResponse,
+  DnsObservationRunResponse,
+  DnsObservationStateResponse,
   NetworkPathResponse,
   NetworkPathsResponse,
   Ns1Status,
@@ -139,4 +143,16 @@ export const api = {
   },
   telemetryCacheNode: (nodeId: string) => request<CacheNodeResponse>(`/api/v1/telemetry/cache-nodes/${enc(nodeId)}`),
   telemetryOrigin: () => request<OriginResponse>('/api/v1/telemetry/origin'),
+  dnsObservationConfig: () => request<DnsObservationConfigResponse>('/api/v1/dns-observation/config'),
+  dnsObservationState: () => request<DnsObservationStateResponse>('/api/v1/dns-observation/state'),
+  dnsObservationRun: (ispId?: string) =>
+    request<DnsObservationRunResponse>('/api/v1/dns-observation/run', { method: 'POST', body: JSON.stringify(ispId ? { ispId } : {}) }),
+  dnsObservationHistory: (q: { isp?: string; status?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.isp) p.set('isp', q.isp);
+    if (q.status) p.set('status', q.status);
+    if (q.limit !== undefined) p.set('limit', String(q.limit));
+    const qs = p.toString();
+    return request<DnsObservationHistoryResponse>(`/api/v1/dns-observation/history${qs ? `?${qs}` : ''}`);
+  },
 };

@@ -13,8 +13,10 @@ import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useNetworkPaths } from '../telemetry/use-network-paths';
 import { useCacheTelemetry } from '../telemetry/use-cache-telemetry';
+import { useDnsObservation } from '../telemetry/use-dns-observation';
 import { PathTelemetryInline } from '../telemetry/NetworkPathTelemetry';
 import { RealtaDeliveryContext } from '../telemetry/CacheTelemetry';
+import { DnsObservationTier } from '../telemetry/DnsObservationTier';
 import type { LiveSteeringConfig, LiveSteeringEvent, LiveSteeringState } from '../api/types';
 
 const DEFAULT_INTERVAL = 30;
@@ -50,9 +52,11 @@ export function LiveSteering() {
   const { hasPermission } = useAuth();
   const canView = hasPermission('steering.summary.read');
   const showDetail = hasPermission('ns1.detail.read');
+  const canRunObservation = hasPermission('dns.observed.run');
   const reduceMotion = useMemo(prefersReducedMotion, []);
   const telemetry = useNetworkPaths(60_000); // read-only, informational; refreshed hourly-ish
   const cache = useCacheTelemetry({ refreshMs: 60_000 }); // Réalta pool + origin context
+  const dnsObs = useDnsObservation({ refreshMs: 60_000 }); // Tier-2 observed DNS answer
 
   const [config, setConfig] = useState<LiveSteeringConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -214,6 +218,11 @@ export function LiveSteering() {
       {configError && <div className="notice danger">{configError}</div>}
       {telemetry.notice && telemetry.mode !== 'disabled' && <div className="notice info">{telemetry.notice}</div>}
       {cache.notice && cache.mode !== 'disabled' && <div className="notice info">{cache.notice}</div>}
+      <div className="notice info">
+        RADAR shows three separate tiers: <b>Predicted DNS steering</b> (from configuration), <b>Observed DNS answer</b> (what a
+        resolver actually returned), and <b>Actual traffic</b> (not connected). A single DNS observation is one sample and does not
+        prove the expected distribution or actual delivered traffic.
+      </div>
 
       <div className="card">
         <div className="isp-picker">
@@ -270,25 +279,47 @@ export function LiveSteering() {
                 <span className="muted">No persisted steering state yet.</span>
               ) : (
                 <>
-                  <div className="path">
-                    <div className="seg"><span className="seg-label">ISP / ASN</span>{isp.name} AS{isp.asn}</div>
-                    <div className="seg"><span className="seg-label">Identity source</span>{s.identitySource ?? '—'}</div>
-                    <div className="seg"><span className="seg-label">NS1 steering result</span>{s.filterChain.join(' → ') || '—'}</div>
-                    <div className="seg"><span className="seg-label">Eligible platforms</span>{eligiblePlatforms(s).join(', ') || '—'}</div>
-                    <div className="seg"><span className="seg-label">Expected DNS distribution</span>{s.complete ? s.distribution.map((d) => `${d.deliveryPlatform ?? d.label} ${(d.share * 100).toFixed(0)}%`).join(' · ') || '—' : '— (partial)'}</div>
-                    <div className="seg realta"><span className="seg-label">Preferred Réalta path</span>{s.preferredPath ?? isp.preferredPath} <span className="badge neutral">CONFIGURED</span></div>
-                    <div className="seg cloudflare"><span className="seg-label">Downstream</span>Cloudflare Load Balancer</div>
+                  {/* Tier 1 — Predicted DNS steering (from configuration) */}
+                  <div className="steer-tier predicted-tier">
+                    <div className="tier-head"><span className="tier-label">Predicted DNS steering</span> <span className="muted" style={{ fontSize: '0.72rem' }}>from configuration · evaluated {new Date(s.evaluatedAt).toLocaleTimeString()}</span></div>
+                    <div className="path">
+                      <div className="seg"><span className="seg-label">ISP / ASN</span>{isp.name} AS{isp.asn}</div>
+                      <div className="seg"><span className="seg-label">Identity source</span>{s.identitySource ?? '—'}</div>
+                      <div className="seg"><span className="seg-label">NS1 steering result</span>{s.filterChain.join(' → ') || '—'}</div>
+                      <div className="seg"><span className="seg-label">Eligible platforms</span>{eligiblePlatforms(s).join(', ') || '—'}</div>
+                      <div className="seg"><span className="seg-label">Expected DNS distribution</span>{s.complete ? s.distribution.map((d) => `${d.deliveryPlatform ?? d.label} ${(d.share * 100).toFixed(0)}%`).join(' · ') || '—' : '— (partial)'}</div>
+                      <div className="seg realta"><span className="seg-label">Preferred Réalta path</span>{s.preferredPath ?? isp.preferredPath} <span className="badge neutral">CONFIGURED</span></div>
+                      <div className="seg cloudflare"><span className="seg-label">Downstream</span>Cloudflare Load Balancer</div>
+                    </div>
+                    {(() => {
+                      const sample = telemetry.byName.get(s.preferredPath ?? isp.preferredPath ?? '');
+                      return sample ? <PathTelemetryInline sample={sample} detail={showDetail} /> : null;
+                    })()}
+                    {eligiblePlatforms(s).some((plat) => /réalta|realta/i.test(plat)) && cache.pools.length > 0 && (
+                      <RealtaDeliveryContext pools={cache.pools} origin={cache.origin} />
+                    )}
                   </div>
-                  {(() => {
-                    const sample = telemetry.byName.get(s.preferredPath ?? isp.preferredPath ?? '');
-                    return sample ? <PathTelemetryInline sample={sample} detail={showDetail} /> : null;
-                  })()}
-                  {eligiblePlatforms(s).some((plat) => /réalta|realta/i.test(plat)) && cache.pools.length > 0 && (
-                    <RealtaDeliveryContext pools={cache.pools} origin={cache.origin} />
-                  )}
-                  <div className="muted" style={{ fontSize: '0.76rem', marginTop: '0.4rem' }}>
-                    Actual CDN traffic share: <b>Telemetry not connected</b> · evaluated {new Date(s.evaluatedAt).toLocaleTimeString()}
-                    {!s.complete && ' · partial evaluation — no definitive platform'}
+
+                  {/* Tier 2 — Observed DNS answer (what a resolver actually returned) */}
+                  <div className="steer-tier">
+                    <DnsObservationTier
+                      observation={dnsObs.byIsp.get(isp.id) ?? null}
+                      highlighted={dnsObs.changedAt.has(isp.id)}
+                      reason={dnsObs.changeReason.get(isp.id)}
+                      reduceMotion={reduceMotion}
+                      detail={showDetail}
+                    />
+                    {canRunObservation && (
+                      <button className="ghost" style={{ marginTop: '0.35rem', fontSize: '0.76rem' }} disabled={dnsObs.running} onClick={() => dnsObs.run(isp.id)}>
+                        {dnsObs.running ? 'Observing…' : 'Run DNS observation'}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Tier 3 — Actual traffic / experience (not connected) */}
+                  <div className="steer-tier traffic-tier muted" style={{ fontSize: '0.76rem' }}>
+                    <span className="tier-label">Actual traffic / experience</span> <b>Telemetry not connected</b> — actual CDN traffic share, POP selection and delivered QoE are not measured.
+                    {!s.complete && ' Partial evaluation — no definitive platform.'}
                   </div>
                   {highlighted && c?.lastEvent && (
                     <div className="notice info" style={{ marginTop: '0.4rem' }}>

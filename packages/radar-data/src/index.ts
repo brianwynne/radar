@@ -19,6 +19,10 @@ export type {
   NewSteeringChangeEvent,
   SteeringEventQuery,
   SteeringEventRepository,
+  DnsObservationRecord,
+  NewDnsObservation,
+  DnsObservationQuery,
+  DnsObservationRepository,
 } from './types.js';
 
 export type { SnapshotRepository } from './snapshots/snapshot-repository.js';
@@ -30,6 +34,7 @@ export { PostgresAuditRepository } from './audit/postgres-audit-repository.js';
 export { PostgresCheckpointRepository } from './steering/postgres-checkpoint-repository.js';
 export { PostgresSteeringStateRepository } from './steering/postgres-steering-state-repository.js';
 export { PostgresSteeringEventRepository } from './steering/postgres-steering-event-repository.js';
+export { PostgresDnsObservationRepository } from './dns/postgres-dns-observation-repository.js';
 
 export {
   applyMigrations,

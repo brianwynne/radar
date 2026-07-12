@@ -15,7 +15,9 @@ import {
   PostgresCheckpointRepository,
   PostgresSteeringStateRepository,
   PostgresSteeringEventRepository,
+  PostgresDnsObservationRepository,
   type NewSteeringState,
+  type NewDnsObservation,
   type Queryable,
 } from '../src/index.js';
 
@@ -52,6 +54,7 @@ describe('migrations (pg-mem)', () => {
     expect(status).toEqual([
       { version: '0001_init', filename: '0001_init.sql', applied: true, checksumMatches: true },
       { version: '0002_live_steering', filename: '0002_live_steering.sql', applied: true, checksumMatches: true },
+      { version: '0003_dns_observations', filename: '0003_dns_observations.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -197,5 +200,56 @@ describe('PostgresSteeringEventRepository (pg-mem)', () => {
     expect(ev.currentChecksum).toBe('sha256:bbbb');
     expect(await repo.list({ asn: 5466 })).toHaveLength(1);
     expect(await repo.list({ limit: 1 })).toHaveLength(1);
+  });
+});
+
+const dnsObservation = (over: Partial<NewDnsObservation> = {}): NewDnsObservation => ({
+  ispId: 'eir',
+  ispName: 'Eir',
+  asn: 5466,
+  resolverIp: '192.0.2.11',
+  zone: 'rte.ie',
+  domain: 'live.rte.ie',
+  recordType: 'A',
+  ecsRequested: true,
+  ecsPrefix: '203.0.113.0/24',
+  ecsHonoured: true,
+  responseCode: 'NOERROR',
+  observedAnswers: [{ type: 'A', address: '192.0.2.10' }],
+  predictedAnswers: [{ answerId: 'ans-realta', addresses: ['192.0.2.10'] }],
+  comparisonStatus: 'match',
+  confidence: 'medium',
+  ttl: 30,
+  latencyMs: 12,
+  recordChecksum: 'sha256:aaaa',
+  explanation: 'ok',
+  warnings: [],
+  provenance: { source: 'radar', label: 'Observed DNS answer' },
+  correlationId: 'corr-1',
+  ...over,
+});
+
+describe('PostgresDnsObservationRepository (pg-mem)', () => {
+  let db: Queryable;
+  beforeEach(async () => {
+    db = (await freshDb()).db;
+  });
+
+  it('creates observations, round-trips JSONB, filters, bounds and returns latest per ISP', async () => {
+    const repo = new PostgresDnsObservationRepository(db);
+    const created = await repo.create(dnsObservation());
+    expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(created.observedAnswers).toEqual([{ type: 'A', address: '192.0.2.10' }]);
+    expect(created.provenance).toEqual({ source: 'radar', label: 'Observed DNS answer' });
+
+    await repo.create(dnsObservation({ comparisonStatus: 'mismatch', responseCode: 'NXDOMAIN' }));
+    await repo.create(dnsObservation({ ispId: 'virgin', ispName: 'Virgin', asn: 6830 }));
+
+    expect(await repo.list()).toHaveLength(3);
+    expect(await repo.list({ ispId: 'eir' })).toHaveLength(2);
+    expect(await repo.list({ comparisonStatus: 'mismatch' })).toHaveLength(1);
+    expect(await repo.list({ limit: 1 })).toHaveLength(1);
+    const latest = await repo.latestPerIsp();
+    expect(latest.map((r) => r.ispId).sort()).toEqual(['eir', 'virgin']); // one row per ISP
   });
 });

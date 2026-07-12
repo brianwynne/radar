@@ -49,6 +49,13 @@ its **expected future source**: delivery-platform health, observed viewer distri
   `provenance.label = "Current Expected DNS Steering"`. It is the persisted *expected*
   result of evaluating NS1's Filter Chain — **never actual delivered traffic**. PNI/INEX/
   transit utilisation and actual CDN traffic share remain *Telemetry not connected*.
+- **Three tiers, never merged**: RADAR distinguishes **Predicted DNS steering** (from
+  configuration), **Observed DNS answer** (Tier-2 active DNS — what a resolver actually
+  returned, labelled `provenance.label = "Observed DNS answer"`, with a **confidence** that a
+  resolver result represents subscribers, and never asserted at low/unknown confidence), and
+  **Actual traffic** (*Telemetry not connected*). A single DNS observation is one **sample** —
+  it is never presented as proof of the expected distribution or of delivered traffic, and a
+  DNS change is never described as a traffic change.
 - **Steering-change reasons** are attributed from a fixed vocabulary; an unexplainable
   change is labelled *"Reason not yet attributable"* rather than inventing a cause.
 

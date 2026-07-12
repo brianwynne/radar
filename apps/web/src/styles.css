@@ -187,3 +187,14 @@ ul.notes li { margin: 0.15rem 0; }
 .realta-context .tele-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
 .realta-context .tele-row + .tele-row { margin-top: 0.2rem; }
 .realta-context .seg-label { display: inline; font-size: 0.62rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.steer-tier { margin-top: 0.5rem; padding-top: 0.4rem; border-top: 1px dashed var(--line); }
+.steer-tier:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+.tier-label { display: inline-block; font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--brand-ink); background: var(--info-bg); border-radius: 4px; padding: 0.05rem 0.35rem; margin-right: 0.35rem; }
+.traffic-tier .tier-label { color: var(--ink-soft); background: var(--panel-muted); }
+.observation-tier { padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-left: 3px solid #0f9d8f; border-radius: 8px; background: var(--panel-muted); }
+.observation-tier .tele-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.observation-tier .tele-row + .tele-row { margin-top: 0.15rem; }
+.observation-tier.changed { border-color: #0f9d8f; box-shadow: 0 0 0 2px rgba(15, 157, 143, 0.18); animation: obs-pulse 1s ease-in-out 2; }
+.observation-tier.changed.no-animate, .reduce-motion .observation-tier.changed { animation: none; }
+@keyframes obs-pulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(15, 157, 143, 0.18); } 50% { box-shadow: 0 0 0 5px rgba(15, 157, 143, 0.18); } }
+@media (prefers-reduced-motion: reduce) { .observation-tier.changed { animation: none; } }

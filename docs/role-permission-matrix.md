@@ -23,6 +23,7 @@ may hide unavailable controls but never enforces.
 | `ns1.detail.read` | — | ✅ | ✅ |
 | `ns1.raw.read` | — | ✅ | ✅ |
 | `simulation.run` | — | ✅ | ✅ |
+| `dns.observed.run` | — | ✅ | ✅ |
 | `snapshot.read` | — | ✅ | ✅ |
 | `snapshot.create` | — | — | ✅ |
 | `topology.manage` | — | — | ✅ |
@@ -47,6 +48,8 @@ metadata, engineering simulations, or topology administration.
 | `POST /api/v1/snapshots` | `snapshot.create` |
 | `GET /api/v1/snapshots`, `/:id`, `POST /snapshots/compare` | `snapshot.read` |
 | `GET /api/v1/audit` | `audit.read` |
+| `GET /api/v1/dns-observation/config`, `/state`, `/history` | `dns.explain.read` |
+| `POST /api/v1/dns-observation/run` | `dns.observed.run` |
 | `GET/PUT /api/v1/admin/mappings...` | `mapping.manage` |
 | `GET/PUT /api/v1/admin/thresholds...` | `threshold.manage` |
 

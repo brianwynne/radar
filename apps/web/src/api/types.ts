@@ -544,3 +544,102 @@ export interface OriginResponse {
   provenance: TelemetryProvenance;
   item: OriginSample;
 }
+
+// --- DNS observation (Tier-2 predicted-vs-observed) --------------------------
+
+export type DnsComparisonStatus = 'match' | 'partial_match' | 'mismatch' | 'observation_unavailable' | 'confidence_low' | 'unknown';
+export type DnsConfidence = 'high' | 'medium' | 'low' | 'unknown';
+
+export interface DnsObservationScenarioConfig {
+  ispId: string;
+  ispName: string;
+  asn: number;
+  country: string;
+  resolvers: string[];
+  ecsSubnet?: string;
+  zone: string;
+  domain: string;
+  recordType: string;
+  expectedRepresentativeness: 'high' | 'medium' | 'low';
+  provenance: string;
+  notes: string;
+}
+
+export interface DnsTierLabels {
+  predicted: string;
+  observed: string;
+  traffic: string;
+}
+
+export interface DnsObservationConfigResponse {
+  provenance: { source: 'radar'; readOnly: true; retrievedAt: string };
+  mode: 'disabled' | 'mock' | 'resolver';
+  staleAfterSeconds: number;
+  tierLabels: DnsTierLabels;
+  comparisonStatuses: DnsComparisonStatus[];
+  confidenceLevels: DnsConfidence[];
+  scenarios: DnsObservationScenarioConfig[];
+}
+
+export interface DnsObservationDifference {
+  kind: string;
+  detail: string;
+}
+
+export interface DnsObservationItem {
+  id: string;
+  observedAt: string;
+  freshness: { ageSeconds: number | null; staleAfterSeconds: number; fresh: boolean };
+  ispId: string;
+  ispName: string;
+  asn?: number;
+  resolverIp?: string;
+  zone: string;
+  domain: string;
+  recordType: string;
+  responseCode?: string;
+  ecsRequested: boolean;
+  ecsPrefix?: string;
+  ecsHonoured?: boolean;
+  ttl?: number;
+  latencyMs?: number;
+  confidence: DnsConfidence;
+  comparisonStatus: DnsComparisonStatus;
+  matchStatus?: DnsComparisonStatus;
+  differences: DnsObservationDifference[];
+  observedAnswers: { type: string; address: string }[];
+  predictedAnswers: { answerId: string; addresses: string[]; deliveryPlatform?: string }[];
+  predictedDistribution: { answerId: string; label: string; deliveryPlatform?: string; share: number }[];
+  observedOrder: string[];
+  recordChecksum?: string;
+  explanation?: string;
+  warnings: string[];
+  provenance: { source: 'radar'; label: string; readOnly: true };
+}
+
+export interface DnsObservationStateItem {
+  ispId: string;
+  ispName: string;
+  asn: number;
+  observation: DnsObservationItem | null;
+}
+
+export interface DnsObservationStateResponse {
+  provenance: { source: 'radar'; readOnly: true; retrievedAt: string };
+  tierLabels: DnsTierLabels;
+  count: number;
+  items: DnsObservationStateItem[];
+}
+
+export interface DnsObservationRunResponse {
+  provenance: { source: 'radar'; readOnly: true; retrievedAt: string };
+  tierLabels: DnsTierLabels;
+  count: number;
+  results: DnsObservationItem[];
+}
+
+export interface DnsObservationHistoryResponse {
+  provenance: { source: 'radar'; readOnly: true; retrievedAt: string };
+  count: number;
+  items: DnsObservationItem[];
+}

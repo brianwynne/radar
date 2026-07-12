@@ -109,3 +109,26 @@ monitor/source/feed *endpoints* are FIXTURE-PENDING (§5).
    guide §28 scenarios 1–6 + §29 contract tests.
 7. Platform mapping via a RADAR-owned answer→platform table (guide §27), not only
    `meta.note`.
+
+## Tier-2 DNS observation — resolver vs on-net (assumption)
+
+RADAR verifies predicted steering by actively observing DNS, but a **resolver observation is
+not the same as being on the ISP's network**, and this bounds every claim:
+
+- **DNS steering (case 1)** — NS1 (authoritative) sees the recursive resolver's IP or its
+  **EDNS Client Subnet (ECS)**. Querying via an ISP resolver reproduces a subscriber's answer
+  **only if ECS is forwarded with a customer-representative prefix**; many resolvers strip or
+  truncate ECS, in which case NS1 sees only the resolver's egress IP. RADAR records
+  `ecsRequested` / `ecsHonoured` and never implies ECS was honoured unless the response
+  confirms a scope (OPT scope-prefix-length > 0).
+- **Traffic steering (case 2)** — once the client connects, the CDN sees its **real source
+  IP**, so POP/edge selection, peering, cache behaviour and QoE behave as the *tester's* ISP,
+  not the target ISP. RADAR therefore **cannot** infer traffic behaviour from DNS and keeps
+  "Actual traffic" as *Telemetry not connected*.
+
+Consequences encoded in RADAR: a **confidence** grade on every observation (high/medium/low/
+unknown), no assertion of match/mismatch at low/unknown confidence, and a single observation
+treated as one **sample** (never proof of the Weighted-Shuffle distribution). Configured ISP
+resolver addresses and ECS subnets are **RADAR-owned placeholders** (RFC 5737) until RTÉ
+supplies confirmed endpoints — RADAR never invents real resolver IPs. See
+[../architecture/dns-observation.md](../architecture/dns-observation.md).

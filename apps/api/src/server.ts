@@ -13,6 +13,8 @@ import { createNs1Client } from './ns1/index.js';
 import { createChangeDetectionService } from './change-detection/index.js';
 import { createTelemetryClient } from './telemetry/index.js';
 import { createCacheTelemetryClient } from './telemetry/cache-index.js';
+import { createDnsObservationService } from './dns-observation/index.js';
+import { createDnsObservationStore } from './database/dns-observation-store.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -37,6 +39,13 @@ async function main(): Promise<void> {
 
   const telemetryClient = createTelemetryClient(config.telemetry);
   const cacheTelemetryClient = createCacheTelemetryClient(config.cacheTelemetry);
+  const dnsObservationRepository = createDnsObservationStore(pool);
+  const dnsObservationService = createDnsObservationService({
+    ns1Client,
+    config: config.dnsObservation,
+    repository: dnsObservationRepository,
+    logger: undefined,
+  });
 
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
@@ -48,6 +57,9 @@ async function main(): Promise<void> {
     telemetryMode: config.telemetry.mode,
     cacheTelemetryClient,
     cacheTelemetryMode: config.cacheTelemetry.mode,
+    dnsObservationService,
+    dnsObservationRepository,
+    dnsObservationStaleAfterSeconds: config.dnsObservation.staleAfterSeconds,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -57,6 +69,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, 'radar-api shutting down');
     await changeDetection?.stop();
+    dnsObservationService.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -70,6 +83,10 @@ async function main(): Promise<void> {
     if (changeDetection) {
       changeDetection.start();
       app.log.info({ intervalMs: config.changeDetection.intervalMs }, 'change detection started');
+    }
+    if (config.dnsObservation.periodic.enabled) {
+      dnsObservationService.start();
+      app.log.info({ intervalSeconds: config.dnsObservation.periodic.minIntervalSeconds }, 'periodic DNS observation started');
     }
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

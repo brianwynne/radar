@@ -185,6 +185,62 @@ export interface SteeringEventRepository {
   list(query?: SteeringEventQuery): Promise<SteeringChangeEvent[]>;
 }
 
+// --- DNS observations (Tier-2 active DNS probing history) --------------------
+
+/** A bounded-history record of one active DNS observation and its comparison against
+ *  RADAR's predicted NS1 evaluation. Read-only-derived; stores no credentials, packet
+ *  captures or raw resolver logs. `observedAnswers`/`predictedAnswers`/`warnings`/
+ *  `provenance` are opaque JSONB to this layer. */
+export interface DnsObservationRecord {
+  id: string;
+  observedAt: Date;
+  ispId: string;
+  ispName: string;
+  asn?: number;
+  resolverIp?: string;
+  zone: string;
+  domain: string;
+  recordType: string;
+  ecsRequested: boolean;
+  ecsPrefix?: string;
+  ecsHonoured?: boolean;
+  responseCode?: string;
+  observedAnswers: unknown;
+  predictedAnswers: unknown;
+  comparisonStatus: string;
+  confidence: string;
+  ttl?: number;
+  latencyMs?: number;
+  recordChecksum?: string;
+  explanation?: string;
+  warnings: unknown;
+  provenance: unknown;
+  correlationId?: string;
+}
+
+export type NewDnsObservation = Omit<DnsObservationRecord, 'id' | 'observedAt'> & { observedAt?: Date };
+
+export interface DnsObservationQuery {
+  ispId?: string;
+  resolverIp?: string;
+  zone?: string;
+  domain?: string;
+  recordType?: string;
+  comparisonStatus?: string;
+  recordChecksum?: string;
+  since?: Date;
+  before?: Date;
+  /** Page size, 1..500 (default 100). */
+  limit?: number;
+}
+
+export interface DnsObservationRepository {
+  create(observation: NewDnsObservation): Promise<DnsObservationRecord>;
+  list(query?: DnsObservationQuery): Promise<DnsObservationRecord[]>;
+  /** The latest observation per ISP (the current observed-DNS state). */
+  latestPerIsp(): Promise<DnsObservationRecord[]>;
+}
+
 export interface AuditQuery {
   actorSubject?: string;
   action?: string;

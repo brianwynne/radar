@@ -12,6 +12,7 @@ export type RadarPermission =
   | 'ns1.detail.read'
   | 'ns1.raw.read'
   | 'simulation.run'
+  | 'dns.observed.run'
   | 'snapshot.read'
   | 'snapshot.create'
   | 'topology.manage'
@@ -24,7 +25,7 @@ export const RADAR_ROLES: readonly RadarRole[] = ['NOC_VIEWER', 'VIEWING_ENGINEE
 /** Permissions granted *directly* by each role (not counting inheritance). */
 const DIRECT: Record<RadarRole, RadarPermission[]> = {
   NOC_VIEWER: ['dashboard.read', 'steering.summary.read', 'topology.summary.read'],
-  VIEWING_ENGINEER: ['dns.explain.read', 'ns1.detail.read', 'ns1.raw.read', 'simulation.run', 'snapshot.read', 'audit.read'],
+  VIEWING_ENGINEER: ['dns.explain.read', 'ns1.detail.read', 'ns1.raw.read', 'simulation.run', 'dns.observed.run', 'snapshot.read', 'audit.read'],
   ENGINEER: ['snapshot.create', 'topology.manage', 'mapping.manage', 'threshold.manage'],
 };
 

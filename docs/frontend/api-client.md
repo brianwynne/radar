@@ -32,6 +32,10 @@ Requests are same-origin (`/api/...`), proxied to radar-api by Vite (dev) or ngi
 | `api.telemetryCacheNodes(q?)` | `GET /api/v1/telemetry/cache-nodes` | `CacheNodesResponse` |
 | `api.telemetryCacheNode(id)` | `GET /api/v1/telemetry/cache-nodes/:id` | `CacheNodeResponse` |
 | `api.telemetryOrigin()` | `GET /api/v1/telemetry/origin` | `OriginResponse` |
+| `api.dnsObservationConfig()` | `GET /api/v1/dns-observation/config` | `DnsObservationConfigResponse` |
+| `api.dnsObservationState()` | `GET /api/v1/dns-observation/state` | `DnsObservationStateResponse` |
+| `api.dnsObservationRun(ispId?)` | `POST /api/v1/dns-observation/run` | `DnsObservationRunResponse` |
+| `api.dnsObservationHistory(q?)` | `GET /api/v1/dns-observation/history` | `DnsObservationHistoryResponse` |
 
 ## Errors
 Non-2xx responses throw `ApiError { status, code, message }`. Callers map:

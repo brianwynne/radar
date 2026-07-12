@@ -6,6 +6,7 @@ import { loadDatabaseConfig, type DatabaseConfig } from './database/config.js';
 import { loadNs1Config, type Ns1Config } from './ns1/config.js';
 import { loadTelemetryConfig, type TelemetryConfig } from './telemetry/config.js';
 import { loadCacheTelemetryConfig, type CacheTelemetryConfig } from './telemetry/cache-config.js';
+import { loadDnsObservationConfig, type DnsObservationConfig } from './dns-observation/config.js';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -92,6 +93,8 @@ export interface Config {
   telemetry: TelemetryConfig;
   /** Cache-pool / cache-node / origin telemetry (disabled by default). */
   cacheTelemetry: CacheTelemetryConfig;
+  /** Tier-2 active DNS observation (disabled by default). */
+  dnsObservation: DnsObservationConfig;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -162,6 +165,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // Cache/origin telemetry: disabled by default; same validation discipline.
   const cacheTelemetry = loadCacheTelemetryConfig(env);
 
+  // Tier-2 active DNS observation: disabled by default; periodic off by default.
+  const dnsObservation = loadDnsObservationConfig(env);
+
   return {
     NODE_ENV: p.NODE_ENV,
     API_HOST: p.API_HOST,
@@ -178,5 +184,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     changeDetection: { enabled: parseBool(p.CHANGE_DETECTION_ENABLED), intervalMs: p.CHANGE_DETECTION_INTERVAL_MS },
     telemetry,
     cacheTelemetry,
+    dnsObservation,
   };
 }

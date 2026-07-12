@@ -94,6 +94,32 @@ const ORIGIN = (mode: 'mock' | 'disabled') => ({
   item: { originId: 'origin', originName: 'Réalta origin', requestRate: mode === 'disabled' ? null : 9000, outboundBandwidthBps: mode === 'disabled' ? null : 120e9, cpuUtilisationPercent: mode === 'disabled' ? null : 62, status: mode === 'disabled' ? 'telemetry_not_connected' : 'healthy', stale: false, freshness: { ageSeconds: mode === 'disabled' ? null : 3, staleAfterSeconds: 120, fresh: mode !== 'disabled' }, observedAt: mode === 'disabled' ? null : 'x', source: mode, provenance: { source: mode, synthetic: mode === 'mock', readOnly: true, informationalOnly: true, note: 'x' } },
 });
 
+const DNS_CONFIG = {
+  provenance: { source: 'radar', readOnly: true, retrievedAt: 'x' },
+  mode: 'mock',
+  staleAfterSeconds: 900,
+  tierLabels: { predicted: 'Predicted DNS steering', observed: 'Observed DNS answer', traffic: 'Actual traffic — telemetry not connected' },
+  comparisonStatuses: ['match', 'partial_match', 'mismatch', 'observation_unavailable', 'confidence_low', 'unknown'],
+  confidenceLevels: ['high', 'medium', 'low', 'unknown'],
+  scenarios: [{ ispId: 'eir', ispName: 'Eir', asn: 5466, country: 'IE', resolvers: ['192.0.2.11'], ecsSubnet: '203.0.113.0/24', zone: 'rte.ie', domain: 'live.rte.ie', recordType: 'A', expectedRepresentativeness: 'medium', provenance: 'MOCK', notes: '' }],
+};
+const dnsObservation = (ispId: string, status: string, addresses: string[]) => ({
+  id: `obs-${ispId}-${status}`, observedAt: '2026-07-11T15:41:00Z', freshness: { ageSeconds: 5, staleAfterSeconds: 900, fresh: true },
+  ispId, ispName: ispId === 'eir' ? 'Eir' : 'Virgin Media', asn: ispId === 'eir' ? 5466 : 6830, resolverIp: '192.0.2.11', zone: 'rte.ie', domain: 'live.rte.ie', recordType: 'A',
+  responseCode: 'NOERROR', ecsRequested: true, ecsPrefix: '203.0.113.0/24', ecsHonoured: true, ttl: 30, latencyMs: 12, confidence: 'medium',
+  comparisonStatus: status, matchStatus: status, differences: [], observedAnswers: addresses.map((a) => ({ type: 'A', address: a })), predictedAnswers: [], predictedDistribution: [], observedOrder: addresses, recordChecksum: 'sha256:x',
+  explanation: 'ok', warnings: [], provenance: { source: 'radar', label: 'Observed DNS answer', readOnly: true },
+});
+const dnsState = (eirStatus: string, eirAddrs: string[]) => ({
+  provenance: { source: 'radar', readOnly: true, retrievedAt: 'x' },
+  tierLabels: DNS_CONFIG.tierLabels,
+  count: 2,
+  items: [
+    { ispId: 'eir', ispName: 'Eir', asn: 5466, observation: dnsObservation('eir', eirStatus, eirAddrs) },
+    { ispId: 'virgin', ispName: 'Virgin Media', asn: 6830, observation: null },
+  ],
+});
+
 interface StubOpts {
   state?: (ispId: string) => LiveSteeringState | undefined;
   events?: (callIndex: number) => LiveSteeringEvent[];
@@ -103,6 +129,7 @@ interface StubOpts {
 
 function stub(principal: Principal, opts: StubOpts = {}) {
   let eventsCall = 0;
+  let dnsRuns = 0;
   const calls: string[] = [];
   vi.stubGlobal(
     'fetch',
@@ -112,6 +139,9 @@ function stub(principal: Principal, opts: StubOpts = {}) {
       calls.push(url);
       const j = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
       if (p.endsWith('/api/v1/me')) return j(principal);
+      if (p.endsWith('/dns-observation/config')) return j(DNS_CONFIG);
+      if (p.endsWith('/dns-observation/run')) { dnsRuns += 1; return j({ provenance: {}, tierLabels: DNS_CONFIG.tierLabels, count: 1, results: [] }); }
+      if (p.endsWith('/dns-observation/state')) return j(dnsRuns > 0 ? dnsState('mismatch', ['198.51.100.9']) : dnsState('match', ['192.0.2.10', '192.0.2.20']));
       if (p.endsWith('/ns1/config')) return j({ mode: 'mock', synthetic: true, readOnly: true });
       if (p.endsWith('/telemetry/network-paths')) return j(TELEMETRY(opts.telemetryMode ?? 'mock'));
       if (p.endsWith('/telemetry/cache-pools')) return j(CACHE_POOLS(opts.telemetryMode ?? 'mock'));
@@ -263,7 +293,7 @@ describe('Live Steering', () => {
     const pathTele = (await within(eirCard as HTMLElement).findByText(/52\.0%/)).closest('.path-telemetry')! as HTMLElement;
     expect(within(pathTele).getByText('healthy')).toBeInTheDocument();
     // …while actual CDN traffic share remains explicitly not connected.
-    expect(within(eirCard as HTMLElement).getByText(/Actual CDN traffic share/)).toBeInTheDocument();
+    expect(within(eirCard as HTMLElement).getByText(/Actual traffic \/ experience/)).toBeInTheDocument();
     // The informational, not-controlling notice is shown.
     expect(screen.getByText(/not automatically modifying NS1 steering/i)).toBeInTheDocument();
   });
@@ -276,6 +306,34 @@ describe('Live Steering', () => {
     expect(await within(eirCard).findByText(/Réalta pools/)).toBeInTheDocument();
     expect(within(eirCard).getByText(/Cloudflare selects the pool/)).toBeInTheDocument();
     expect(within(eirCard).getByText(/Origin/)).toBeInTheDocument();
+  });
+
+  it('renders three separate tiers: predicted steering, observed DNS answer, and (not connected) actual traffic', async () => {
+    stub(VE);
+    renderAt('/live-steering');
+    const eirCard = (await screen.findByRole('heading', { name: /Eir AS5466/ })).closest('.isp-card')! as HTMLElement;
+    expect(await within(eirCard).findByText('Predicted DNS steering')).toBeInTheDocument();
+    expect(within(eirCard).getByText('Observed DNS answer')).toBeInTheDocument();
+    expect(within(eirCard).getByText('Actual traffic / experience')).toBeInTheDocument();
+    // Observed tier shows the comparison status and does not claim traffic.
+    expect(await within(eirCard).findByText('match')).toBeInTheDocument();
+    expect(within(eirCard).getByText(/not measured/i)).toBeInTheDocument();
+    // A Viewing Engineer can trigger a manual observation.
+    expect(within(eirCard).getByRole('button', { name: /Run DNS observation/ })).toBeInTheDocument();
+  });
+
+  it('highlights the observed-DNS tier when an observation changes (distinct from a steering change)', async () => {
+    stub(VE);
+    renderAt('/live-steering');
+    const eirCard = (await screen.findByRole('heading', { name: /Eir AS5466/ })).closest('.isp-card')! as HTMLElement;
+    await within(eirCard).findByText('match'); // primed with the initial observation
+    await userEvent.click(within(eirCard).getByRole('button', { name: /Run DNS observation/ }));
+    // The re-observation returns a mismatch → the observed-DNS tier highlights.
+    await waitFor(() => {
+      const tier = eirCard.querySelector('.observation-tier')!;
+      expect(tier.className).toContain('changed');
+      expect(within(tier as HTMLElement).getByText('mismatch')).toBeInTheDocument();
+    });
   });
 
   it('keeps "Telemetry not connected" when telemetry is disabled', async () => {

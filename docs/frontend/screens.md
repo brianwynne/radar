@@ -31,8 +31,17 @@ to six ISPs (Eir, Virgin Media, Vodafone, Three, Sky, Digiweb); each shows:
 `ISP/ASN → Identity source → NS1 steering result (filter chain) → Eligible platforms →
 Expected DNS distribution → Preferred Réalta network path → Cloudflare Load Balancer`.
 
-This is **expected steering derived from configuration, not measured traffic**. Each card now
-also shows **read-only network-path telemetry** for the ISP's preferred PNI/INEX/transit path
+Each ISP card is structured into **three explicit tiers** — **Predicted DNS steering** (from
+configuration), **Observed DNS answer** (Tier-2 active DNS: what a resolver actually returned,
+with predicted-vs-observed comparison, confidence, ECS status, TTL, latency and a
+`dns.observed.run`-gated **Run DNS observation** button; the tier highlights in a distinct teal
+style when the observation changes, respecting reduced-motion, and never claims traffic
+changed), and **Actual traffic / experience** (*Telemetry not connected*). A single observation
+is one sample, never proof of the distribution or of traffic.
+
+This is **expected steering derived from configuration, not measured traffic**. Within the
+predicted tier each card also shows **read-only network-path telemetry** for the ISP's preferred
+PNI/INEX/transit path
 (observed utilisation + status vs configured capacity/target, with freshness/stale/unavailable
 handled honestly and an "informational only — not modifying NS1 steering" notice); and, when
 Réalta is eligible, a compact **Réalta delivery context** (aggregate pool health, configured
