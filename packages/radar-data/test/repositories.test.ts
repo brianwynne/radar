@@ -16,8 +16,10 @@ import {
   PostgresSteeringStateRepository,
   PostgresSteeringEventRepository,
   PostgresDnsObservationRepository,
+  PostgresValidationResultRepository,
   type NewSteeringState,
   type NewDnsObservation,
+  type NewValidationResult,
   type Queryable,
 } from '../src/index.js';
 
@@ -55,6 +57,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0001_init', filename: '0001_init.sql', applied: true, checksumMatches: true },
       { version: '0002_live_steering', filename: '0002_live_steering.sql', applied: true, checksumMatches: true },
       { version: '0003_dns_observations', filename: '0003_dns_observations.sql', applied: true, checksumMatches: true },
+      { version: '0004_ns1_validations', filename: '0004_ns1_validations.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -251,5 +254,54 @@ describe('PostgresDnsObservationRepository (pg-mem)', () => {
     expect(await repo.list({ limit: 1 })).toHaveLength(1);
     const latest = await repo.latestPerIsp();
     expect(latest.map((r) => r.ispId).sort()).toEqual(['eir', 'virgin']); // one row per ISP
+  });
+});
+
+const validationResult = (over: Partial<NewValidationResult> = {}): NewValidationResult => ({
+  endpoint: 'record',
+  zone: 'rte.ie',
+  domain: 'live.rte.ie',
+  recordType: 'A',
+  sourceMode: 'live',
+  retrievedAt: new Date('2026-07-12T10:00:00.000Z'),
+  rawChecksum: 'sha256:aaaa',
+  structuralChecksum: 'sha256:bbbb',
+  overallStatus: 'compatible_with_warnings',
+  schemaCompatible: true,
+  adapterCompatible: true,
+  supportedFilters: ['up', 'weighted_shuffle'],
+  unsupportedFilters: [],
+  unknownFields: { metadata: ['mystery'], unexpected: [], features: [] },
+  missingFields: [],
+  typeMismatches: [],
+  answerGroupsPresent: false,
+  feedControlledPresent: true,
+  ecs: { present: true, enabled: true },
+  fixtureComparison: { provisionalFixtureFields: ['answers[].meta.asn'], liveOnlyFields: [], typeMismatches: [], matches: false },
+  warnings: ['réalta note'],
+  sanitisedSample: { id: 'r', apiKey: '[REDACTED]' },
+  correlationId: 'corr-1',
+  ...over,
+});
+
+describe('PostgresValidationResultRepository (pg-mem)', () => {
+  let db: Queryable;
+  beforeEach(async () => {
+    db = (await freshDb()).db;
+  });
+
+  it('creates results, round-trips JSONB, fetches by id, filters and bounds', async () => {
+    const repo = new PostgresValidationResultRepository(db);
+    const created = await repo.create(validationResult());
+    expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(created.ecs).toEqual({ present: true, enabled: true });
+    expect(created.sanitisedSample).toEqual({ id: 'r', apiKey: '[REDACTED]' });
+    expect(await repo.getById(created.id)).not.toBeNull();
+    expect(await repo.getById('00000000-0000-0000-0000-000000000000')).toBeNull();
+
+    await repo.create(validationResult({ overallStatus: 'incompatible' }));
+    expect(await repo.list()).toHaveLength(2);
+    expect(await repo.list({ overallStatus: 'incompatible' })).toHaveLength(1);
+    expect(await repo.list({ limit: 1 })).toHaveLength(1);
   });
 });

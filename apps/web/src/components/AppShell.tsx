@@ -13,6 +13,7 @@ const NAV = [
   { to: '/steering', label: 'Steering', perm: 'steering.summary.read', end: false },
   { to: '/topology', label: 'Topology', perm: 'topology.summary.read', end: false },
   { to: '/explorer', label: 'NS1 Explorer', perm: 'ns1.detail.read', end: false },
+  { to: '/validation/ns1', label: 'NS1 Validation', perm: 'ns1.detail.read', end: false },
   { to: '/activity', label: 'Activity', perm: 'audit.read', end: false },
   { to: '/settings', label: 'Settings', perm: 'mapping.manage', end: false },
 ];

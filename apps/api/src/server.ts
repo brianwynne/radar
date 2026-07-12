@@ -15,6 +15,8 @@ import { createTelemetryClient } from './telemetry/index.js';
 import { createCacheTelemetryClient } from './telemetry/cache-index.js';
 import { createDnsObservationService } from './dns-observation/index.js';
 import { createDnsObservationStore } from './database/dns-observation-store.js';
+import { createValidationService } from './validation/index.js';
+import { createValidationStore } from './database/validation-store.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -46,6 +48,8 @@ async function main(): Promise<void> {
     repository: dnsObservationRepository,
     logger: undefined,
   });
+  const validationRepository = createValidationStore(pool);
+  const validationService = createValidationService({ client: ns1Client, mode: config.ns1.mode, config: config.validation, repository: validationRepository });
 
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
@@ -60,6 +64,8 @@ async function main(): Promise<void> {
     dnsObservationService,
     dnsObservationRepository,
     dnsObservationStaleAfterSeconds: config.dnsObservation.staleAfterSeconds,
+    validationService,
+    validationRepository,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },

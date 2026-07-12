@@ -23,6 +23,10 @@ import type {
   Ns1Status,
   OriginResponse,
   Principal,
+  ValidationResultResponse,
+  ValidationResultsResponse,
+  ValidationRunResponse,
+  ValidationUnsupportedFeaturesResponse,
   RawRecordResponse,
   RecordResponse,
   SnapshotCaptureResponse,
@@ -155,4 +159,16 @@ export const api = {
     const qs = p.toString();
     return request<DnsObservationHistoryResponse>(`/api/v1/dns-observation/history${qs ? `?${qs}` : ''}`);
   },
+  validationRun: (body: { zone: string; domain?: string; recordType?: string; includeActivity?: boolean; includeRaw?: boolean }) =>
+    request<ValidationRunResponse>('/api/v1/validation/ns1/run', { method: 'POST', body: JSON.stringify(body) }),
+  validationResults: (q: { zone?: string; status?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.zone) p.set('zone', q.zone);
+    if (q.status) p.set('status', q.status);
+    if (q.limit !== undefined) p.set('limit', String(q.limit));
+    const qs = p.toString();
+    return request<ValidationResultsResponse>(`/api/v1/validation/ns1/results${qs ? `?${qs}` : ''}`);
+  },
+  validationResult: (id: string) => request<ValidationResultResponse>(`/api/v1/validation/ns1/results/${enc(id)}`),
+  validationUnsupportedFeatures: () => request<ValidationUnsupportedFeaturesResponse>('/api/v1/validation/ns1/unsupported-features'),
 };

@@ -1262,3 +1262,26 @@ When a wire-schema detail is unknown:
 5. wait for a real read-only response before finalising the adapter.
 
 RADAR must prefer an explicit “evaluation incomplete” result over a convincing but inaccurate explanation.
+
+## §30. Read-only live validation (production readiness)
+
+Before finalising any adapter against real NS1 data, RADAR provides a **read-only validation**
+capability (docs/validation/ns1-live-validation.md) that operationalises §24/§29: it fetches
+live (or mock) zones/records/activity via the existing read-only client, preserves the raw
+response, and compares it — without coercion — against RADAR's runtime wire schemas, the engine
+adapter and the synthetic fixtures.
+
+It reports, per target: schema compatibility, adapter compatibility, supported vs unsupported
+filters, unknown metadata fields, unexpected fields, missing expected fields, field-type
+mismatches, answer-group presence, feed-controlled metadata presence, ECS configuration, and an
+overall status (`compatible` / `compatible_with_warnings` / `partial` / `incompatible` /
+`unavailable`). Answer order, filter-chain order, answer-group structure and unknown fields are
+all preserved.
+
+Rules this enforces:
+- **Never coerce** incompatible live data into the model — report the divergence (a partial or
+  incompatible status) instead, consistent with §17's "evaluation incomplete over confidently
+  wrong".
+- **Provisional fixtures** (§24) are confirmed or corrected against live via this tooling; a
+  **sanitised fixture candidate** is a reviewed draft, never an automatic commit.
+- Live validation is gated (`NS1_VALIDATION_ENABLED`) and, like everything in v1, **GET-only**.

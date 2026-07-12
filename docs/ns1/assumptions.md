@@ -132,3 +132,21 @@ treated as one **sample** (never proof of the Weighted-Shuffle distribution). Co
 resolver addresses and ECS subnets are **RADAR-owned placeholders** (RFC 5737) until RTÉ
 supplies confirmed endpoints — RADAR never invents real resolver IPs. See
 [../architecture/dns-observation.md](../architecture/dns-observation.md).
+
+## Live validation supersedes provisional fixtures (process)
+
+Every NS1 fixture field is **provisional** until confirmed against a live payload. The
+read-only validation tooling (see [../validation/ns1-live-validation.md](../validation/ns1-live-validation.md))
+is the mechanism for that confirmation: it compares live NS1 zones/records/activity against
+RADAR's runtime schemas, the engine adapter and the synthetic fixtures, and reports schema/
+adapter compatibility, supported/unsupported filters, unknown/unexpected/missing fields, type
+mismatches, answer-group and feed-controlled-metadata presence, and ECS configuration —
+**without silently coercing** incompatible live data into the model.
+
+- Live payloads are never mutated into the fixture shape; a divergence is **reported**, not
+  hidden. Provisional fixture fields that do not appear in live are flagged.
+- A **sanitised fixture candidate** can be generated (credential-redacted, order-preserving,
+  provenance-stamped, with an explicit operator-review list) but is **never auto-committed** —
+  an operator reviews it before it replaces a provisional fixture.
+- Running validation against a **live** NS1 account requires an explicit opt-in
+  (`NS1_VALIDATION_ENABLED=true`) on top of `RADAR_MODE=live`; it remains read-only.

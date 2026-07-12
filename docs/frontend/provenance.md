@@ -59,6 +59,16 @@ its **expected future source**: delivery-platform health, observed viewer distri
 - **Steering-change reasons** are attributed from a fixed vocabulary; an unexplainable
   change is labelled *"Reason not yet attributable"* rather than inventing a cause.
 
+## Live vs synthetic, confirmed by validation
+The mock/synthetic banner tells a viewer whether NS1 data is fixture-backed or live. The
+**NS1 Validation** screen makes that provenance rigorous: it compares live NS1 payloads against
+RADAR's runtime schemas, adapter and synthetic fixtures and reports compatibility **without
+coercing** incompatible data into the model — provisional fixture fields that do not match live
+are flagged, and unsupported filters / unknown fields are inventoried rather than hidden. A
+generated **sanitised fixture candidate** is a credential-redacted, review-flagged draft that is
+**never auto-committed**. All of this is read-only — a prominent notice states *"Validation is
+read-only. RADAR has not modified NS1."*
+
 ## Responsibility boundary
 Provenance also covers *who decides what*: NS1 selects the delivery platform; Cloudflare
 selects the Réalta pool. The UI states this wherever a platform or pool is shown, so a

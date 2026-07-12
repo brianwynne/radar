@@ -36,6 +36,10 @@ Requests are same-origin (`/api/...`), proxied to radar-api by Vite (dev) or ngi
 | `api.dnsObservationState()` | `GET /api/v1/dns-observation/state` | `DnsObservationStateResponse` |
 | `api.dnsObservationRun(ispId?)` | `POST /api/v1/dns-observation/run` | `DnsObservationRunResponse` |
 | `api.dnsObservationHistory(q?)` | `GET /api/v1/dns-observation/history` | `DnsObservationHistoryResponse` |
+| `api.validationRun(body)` | `POST /api/v1/validation/ns1/run` | `ValidationRunResponse` |
+| `api.validationResults(q?)` | `GET /api/v1/validation/ns1/results` | `ValidationResultsResponse` |
+| `api.validationResult(id)` | `GET /api/v1/validation/ns1/results/:id` | `ValidationResultResponse` |
+| `api.validationUnsupportedFeatures()` | `GET /api/v1/validation/ns1/unsupported-features` | `ValidationUnsupportedFeaturesResponse` |
 
 ## Errors
 Non-2xx responses throw `ApiError { status, code, message }`. Callers map:

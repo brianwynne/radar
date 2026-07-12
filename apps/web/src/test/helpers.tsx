@@ -17,7 +17,7 @@ export const VE: Principal = {
   ...NOC,
   displayName: 'Viewing Engineer',
   roles: ['VIEWING_ENGINEER'],
-  permissions: [...NOC.permissions, 'dns.explain.read', 'ns1.detail.read', 'ns1.raw.read', 'simulation.run', 'dns.observed.run', 'snapshot.read', 'audit.read'],
+  permissions: [...NOC.permissions, 'dns.explain.read', 'ns1.detail.read', 'ns1.raw.read', 'simulation.run', 'dns.observed.run', 'validation.run', 'snapshot.read', 'audit.read'],
 };
 export const ENGINEER: Principal = {
   ...VE,

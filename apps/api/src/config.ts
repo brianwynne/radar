@@ -7,6 +7,7 @@ import { loadNs1Config, type Ns1Config } from './ns1/config.js';
 import { loadTelemetryConfig, type TelemetryConfig } from './telemetry/config.js';
 import { loadCacheTelemetryConfig, type CacheTelemetryConfig } from './telemetry/cache-config.js';
 import { loadDnsObservationConfig, type DnsObservationConfig } from './dns-observation/config.js';
+import { loadValidationConfig, type ValidationConfig } from './validation/config.js';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -95,6 +96,8 @@ export interface Config {
   cacheTelemetry: CacheTelemetryConfig;
   /** Tier-2 active DNS observation (disabled by default). */
   dnsObservation: DnsObservationConfig;
+  /** Read-only NS1 live-validation (live runs gated by NS1_VALIDATION_ENABLED). */
+  validation: ValidationConfig;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -168,6 +171,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // Tier-2 active DNS observation: disabled by default; periodic off by default.
   const dnsObservation = loadDnsObservationConfig(env);
 
+  // NS1 live-validation: read-only; live runs gated by NS1_VALIDATION_ENABLED.
+  const validation = loadValidationConfig(env);
+
   return {
     NODE_ENV: p.NODE_ENV,
     API_HOST: p.API_HOST,
@@ -185,5 +191,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     telemetry,
     cacheTelemetry,
     dnsObservation,
+    validation,
   };
 }

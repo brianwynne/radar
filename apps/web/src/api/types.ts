@@ -643,3 +643,93 @@ export interface DnsObservationHistoryResponse {
   count: number;
   items: DnsObservationItem[];
 }
+
+// --- NS1 live validation -----------------------------------------------------
+
+export type ValidationOverallStatus = 'compatible' | 'compatible_with_warnings' | 'partial' | 'incompatible' | 'unavailable';
+
+export interface ValidationFieldTypeMismatch {
+  path: string;
+  expected: string;
+  actual: string;
+}
+export interface ValidationUnsupportedFeature {
+  kind: 'filter' | 'metadata' | 'structure';
+  name: string;
+  detail: string;
+}
+export interface ValidationFixtureComparison {
+  provisionalFixtureFields: string[];
+  liveOnlyFields: string[];
+  typeMismatches: ValidationFieldTypeMismatch[];
+  matches: boolean;
+}
+export interface ValidationSanitisedCandidate {
+  provenance: {
+    source: 'ns1';
+    mode: string;
+    endpoint: string;
+    resourceKey: string;
+    retrievedAt: string;
+    rawChecksum: string;
+    generatedBy: string;
+    warning: string;
+    reviewRequired: string[];
+  };
+  payload: unknown;
+}
+
+export interface ValidationResultItem {
+  id?: string;
+  endpoint: string;
+  resourceKey?: string;
+  zone?: string;
+  domain?: string;
+  recordType?: string;
+  sourceMode: string;
+  retrievedAt: string;
+  ranAt?: string;
+  rawChecksum?: string;
+  structuralChecksum?: string;
+  overallStatus: ValidationOverallStatus;
+  schemaCompatible: boolean;
+  schemaIssues?: string[];
+  adapterCompatible: boolean;
+  supportedFilters: string[];
+  unsupportedFilters: string[];
+  unknownMetadataFields: string[];
+  unexpectedFields: string[];
+  missingExpectedFields: string[];
+  fieldTypeMismatches: ValidationFieldTypeMismatch[];
+  unsupportedFeatures: ValidationUnsupportedFeature[];
+  answerGroupsPresent: boolean;
+  feedControlledMetadataPresent: boolean;
+  ecs: { present: boolean; enabled?: boolean };
+  fixtureComparison: ValidationFixtureComparison;
+  warnings: string[];
+  sanitisedSample?: unknown;
+  fixtureCandidate?: ValidationSanitisedCandidate;
+}
+
+export interface ValidationRunResponse {
+  provenance: { source: 'radar'; readOnly: true; notice: string; retrievedAt: string };
+  mode: string;
+  rawWithheld?: boolean;
+  count: number;
+  results: ValidationResultItem[];
+}
+export interface ValidationResultsResponse {
+  provenance: { source: 'radar'; readOnly: true; notice: string; retrievedAt: string };
+  mode?: string;
+  count: number;
+  items: ValidationResultItem[];
+}
+export interface ValidationResultResponse {
+  provenance: { source: 'radar'; readOnly: true; notice: string; retrievedAt: string };
+  item: ValidationResultItem;
+}
+export interface ValidationUnsupportedFeaturesResponse {
+  provenance: { source: 'radar'; readOnly: true; notice: string; retrievedAt: string };
+  unsupportedFilters: { name: string; count: number }[];
+  unknownMetadataFields: { name: string; count: number }[];
+}

@@ -19,8 +19,10 @@ import {
   PostgresSteeringStateRepository,
   PostgresSteeringEventRepository,
   PostgresDnsObservationRepository,
+  PostgresValidationResultRepository,
   type NewSteeringState,
   type NewDnsObservation,
+  type NewValidationResult,
   type Queryable,
 } from '../../src/index.js';
 
@@ -56,7 +58,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
   const q = (): Queryable => pool as unknown as Queryable;
   const reset = () =>
     pool.query(
-      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, dns_observations, schema_migrations CASCADE',
+      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, dns_observations, ns1_validation_results, schema_migrations CASCADE',
     );
   const migrate = async () => {
     const c = await pool.connect();
@@ -80,7 +82,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
 
     it('bootstraps schema_migrations, applies migrations in lexical order with timing', async () => {
       const applied = await migrate();
-      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations']);
+      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations']);
       const cols = await pool.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'schema_migrations'`,
       );
@@ -164,9 +166,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
         }
       };
       const [a, b] = await Promise.all([runOnce(), runOnce()]);
-      expect([a.length, b.length].sort()).toEqual([0, 3]); // one applied all, the other found them applied
+      expect([a.length, b.length].sort()).toEqual([0, 4]); // one applied all, the other found them applied
       const count = await pool.query<{ n: number }>('SELECT count(*)::int n FROM schema_migrations');
-      expect(count.rows[0].n).toBe(3); // no duplicate
+      expect(count.rows[0].n).toBe(4); // no duplicate
     });
 
     it('releases the advisory lock after success and after failure', async () => {
@@ -514,6 +516,49 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
       // No credential-like content is present in stored rows.
       const dump = JSON.stringify(await repo.list());
       expect(dump.toLowerCase()).not.toMatch(/token|secret|password|api[_-]?key/);
+    });
+  });
+
+  // ----- NS1 validation repository -----------------------------------------
+  describe('ns1 validation repository', () => {
+    beforeAll(async () => {
+      await reset();
+      await migrate();
+    });
+    afterEach(() => pool.query('TRUNCATE ns1_validation_results'));
+
+    const val = (over: Partial<NewValidationResult> = {}): NewValidationResult => ({
+      endpoint: 'record', zone: 'rte.ie', domain: 'live.rte.ie', recordType: 'A', sourceMode: 'live',
+      retrievedAt: new Date('2026-07-12T10:00:00.000Z'), rawChecksum: 'sha256:aaaa', structuralChecksum: 'sha256:bbbb',
+      overallStatus: 'compatible_with_warnings', schemaCompatible: true, adapterCompatible: true,
+      supportedFilters: ['up', 'weighted_shuffle'], unsupportedFilters: [],
+      unknownFields: { metadata: ['mystery ✓'], unexpected: [], features: [] }, missingFields: [], typeMismatches: [],
+      answerGroupsPresent: false, feedControlledPresent: true, ecs: { present: true, enabled: true },
+      fixtureComparison: { provisionalFixtureFields: ['answers[].meta.asn'], liveOnlyFields: [], typeMismatches: [], matches: false },
+      warnings: ['réalta note'], sanitisedSample: { id: 'r', apiKey: '[REDACTED]' }, correlationId: 'corr-1', ...over,
+    });
+
+    it('persists results with JSONB round-trip, getById, filters, bounds; stores no credentials', async () => {
+      const repo = new PostgresValidationResultRepository(q());
+      const created = await repo.create(val());
+      expect(created.id).toMatch(/^[0-9a-f-]{36}$/);
+      expect(created.ecs).toEqual({ present: true, enabled: true });
+      expect(created.sanitisedSample).toEqual({ id: 'r', apiKey: '[REDACTED]' });
+      expect((created.unknownFields as { metadata: string[] }).metadata).toEqual(['mystery ✓']); // unicode preserved
+      expect(await repo.getById(created.id)).not.toBeNull();
+
+      await repo.create(val({ overallStatus: 'incompatible', schemaCompatible: false }));
+      await repo.create(val({ endpoint: 'zone', domain: undefined, recordType: undefined }));
+      expect(await repo.list()).toHaveLength(3);
+      expect(await repo.list({ overallStatus: 'incompatible' })).toHaveLength(1);
+      expect(await repo.list({ endpoint: 'record' })).toHaveLength(2);
+      expect(await repo.list({ rawChecksum: 'sha256:aaaa' })).toHaveLength(3);
+      expect(await repo.list({ limit: 1 })).toHaveLength(1);
+      const all = await repo.list({});
+      expect(all[0].ranAt.getTime()).toBeGreaterThanOrEqual(all[1].ranAt.getTime()); // newest first
+
+      const dump = JSON.stringify(await repo.list());
+      expect(dump.toLowerCase()).not.toMatch(/super-secret|bearer .*token/);
     });
   });
 

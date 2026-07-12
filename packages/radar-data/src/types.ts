@@ -241,6 +241,60 @@ export interface DnsObservationRepository {
   latestPerIsp(): Promise<DnsObservationRecord[]>;
 }
 
+// --- NS1 live-validation results (bounded history) --------------------------
+
+/** A bounded-history record of one read-only NS1 production-readiness validation. Stores no
+ *  credentials or raw secrets; `sanitisedSample` is credential-redacted and structural. The
+ *  JSONB fields are opaque to this layer. */
+export interface ValidationResultRecord {
+  id: string;
+  ranAt: Date;
+  endpoint: string;
+  zone?: string;
+  domain?: string;
+  recordType?: string;
+  sourceMode: string;
+  retrievedAt?: Date;
+  rawChecksum?: string;
+  structuralChecksum?: string;
+  overallStatus: string;
+  schemaCompatible: boolean;
+  adapterCompatible: boolean;
+  supportedFilters: unknown;
+  unsupportedFilters: unknown;
+  unknownFields: unknown;
+  missingFields: unknown;
+  typeMismatches: unknown;
+  answerGroupsPresent: boolean;
+  feedControlledPresent: boolean;
+  ecs: unknown;
+  fixtureComparison: unknown;
+  warnings: unknown;
+  sanitisedSample?: unknown;
+  correlationId?: string;
+}
+
+export type NewValidationResult = Omit<ValidationResultRecord, 'id' | 'ranAt'> & { ranAt?: Date };
+
+export interface ValidationResultQuery {
+  zone?: string;
+  domain?: string;
+  recordType?: string;
+  endpoint?: string;
+  overallStatus?: string;
+  rawChecksum?: string;
+  since?: Date;
+  before?: Date;
+  /** Page size, 1..500 (default 100). */
+  limit?: number;
+}
+
+export interface ValidationResultRepository {
+  create(result: NewValidationResult): Promise<ValidationResultRecord>;
+  getById(id: string): Promise<ValidationResultRecord | null>;
+  list(query?: ValidationResultQuery): Promise<ValidationResultRecord[]>;
+}
+
 export interface AuditQuery {
   actorSubject?: string;
   action?: string;

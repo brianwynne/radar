@@ -94,6 +94,19 @@ Delivery-platform health and viewer distribution remain *Telemetry not connected
 The **Delivery Topology** screen's cache section (below) gains the same pool table plus a
 per-node table (`ns1.detail.read`) and origin health.
 
+## NS1 Validation screen (`/validation/ns1`, `ns1.detail.read`)
+Read-only production-readiness validation of live/mock NS1 data against RADAR's runtime schemas,
+adapter and synthetic fixtures. Shows the source mode and a run form (zone + optional domain/
+recordType/includeActivity/includeRaw). Each result renders the overall compatibility status,
+schema + adapter compatibility, supported/unsupported filters, unknown/unexpected/missing
+fields, field-type mismatches, answer-group and feed-controlled-metadata presence, ECS config,
+adapter warnings, and the **fixture comparison** (provisional fixture fields vs live). A
+prominent notice states **"Validation is read-only. RADAR has not modified NS1."** Running
+requires `validation.run`; sanitised raw access and the **"Generate sanitised fixture
+candidate"** action (a downloadable, review-flagged draft — never auto-committed) require
+`ns1.raw.read`. An exportable sanitised report is available per result, plus a Recent
+Validation Results table. Live-account validation additionally requires `NS1_VALIDATION_ENABLED`.
+
 ## NS1 Explorer screen
 Read-only discovery across every record the API exposes. Pick a zone (`GET /ns1/zones`),
 see its records (`GET /ns1/zones/:zone`), and select one — the selection is

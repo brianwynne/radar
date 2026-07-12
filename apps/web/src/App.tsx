@@ -3,6 +3,7 @@ import { useAuth } from './auth/AuthContext';
 import { AppShell } from './components/AppShell';
 import { Dashboard } from './pages/Dashboard';
 import { Ns1Explorer } from './pages/Ns1Explorer';
+import { ValidationNs1 } from './pages/ValidationNs1';
 import { ExplainDns } from './pages/ExplainDns';
 import { Steering } from './pages/Steering';
 import { LiveSteering } from './pages/LiveSteering';
@@ -41,6 +42,7 @@ export function App() {
         <Route path="explorer" element={<Ns1Explorer />} />
         <Route path="explorer/:zone" element={<Ns1Explorer />} />
         <Route path="explorer/:zone/:domain/:type" element={<Ns1Explorer />} />
+        <Route path="validation/ns1" element={<ValidationNs1 />} />
         <Route path="activity" element={<Activity />} />
         <Route path="snapshots/:snapshotId" element={<SnapshotDetail />} />
         <Route path="settings" element={<Settings />} />

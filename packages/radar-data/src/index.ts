@@ -23,6 +23,10 @@ export type {
   NewDnsObservation,
   DnsObservationQuery,
   DnsObservationRepository,
+  ValidationResultRecord,
+  NewValidationResult,
+  ValidationResultQuery,
+  ValidationResultRepository,
 } from './types.js';
 
 export type { SnapshotRepository } from './snapshots/snapshot-repository.js';
@@ -35,6 +39,7 @@ export { PostgresCheckpointRepository } from './steering/postgres-checkpoint-rep
 export { PostgresSteeringStateRepository } from './steering/postgres-steering-state-repository.js';
 export { PostgresSteeringEventRepository } from './steering/postgres-steering-event-repository.js';
 export { PostgresDnsObservationRepository } from './dns/postgres-dns-observation-repository.js';
+export { PostgresValidationResultRepository } from './validation/postgres-validation-repository.js';
 
 export {
   applyMigrations,
