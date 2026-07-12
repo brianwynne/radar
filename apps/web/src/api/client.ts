@@ -10,9 +10,14 @@ import type {
   LiveSteeringConfig,
   LiveSteeringEventsResponse,
   LiveSteeringStateResponse,
+  CacheNodeResponse,
+  CacheNodesResponse,
+  CachePoolResponse,
+  CachePoolsResponse,
   NetworkPathResponse,
   NetworkPathsResponse,
   Ns1Status,
+  OriginResponse,
   Principal,
   RawRecordResponse,
   RecordResponse,
@@ -114,4 +119,24 @@ export const api = {
     return request<NetworkPathsResponse>(`/api/v1/telemetry/network-paths${qs ? `?${qs}` : ''}`);
   },
   telemetryNetworkPath: (pathId: string) => request<NetworkPathResponse>(`/api/v1/telemetry/network-paths/${enc(pathId)}`),
+  telemetryCachePools: (q: { site?: string; status?: string; stale?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (q.site) p.set('site', q.site);
+    if (q.status) p.set('status', q.status);
+    if (q.stale !== undefined) p.set('stale', String(q.stale));
+    const qs = p.toString();
+    return request<CachePoolsResponse>(`/api/v1/telemetry/cache-pools${qs ? `?${qs}` : ''}`);
+  },
+  telemetryCachePool: (poolId: string) => request<CachePoolResponse>(`/api/v1/telemetry/cache-pools/${enc(poolId)}`),
+  telemetryCacheNodes: (q: { site?: string; poolId?: string; status?: string; stale?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (q.site) p.set('site', q.site);
+    if (q.poolId) p.set('poolId', q.poolId);
+    if (q.status) p.set('status', q.status);
+    if (q.stale !== undefined) p.set('stale', String(q.stale));
+    const qs = p.toString();
+    return request<CacheNodesResponse>(`/api/v1/telemetry/cache-nodes${qs ? `?${qs}` : ''}`);
+  },
+  telemetryCacheNode: (nodeId: string) => request<CacheNodeResponse>(`/api/v1/telemetry/cache-nodes/${enc(nodeId)}`),
+  telemetryOrigin: () => request<OriginResponse>('/api/v1/telemetry/origin'),
 };

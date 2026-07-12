@@ -26,10 +26,17 @@ fresh value). It is labelled **informational only — RADAR is not modifying NS1
 mock data is tagged MOCK / SYNTHETIC. The UI **never generates a sample utilisation
 percentage**.
 
+**Cache-pool / cache-node / origin telemetry** is likewise **observed and read-only** where a
+source is configured: pool/node throughput, CPU, hit ratio and origin health, with **headroom**
+(configured capacity − observed throughput) computed deterministically and shown as `n/a` when
+either input is unavailable. Configured capacity/node-count stay CONFIGURED / manually
+maintained, distinct from observed values. It carries the boundary **NS1 selects Réalta ·
+Cloudflare selects the pool · RADAR only observes** and is labelled **informational only — not
+modifying NS1 or Cloudflare** (mock data tagged MOCK / SYNTHETIC).
+
 Everything else that would have a measured value still shows **Telemetry not connected** plus
-its **expected future source** (Varnish telemetry, Cloudflare API, …): pool/cache utilisation,
-delivery-platform health, observed viewer distribution, and **actual CDN traffic share** on
-Live Steering.
+its **expected future source**: delivery-platform health, observed viewer distribution, and
+**actual CDN traffic share** on Live Steering.
 
 ## Derived vs asserted
 - **Identity** (country/ASN/network path) is *derived/configured*, labelled accordingly

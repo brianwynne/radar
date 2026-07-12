@@ -5,6 +5,7 @@ import type { RadarRole } from './auth/permissions.js';
 import { loadDatabaseConfig, type DatabaseConfig } from './database/config.js';
 import { loadNs1Config, type Ns1Config } from './ns1/config.js';
 import { loadTelemetryConfig, type TelemetryConfig } from './telemetry/config.js';
+import { loadCacheTelemetryConfig, type CacheTelemetryConfig } from './telemetry/cache-config.js';
 
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
@@ -89,6 +90,8 @@ export interface Config {
   changeDetection: { enabled: boolean; intervalMs: number };
   /** Network-path telemetry (disabled by default; mock or read-only Prometheus). */
   telemetry: TelemetryConfig;
+  /** Cache-pool / cache-node / origin telemetry (disabled by default). */
+  cacheTelemetry: CacheTelemetryConfig;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -156,6 +159,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // HTTPS outside development) happens here so misconfiguration fails startup.
   const telemetry = loadTelemetryConfig(env);
 
+  // Cache/origin telemetry: disabled by default; same validation discipline.
+  const cacheTelemetry = loadCacheTelemetryConfig(env);
+
   return {
     NODE_ENV: p.NODE_ENV,
     API_HOST: p.API_HOST,
@@ -171,5 +177,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ns1,
     changeDetection: { enabled: parseBool(p.CHANGE_DETECTION_ENABLED), intervalMs: p.CHANGE_DETECTION_INTERVAL_MS },
     telemetry,
+    cacheTelemetry,
   };
 }

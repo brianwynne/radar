@@ -82,6 +82,18 @@ const TELEMETRY = (mode: 'mock' | 'disabled') => ({
   ],
 });
 
+const CACHE_POOLS = (mode: 'mock' | 'disabled') => ({
+  provenance: { source: 'radar', telemetryMode: mode, readOnly: true, informationalOnly: true, notice: 'Cache and origin telemetry are informational. RADAR is not automatically modifying NS1 or Cloudflare.', retrievedAt: 'x' },
+  count: 1,
+  items: [
+    { poolId: 'donnybrook-1', poolName: 'Donnybrook Pool 1', site: 'Donnybrook', cacheNodeCount: 2, configuredCapacityBps: 160e9, observedOutboundBps: mode === 'disabled' ? null : 80e9, observedUtilisationPercent: mode === 'disabled' ? null : 50, headroomBps: mode === 'disabled' ? null : 80e9, cpuUtilisationPercent: mode === 'disabled' ? null : 55, memoryUtilisationPercent: mode === 'disabled' ? null : 60, cacheHitRatio: mode === 'disabled' ? null : 0.95, requestRate: mode === 'disabled' ? null : 42000, status: mode === 'disabled' ? 'telemetry_not_connected' : 'healthy', stale: false, freshness: { ageSeconds: mode === 'disabled' ? null : 3, staleAfterSeconds: 120, fresh: mode !== 'disabled' }, observedAt: mode === 'disabled' ? null : 'x', source: mode, provenance: { source: mode, synthetic: mode === 'mock', readOnly: true, informationalOnly: true, note: 'x' } },
+  ],
+});
+const ORIGIN = (mode: 'mock' | 'disabled') => ({
+  provenance: { source: 'radar', telemetryMode: mode, readOnly: true, informationalOnly: true, notice: '', retrievedAt: 'x' },
+  item: { originId: 'origin', originName: 'Réalta origin', requestRate: mode === 'disabled' ? null : 9000, outboundBandwidthBps: mode === 'disabled' ? null : 120e9, cpuUtilisationPercent: mode === 'disabled' ? null : 62, status: mode === 'disabled' ? 'telemetry_not_connected' : 'healthy', stale: false, freshness: { ageSeconds: mode === 'disabled' ? null : 3, staleAfterSeconds: 120, fresh: mode !== 'disabled' }, observedAt: mode === 'disabled' ? null : 'x', source: mode, provenance: { source: mode, synthetic: mode === 'mock', readOnly: true, informationalOnly: true, note: 'x' } },
+});
+
 interface StubOpts {
   state?: (ispId: string) => LiveSteeringState | undefined;
   events?: (callIndex: number) => LiveSteeringEvent[];
@@ -102,6 +114,9 @@ function stub(principal: Principal, opts: StubOpts = {}) {
       if (p.endsWith('/api/v1/me')) return j(principal);
       if (p.endsWith('/ns1/config')) return j({ mode: 'mock', synthetic: true, readOnly: true });
       if (p.endsWith('/telemetry/network-paths')) return j(TELEMETRY(opts.telemetryMode ?? 'mock'));
+      if (p.endsWith('/telemetry/cache-pools')) return j(CACHE_POOLS(opts.telemetryMode ?? 'mock'));
+      if (p.endsWith('/telemetry/cache-nodes')) return j({ provenance: { source: 'radar', telemetryMode: opts.telemetryMode ?? 'mock', readOnly: true, informationalOnly: true, notice: '', retrievedAt: 'x' }, count: 0, items: [] });
+      if (p.endsWith('/telemetry/origin')) return j(ORIGIN(opts.telemetryMode ?? 'mock'));
       if (p.endsWith('/live-steering/config')) return j(CONFIG);
       if (p.endsWith('/live-steering/state')) {
         const isp = new URL(url, 'http://x').searchParams.get('isp') ?? '';
@@ -245,12 +260,22 @@ describe('Live Steering', () => {
     renderAt('/live-steering');
     const eirCard = (await screen.findByRole('heading', { name: /Eir AS5466/ })).closest('.isp-card')!;
     // Fresh observed utilisation for the Eir PNI path appears on the Eir card…
-    expect(await within(eirCard as HTMLElement).findByText(/52\.0%/)).toBeInTheDocument();
-    expect(within(eirCard as HTMLElement).getByText('healthy')).toBeInTheDocument();
+    const pathTele = (await within(eirCard as HTMLElement).findByText(/52\.0%/)).closest('.path-telemetry')! as HTMLElement;
+    expect(within(pathTele).getByText('healthy')).toBeInTheDocument();
     // …while actual CDN traffic share remains explicitly not connected.
     expect(within(eirCard as HTMLElement).getByText(/Actual CDN traffic share/)).toBeInTheDocument();
     // The informational, not-controlling notice is shown.
     expect(screen.getByText(/not automatically modifying NS1 steering/i)).toBeInTheDocument();
+  });
+
+  it('shows Réalta pool + origin delivery context with the responsibility boundary', async () => {
+    stub(VE, { telemetryMode: 'mock' });
+    renderAt('/live-steering');
+    const eirCard = (await screen.findByRole('heading', { name: /Eir AS5466/ })).closest('.isp-card')! as HTMLElement;
+    // Réalta is eligible for Eir → the delivery context renders.
+    expect(await within(eirCard).findByText(/Réalta pools/)).toBeInTheDocument();
+    expect(within(eirCard).getByText(/Cloudflare selects the pool/)).toBeInTheDocument();
+    expect(within(eirCard).getByText(/Origin/)).toBeInTheDocument();
   });
 
   it('keeps "Telemetry not connected" when telemetry is disabled', async () => {

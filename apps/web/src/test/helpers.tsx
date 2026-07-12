@@ -165,6 +165,28 @@ export const TELEMETRY_BODY = {
   ],
 };
 
+const cacheProv = (mode: string) => ({ source: 'radar', telemetryMode: mode, readOnly: true, informationalOnly: true, notice: 'Cache and origin telemetry are informational. RADAR is not automatically modifying NS1 or Cloudflare.', retrievedAt: '2026-07-12T10:00:00Z' });
+const poolSample = (id: string, name: string, site: string, status: string, cap: number, out: number, cpu: number) => ({
+  poolId: id, poolName: name, site, cacheNodeCount: 2, configuredCapacityBps: cap, observedOutboundBps: out, observedUtilisationPercent: (out / cap) * 100, headroomBps: cap - out, cpuUtilisationPercent: cpu, memoryUtilisationPercent: 60, cacheHitRatio: 0.95, requestRate: 42000, status, stale: false, freshness: { ageSeconds: 3, staleAfterSeconds: 120, fresh: true }, observedAt: '2026-07-12T09:59:57Z', source: 'mock', provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, note: 'x' },
+});
+export const CACHE_POOLS_BODY = {
+  provenance: cacheProv('mock'), count: 2,
+  items: [
+    poolSample('donnybrook-1', 'Donnybrook Pool 1', 'Donnybrook', 'healthy', 160e9, 80e9, 55),
+    poolSample('external-1', 'External Pool 1', 'External', 'warning', 700e9, 588e9, 85),
+  ],
+};
+export const CACHE_NODES_BODY = {
+  provenance: cacheProv('mock'), count: 2,
+  items: [
+    { nodeId: 'donnybrook-1-n1', nodeName: 'Donnybrook Pool 1 — node 1', poolId: 'donnybrook-1', site: 'Donnybrook', configuredCapacityBps: 80e9, observedOutboundBps: 40e9, observedUtilisationPercent: 50, headroomBps: 40e9, cpuUtilisationPercent: 55, memoryUtilisationPercent: 60, cacheHitRatio: 0.95, requestRate: 21000, status: 'healthy', stale: false, freshness: { ageSeconds: 3, staleAfterSeconds: 120, fresh: true }, observedAt: '2026-07-12T09:59:57Z', source: 'mock', provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, note: 'x' } },
+  ],
+};
+export const ORIGIN_BODY = {
+  provenance: cacheProv('mock'),
+  item: { originId: 'origin', originName: 'Réalta origin', requestRate: 9000, outboundBandwidthBps: 120e9, cpuUtilisationPercent: 62, status: 'healthy', stale: false, freshness: { ageSeconds: 3, staleAfterSeconds: 120, fresh: true }, observedAt: '2026-07-12T09:59:57Z', source: 'mock', provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, note: 'x' } },
+};
+
 export function stubApi(principal: Principal): void {
   vi.stubGlobal(
     'fetch',
@@ -174,6 +196,9 @@ export function stubApi(principal: Principal): void {
       let body: unknown = {};
       if (p.endsWith('/api/v1/me')) body = principal;
       else if (p.endsWith('/telemetry/network-paths')) body = TELEMETRY_BODY;
+      else if (p.endsWith('/telemetry/cache-pools')) body = CACHE_POOLS_BODY;
+      else if (p.endsWith('/telemetry/cache-nodes')) body = CACHE_NODES_BODY;
+      else if (p.endsWith('/telemetry/origin')) body = ORIGIN_BODY;
       else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;

@@ -12,7 +12,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useNetworkPaths } from '../telemetry/use-network-paths';
+import { useCacheTelemetry } from '../telemetry/use-cache-telemetry';
 import { PathTelemetryInline } from '../telemetry/NetworkPathTelemetry';
+import { RealtaDeliveryContext } from '../telemetry/CacheTelemetry';
 import type { LiveSteeringConfig, LiveSteeringEvent, LiveSteeringState } from '../api/types';
 
 const DEFAULT_INTERVAL = 30;
@@ -50,6 +52,7 @@ export function LiveSteering() {
   const showDetail = hasPermission('ns1.detail.read');
   const reduceMotion = useMemo(prefersReducedMotion, []);
   const telemetry = useNetworkPaths(60_000); // read-only, informational; refreshed hourly-ish
+  const cache = useCacheTelemetry({ refreshMs: 60_000 }); // Réalta pool + origin context
 
   const [config, setConfig] = useState<LiveSteeringConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
@@ -210,6 +213,7 @@ export function LiveSteering() {
 
       {configError && <div className="notice danger">{configError}</div>}
       {telemetry.notice && telemetry.mode !== 'disabled' && <div className="notice info">{telemetry.notice}</div>}
+      {cache.notice && cache.mode !== 'disabled' && <div className="notice info">{cache.notice}</div>}
 
       <div className="card">
         <div className="isp-picker">
@@ -279,6 +283,9 @@ export function LiveSteering() {
                     const sample = telemetry.byName.get(s.preferredPath ?? isp.preferredPath ?? '');
                     return sample ? <PathTelemetryInline sample={sample} detail={showDetail} /> : null;
                   })()}
+                  {eligiblePlatforms(s).some((plat) => /réalta|realta/i.test(plat)) && cache.pools.length > 0 && (
+                    <RealtaDeliveryContext pools={cache.pools} origin={cache.origin} />
+                  )}
                   <div className="muted" style={{ fontSize: '0.76rem', marginTop: '0.4rem' }}>
                     Actual CDN traffic share: <b>Telemetry not connected</b> · evaluated {new Date(s.evaluatedAt).toLocaleTimeString()}
                     {!s.complete && ' · partial evaluation — no definitive platform'}

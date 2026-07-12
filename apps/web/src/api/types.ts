@@ -453,3 +453,94 @@ export interface NetworkPathResponse {
   provenance: TelemetryProvenance;
   item: NetworkPathSample;
 }
+
+// --- Cache-pool / cache-node / origin telemetry (read-only, informational) ---
+
+export interface CachePoolSample {
+  poolId: string;
+  poolName: string;
+  site: string;
+  cacheNodeCount: number;
+  configuredCapacityBps: number;
+  observedOutboundBps: number | null;
+  observedUtilisationPercent: number | null;
+  headroomBps: number | null;
+  cpuUtilisationPercent: number | null;
+  memoryUtilisationPercent: number | null;
+  cacheHitRatio: number | null;
+  requestRate: number | null;
+  status: TelemetryStatus;
+  stale: boolean;
+  freshness: TelemetryFreshness;
+  observedAt: string | null;
+  source: TelemetrySource;
+  provenance: TelemetrySampleProvenance;
+  // Engineering detail (with ns1.detail.read):
+  targetPercent?: number;
+  warningPercent?: number;
+  criticalPercent?: number;
+  warnings?: string[];
+}
+
+export interface CacheNodeSample {
+  nodeId: string;
+  nodeName: string;
+  poolId: string;
+  site: string;
+  configuredCapacityBps: number;
+  observedOutboundBps: number | null;
+  observedUtilisationPercent: number | null;
+  headroomBps: number | null;
+  cpuUtilisationPercent: number | null;
+  memoryUtilisationPercent: number | null;
+  cacheHitRatio: number | null;
+  requestRate: number | null;
+  status: TelemetryStatus;
+  stale: boolean;
+  freshness: TelemetryFreshness;
+  observedAt: string | null;
+  source: TelemetrySource;
+  provenance: TelemetrySampleProvenance;
+  targetPercent?: number;
+  warningPercent?: number;
+  criticalPercent?: number;
+  warnings?: string[];
+}
+
+export interface OriginSample {
+  originId: string;
+  originName: string;
+  requestRate: number | null;
+  outboundBandwidthBps: number | null;
+  cpuUtilisationPercent: number | null;
+  status: TelemetryStatus;
+  stale: boolean;
+  freshness: TelemetryFreshness;
+  observedAt: string | null;
+  source: TelemetrySource;
+  provenance: TelemetrySampleProvenance;
+  warnings?: string[];
+}
+
+export interface CachePoolsResponse {
+  provenance: TelemetryProvenance;
+  count: number;
+  items: CachePoolSample[];
+}
+export interface CachePoolResponse {
+  provenance: TelemetryProvenance;
+  item: CachePoolSample;
+}
+export interface CacheNodesResponse {
+  provenance: TelemetryProvenance;
+  count: number;
+  items: CacheNodeSample[];
+}
+export interface CacheNodeResponse {
+  provenance: TelemetryProvenance;
+  item: CacheNodeSample;
+}
+export interface OriginResponse {
+  provenance: TelemetryProvenance;
+  item: OriginSample;
+}

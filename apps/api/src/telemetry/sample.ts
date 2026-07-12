@@ -23,6 +23,30 @@ export function classifyUtilisation(util: number, m: Pick<PathMapping, 'configur
   return 'healthy';
 }
 
+/** Freshness of an observation relative to `now` (epoch ms). */
+export function freshnessOf(observedAt: Date | null, now: number, staleAfterSeconds: number): TelemetryFreshness {
+  if (observedAt === null) return { ageSeconds: null, staleAfterSeconds, fresh: false };
+  const ageSeconds = Math.max(0, (now - observedAt.getTime()) / 1000);
+  return { ageSeconds, staleAfterSeconds, fresh: ageSeconds <= staleAfterSeconds };
+}
+
+/** Severity ordering for the health portion of the status (higher = worse). Non-health
+ *  states (stale/unavailable/telemetry_not_connected) are handled separately. */
+const HEALTH_SEVERITY: Record<TelemetryStatus, number> = {
+  healthy: 0,
+  above_target: 1,
+  warning: 2,
+  critical: 3,
+  stale: -1,
+  unavailable: -1,
+  telemetry_not_connected: -1,
+};
+
+/** Worst (highest-severity) of several health statuses (e.g. throughput vs CPU). */
+export function worstStatus(...statuses: TelemetryStatus[]): TelemetryStatus {
+  return statuses.reduce((worst, s) => (HEALTH_SEVERITY[s] > HEALTH_SEVERITY[worst] ? s : worst), 'healthy');
+}
+
 interface BuildContext {
   now: number; // epoch ms
   staleAfterSeconds: number;

@@ -34,8 +34,11 @@ Expected DNS distribution → Preferred Réalta network path → Cloudflare Load
 This is **expected steering derived from configuration, not measured traffic**. Each card now
 also shows **read-only network-path telemetry** for the ISP's preferred PNI/INEX/transit path
 (observed utilisation + status vs configured capacity/target, with freshness/stale/unavailable
-handled honestly and an "informational only — not modifying NS1 steering" notice); **actual
-CDN traffic share** stays *Telemetry not connected*. Events only exist for **meaningful**
+handled honestly and an "informational only — not modifying NS1 steering" notice); and, when
+Réalta is eligible, a compact **Réalta delivery context** (aggregate pool health, configured
+capacity, headroom, origin health) with the explicit boundary *NS1 selects Réalta · Cloudflare
+selects the pool · RADAR only observes*. **Actual CDN traffic share** stays *Telemetry not
+connected*. Events only exist for **meaningful**
 changes (the server's stable fingerprint excludes timestamps and the random Weighted-Shuffle
 *ordering*). On a new event: the affected ISP is highlighted for
 10 s (respecting `prefers-reduced-motion`; unaffected ISPs are not), the previous→current
@@ -65,14 +68,22 @@ panel. The **Network paths** panel now shows read-only, informational **live uti
 PNI/INEX/transit path (observed utilisation + status vs configured capacity/target, freshness,
 and — with `ns1.detail.read` — interface mapping/thresholds/source); capacity/target stay
 labelled CONFIGURED, and pool/cache utilisation elsewhere remains *Telemetry not connected*.
-Role-aware detail; Engineers additionally see disabled management controls.
+A **Réalta cache pools, nodes & origin** panel shows read-only, informational per-pool
+utilisation/health (throughput, CPU, hit ratio, configured capacity + deterministic headroom),
+a per-node table (`ns1.detail.read`), and origin health — with the explicit boundary *NS1
+selects Réalta; Cloudflare selects the pool; RADAR observes and does not yet control Cloudflare
+or NS1*. Role-aware detail; Engineers additionally see disabled management controls.
 
-## NOC Dashboard — network path utilisation
+## NOC Dashboard — network path & cache utilisation
 The Dashboard adds a **Network path utilisation** panel (`topology.summary.read`) showing the
-same read-only telemetry table (path, status, observed utilisation, configured capacity/target,
-freshness; engineering columns with `ns1.detail.read`) and the informational "not modifying NS1
-steering" notice. Delivery-platform health and viewer distribution remain *Telemetry not
-connected*.
+read-only telemetry table (path, status, observed utilisation, configured capacity/target,
+freshness; engineering columns with `ns1.detail.read`), and a **Réalta cache pools & origin**
+panel (per-pool status/throughput/CPU/hit-ratio, configured capacity + deterministic headroom,
+plus origin health), each with the informational "not modifying NS1 or Cloudflare" notice.
+Delivery-platform health and viewer distribution remain *Telemetry not connected*.
+
+The **Delivery Topology** screen's cache section (below) gains the same pool table plus a
+per-node table (`ns1.detail.read`) and origin health.
 
 ## NS1 Explorer screen
 Read-only discovery across every record the API exposes. Pick a zone (`GET /ns1/zones`),

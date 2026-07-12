@@ -6,7 +6,9 @@ import { useState } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { CAPACITY, NETWORK_PATHS, PLATFORMS, REALTA_CHAIN } from '../topology/model';
 import { useNetworkPaths } from '../telemetry/use-network-paths';
+import { useCacheTelemetry } from '../telemetry/use-cache-telemetry';
 import { NetworkPathTelemetryTable } from '../telemetry/NetworkPathTelemetry';
+import { CacheNodeTable, CachePoolTable, OriginPanel } from '../telemetry/CacheTelemetry';
 
 function Node({ label, cat, className }: { label: string; cat: string; className: string }) {
   return (
@@ -94,6 +96,7 @@ export function Topology() {
   const detailed = hasPermission('ns1.detail.read'); // Viewing Engineer and above
   const canManage = hasPermission('topology.manage'); // Engineer
   const telemetry = useNetworkPaths(60_000); // read-only, informational
+  const cache = useCacheTelemetry({ includeNodes: true, refreshMs: 60_000 });
   const [view, setView] = useState<'diagram' | 'list'>('diagram');
   const [zoom, setZoom] = useState(1);
 
@@ -167,6 +170,34 @@ export function Topology() {
             </span>
           </div>
         ))}
+      </div>
+
+      <div className="card">
+        <h3>Réalta cache pools, nodes &amp; origin</h3>
+        {cache.notice && cache.mode !== 'disabled' && <div className="notice info">{cache.notice}</div>}
+        <div className="notice info" style={{ marginBottom: '0.5rem' }}>
+          NS1 selects Réalta; Cloudflare selects the pool; RADAR observes pool and origin telemetry and does not yet control
+          Cloudflare or NS1. Capacity and node counts are CONFIGURED (manually maintained); throughput/CPU/hit-ratio are observed.
+        </div>
+        {cache.error ? (
+          <div className="notice danger">{cache.error}</div>
+        ) : cache.loading ? (
+          <span className="muted">Loading cache telemetry…</span>
+        ) : (
+          <>
+            <CachePoolTable pools={cache.pools} detail={detailed} />
+            {detailed && (
+              <div style={{ marginTop: '0.75rem' }}>
+                <h4 style={{ margin: '0 0 0.3rem' }}>Cache nodes</h4>
+                <CacheNodeTable nodes={cache.nodes} detail={detailed} />
+              </div>
+            )}
+            <div style={{ marginTop: '0.75rem' }}>
+              <h4 style={{ margin: '0 0 0.3rem' }}>Origin</h4>
+              <OriginPanel origin={cache.origin} />
+            </div>
+          </>
+        )}
       </div>
 
       {canManage && (

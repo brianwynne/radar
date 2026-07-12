@@ -6,7 +6,9 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useNetworkPaths } from '../telemetry/use-network-paths';
+import { useCacheTelemetry } from '../telemetry/use-cache-telemetry';
 import { NetworkPathTelemetryTable } from '../telemetry/NetworkPathTelemetry';
+import { CachePoolTable, OriginPanel } from '../telemetry/CacheTelemetry';
 
 export function Dashboard() {
   const { principal, hasPermission } = useAuth();
@@ -15,6 +17,7 @@ export function Dashboard() {
   const canSeePaths = hasPermission('topology.summary.read');
   const showDetail = hasPermission('ns1.detail.read');
   const telemetry = useNetworkPaths(canSeePaths ? 60_000 : undefined);
+  const cache = useCacheTelemetry({ refreshMs: canSeePaths ? 60_000 : undefined });
 
   useEffect(() => {
     if (!hasPermission('ns1.detail.read')) return;
@@ -74,6 +77,25 @@ export function Dashboard() {
             <span className="muted">Loading telemetry…</span>
           ) : (
             <NetworkPathTelemetryTable paths={telemetry.paths} detail={showDetail} />
+          )}
+        </div>
+      )}
+
+      {canSeePaths && (
+        <div className="card">
+          <h3>Réalta cache pools &amp; origin</h3>
+          {cache.mode && cache.mode !== 'disabled' && cache.notice && <div className="notice info">{cache.notice}</div>}
+          {cache.error ? (
+            <div className="notice danger">{cache.error}</div>
+          ) : cache.loading ? (
+            <span className="muted">Loading cache telemetry…</span>
+          ) : (
+            <>
+              <CachePoolTable pools={cache.pools} detail={showDetail} />
+              <div style={{ marginTop: '0.5rem' }}>
+                <OriginPanel origin={cache.origin} />
+              </div>
+            </>
           )}
         </div>
       )}

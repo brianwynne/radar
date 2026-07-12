@@ -183,3 +183,7 @@ ul.notes li { margin: 0.15rem 0; }
 .path-telemetry .tele-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
 .path-telemetry .tele-row + .tele-row { margin-top: 0.2rem; }
 .path-telemetry .seg-label { display: inline; font-size: 0.62rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.realta-context { margin-top: 0.4rem; padding: 0.4rem 0.6rem; border: 1px solid var(--line); border-left: 3px solid #7a3ff2; border-radius: 8px; background: var(--panel-muted); }
+.realta-context .tele-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; }
+.realta-context .tele-row + .tele-row { margin-top: 0.2rem; }
+.realta-context .seg-label { display: inline; font-size: 0.62rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }

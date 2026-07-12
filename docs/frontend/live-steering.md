@@ -40,6 +40,16 @@ notice states *"Network telemetry is currently informational. RADAR is not autom
 modifying NS1 steering."* **Actual CDN traffic share** remains **Telemetry not connected**
 (RADAR does not ingest delivered-traffic telemetry).
 
+### Réalta delivery context (cache pools + origin)
+When Réalta is an eligible platform for the ISP, the card also renders a compact **Réalta
+delivery context** from `GET /api/v1/telemetry/cache-pools` + `/origin` (via
+`useCacheTelemetry`): aggregate pool health (worst status), configured aggregate capacity,
+aggregate headroom (`n/a` if any pool's headroom is unavailable), and origin health — with
+the explicit **responsibility boundary**: *NS1 selects Réalta · Cloudflare selects the pool ·
+RADAR observes pool & origin telemetry (does not control Cloudflare or NS1).* A notice states
+*"Cache and origin telemetry are informational. RADAR is not automatically modifying NS1 or
+Cloudflare."* The full per-pool / per-node tables live on the Dashboard and Topology.
+
 ## Change highlight
 On a new event the affected card gets the `changed` class for 10 s and a notice with the
 **reason label**, previous→current summary, **checksum before→after** and the event time.

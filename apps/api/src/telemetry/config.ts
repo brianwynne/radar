@@ -62,8 +62,9 @@ function readSecretFile(path: string): string | undefined {
   return undefined;
 }
 
-/** Bearer/basic Prometheus auth, sourced only from mounted secrets (never env, never logged). */
-function loadPrometheusAuth(): PrometheusAuth {
+/** Bearer/basic Prometheus auth, sourced only from mounted secrets (never env, never logged).
+ *  Shared by network-path and cache/origin telemetry (a single Prometheus). */
+export function loadPrometheusAuth(): PrometheusAuth {
   const bearer = readSecretFile(BEARER_SECRET);
   if (bearer) return { kind: 'bearer', bearerToken: bearer };
   const basic = readSecretFile(BASIC_SECRET);

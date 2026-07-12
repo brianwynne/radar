@@ -16,6 +16,7 @@ import { auditRoutes } from './routes/audit.js';
 import { changeDetectionRoutes } from './routes/change-detection.js';
 import { liveSteeringRoutes } from './routes/live-steering.js';
 import { telemetryRoutes } from './routes/telemetry.js';
+import { cacheTelemetryRoutes } from './routes/telemetry-cache.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 import type { DatabaseHealthCheck } from './database/health.js';
@@ -24,6 +25,7 @@ import type { SteeringStore } from './database/steering-store.js';
 import type { ChangeDetectionService } from './change-detection/index.js';
 import type { NetworkPathTelemetryClient } from './telemetry/types.js';
 import type { TelemetryMode } from './telemetry/index.js';
+import type { CacheTelemetryClient } from './telemetry/cache-types.js';
 import { createNs1Client } from './ns1/index.js';
 import type { Ns1ReadClient } from './ns1/index.js';
 
@@ -40,6 +42,8 @@ export interface BuildDeps extends AuthDeps {
   changeDetection?: ChangeDetectionService;
   telemetryClient?: NetworkPathTelemetryClient;
   telemetryMode?: TelemetryMode;
+  cacheTelemetryClient?: CacheTelemetryClient;
+  cacheTelemetryMode?: TelemetryMode;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -156,6 +160,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(changeDetectionRoutes, { prefix: '/api/v1', service: deps.changeDetection });
   await app.register(liveSteeringRoutes, { prefix: '/api/v1', store: deps.steeringStore });
   await app.register(telemetryRoutes, { prefix: '/api/v1', client: deps.telemetryClient, mode: deps.telemetryMode });
+  await app.register(cacheTelemetryRoutes, { prefix: '/api/v1', client: deps.cacheTelemetryClient, mode: deps.cacheTelemetryMode });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());
