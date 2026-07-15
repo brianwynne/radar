@@ -98,6 +98,22 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Eir PNI Dublin')).toBeInTheDocument();
   });
 
+  it('colour-codes utilisation: amber ≥60% of capacity, red ≥80%, clear below', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    // Scope to each interface's ROW (the same percentages also appear in the provider cards).
+    const row = (desc: string) => within(screen.getByText(desc).closest('tr')!);
+    // INEX Ethernet2 is at 88% → red (crit).
+    expect(row('INEX IXP Dublin').getByText('88.0%')).toHaveClass('util-crit');
+    // edge1 Port-Channel7 is at 64% → amber (warn).
+    expect(row('INEX LAG').getByText('64.0%')).toHaveClass('util-warn');
+    // Eir Ethernet1 is at 40% → no colour.
+    const eir = row('Eir PNI Dublin').getByText('40.0%');
+    expect(eir).not.toHaveClass('util-warn');
+    expect(eir).not.toHaveClass('util-crit');
+  });
+
   it('summary tiles reflect the connector snapshot', async () => {
     stubApi(NOC);
     renderAt('/network');

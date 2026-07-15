@@ -241,3 +241,10 @@ table.matrix tr.lag-member > td { background: var(--panel-muted); }
 .tree-toggle:hover { color: var(--info); }
 table.matrix td.itf-member { padding-left: 2.4rem; }
 .tree-branch { color: var(--ink-soft); font-family: monospace; }
+
+/* Utilisation colour coding (amber ≥60% of capacity, red ≥80%, with hysteresis). The
+   lag-member override keeps the colour visible on the muted member rows. */
+table.matrix td.util-warn { background: var(--warn-bg); color: var(--warn); font-weight: 700; }
+table.matrix td.util-crit { background: var(--danger-bg); color: var(--danger); font-weight: 700; }
+table.matrix tr.lag-member > td.util-warn { background: var(--warn-bg); }
+table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }

@@ -3,7 +3,7 @@
 // informational (RADAR issues no writes); configured facts (capacity, classification) are
 // shown distinctly from observed telemetry, and a missing/stale value is shown as such —
 // never invented. Auto-refreshes; clearly indicates stale data.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useCloudVision } from '../telemetry/use-cloudvision';
@@ -25,6 +25,24 @@ function formatUptime(seconds: number | null): string {
 }
 
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : String(n));
+
+// Utilisation colour level with hysteresis. A link turns amber at 60% of capacity and red at
+// 80%, but only clears back once it drops a few points below (55% / 75%) — so the colour does
+// not bounce as the 10-second bandwidth jitters around a threshold. `prev` is the level from the
+// previous poll; the transition is single-step and a fixed point when re-applied to the same
+// value (so re-rendering with unchanged data never advances it).
+export type UtilLevel = 'ok' | 'warn' | 'crit';
+const RISE_WARN = 60;
+const FALL_WARN = 55;
+const RISE_CRIT = 80;
+const FALL_CRIT = 75;
+export function nextUtilLevel(util: number | null, prev: UtilLevel): UtilLevel {
+  if (util === null || !Number.isFinite(util)) return 'ok'; // no measurable load → no colour
+  if (prev === 'crit') return util < FALL_CRIT ? (util < FALL_WARN ? 'ok' : 'warn') : 'crit';
+  if (prev === 'warn') return util >= RISE_CRIT ? 'crit' : util < FALL_WARN ? 'ok' : 'warn';
+  return util >= RISE_CRIT ? 'crit' : util >= RISE_WARN ? 'warn' : 'ok';
+}
+const utilClass = (lvl: UtilLevel): string | undefined => (lvl === 'crit' ? 'util-crit' : lvl === 'warn' ? 'util-warn' : undefined);
 
 export function NetworkTelemetry() {
   // Poll on CloudVision's ~10-second publish grid — the interface `rates` node republishes
@@ -63,6 +81,21 @@ export function NetworkTelemetry() {
   const toggleDevice = (id: string) => setDevice((cur) => (cur === id ? '' : id));
 
   const providers = useMemo(() => [...new Set(t.interfaces.map((i) => i.provider).filter((p): p is string => !!p))].sort(), [t.interfaces]);
+
+  // Hysteretic utilisation colour level per interface. Advanced once per poll (keyed on the
+  // interface array identity) and remembered across polls in a ref, so a link hovering at a
+  // threshold keeps a stable colour instead of flickering. Computed over ALL interfaces (not the
+  // filtered view) so the level survives filtering a link out and back in.
+  const levelsRef = useRef<Map<string, UtilLevel>>(new Map());
+  const levelByKey = useMemo(() => {
+    const next = new Map<string, UtilLevel>();
+    for (const i of t.interfaces) {
+      const key = `${i.deviceId}::${i.name}`;
+      next.set(key, nextUtilLevel(i.utilisationPercent, levelsRef.current.get(key) ?? 'ok'));
+    }
+    levelsRef.current = next;
+    return next;
+  }, [t.interfaces]);
 
   const interfaces = useMemo(
     () =>
@@ -335,7 +368,7 @@ export function NetworkTelemetry() {
                   <td>{i.linkType}</td>
                   <td>{formatBps(i.speedBps)}</td>
                   <td>{formatBps(i.primaryBps)}</td>
-                  <td>{formatPercent(i.utilisationPercent)}</td>
+                  <td className={utilClass(levelByKey.get(key) ?? 'ok')}>{formatPercent(i.utilisationPercent)}</td>
                   <td><span className={`badge ${bw.badge} badge-sm`}>{bw.label}</span></td>
                   <td>{num((i.inErrors ?? 0) + (i.outErrors ?? 0))}</td>
                   <td>{num((i.inDiscards ?? 0) + (i.outDiscards ?? 0))}</td>
