@@ -3,7 +3,7 @@
 // informational (RADAR issues no writes); configured facts (capacity, classification) are
 // shown distinctly from observed telemetry, and a missing/stale value is shown as such —
 // never invented. Auto-refreshes; clearly indicates stale data.
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useCloudVision } from '../telemetry/use-cloudvision';
@@ -33,6 +33,9 @@ export function NetworkTelemetry() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [device, setDevice] = useState(''); // selected device id (drill-down)
+  const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'current', dir: 'desc' });
+  const sortBy = (col: 'name' | 'current' | 'util') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'name' ? 'asc' : 'desc' }));
+  const arrow = (col: 'name' | 'current' | 'util') => (sort.col === col ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '');
   const { hasPermission } = useAuth();
   const canLabel = hasPermission('mapping.manage');
   // Local overrides for friendly names being edited (survive the auto-refresh).
@@ -74,11 +77,40 @@ export function NetworkTelemetry() {
     [t.interfaces, device, provider, linkType, status, search],
   );
 
+  // Sort the filtered interfaces. Nulls always sink to the bottom; default = current
+  // bandwidth, highest first. Name sorts alphabetically by router+interface.
+  const sorted = useMemo(() => {
+    const val = (i: (typeof interfaces)[number]): number | null => (sort.col === 'current' ? i.primaryBps : sort.col === 'util' ? i.utilisationPercent : null);
+    const rows = [...interfaces];
+    if (sort.col === 'name') {
+      rows.sort((a, b) => `${a.deviceHostname} ${a.name}`.localeCompare(`${b.deviceHostname} ${b.name}`));
+      if (sort.dir === 'desc') rows.reverse();
+    } else {
+      rows.sort((a, b) => {
+        const av = val(a);
+        const bv = val(b);
+        if (av === null && bv === null) return 0;
+        if (av === null) return 1; // nulls last
+        if (bv === null) return -1;
+        return sort.dir === 'desc' ? bv - av : av - bv;
+      });
+    }
+    return rows;
+  }, [interfaces, sort]);
+
   const bgpPeers = useMemo(() => t.bgpPeers.filter((p) => !device || p.deviceId === device), [t.bgpPeers, device]);
 
   const history = t.history;
   const series = (key: 'totalEdgeThroughputBps' | 'totalPeeringThroughputBps' | 'totalTransitThroughputBps' | 'operationalHeadroomBps') => history.map((h) => h[key]);
   const stale = t.status !== null && (t.status.lastError !== null || (t.completeness?.level === 'empty' && t.status.enabled) || t.warnings.some((w) => /stale|unavailable/i.test(w)));
+
+  // Per-second ticker for the "next refresh in Ns" countdown.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const secondsToRefresh = t.refreshMs && t.lastLoadedAt !== null ? Math.max(0, Math.ceil((t.lastLoadedAt + t.refreshMs - now) / 1000)) : null;
 
   return (
     <section className="page">
@@ -89,7 +121,10 @@ export function NetworkTelemetry() {
             {t.mode === 'cloudvision' ? 'LIVE · CloudVision' : t.mode === 'mock' ? 'MOCK · SYNTHETIC' : 'NOT CONNECTED'}
           </span>
           {t.status?.snapshotAgeSeconds !== undefined && t.status?.snapshotAgeSeconds !== null && (
-            <span className="muted">telemetry {formatFreshness(t.status.snapshotAgeSeconds)}</span>
+            <span className="muted">
+              telemetry {formatFreshness(t.status.snapshotAgeSeconds)}
+              {secondsToRefresh !== null && <> · <span className="refresh-countdown">{secondsToRefresh === 0 ? 'refreshing…' : `next in ${secondsToRefresh}s`}</span></>}
+            </span>
           )}
         </div>
       </header>
@@ -212,13 +247,18 @@ export function NetworkTelemetry() {
         <table className="matrix">
           <thead>
             <tr>
-              <th>Router</th><th>Interface</th><th>Name</th><th>Description</th><th>Provider</th><th>Link type</th>
-              <th>Capacity</th><th>Current</th><th>Util</th><th>Src</th><th>Errors</th><th>Discards</th><th>Status</th><th>Age</th>
+              <th>Router</th>
+              <th className="sortable" onClick={() => sortBy('name')}>Interface{arrow('name')}</th>
+              <th>Name</th><th>Description</th><th>Provider</th><th>Link type</th>
+              <th>Capacity</th>
+              <th className="sortable" onClick={() => sortBy('current')}>Current{arrow('current')}</th>
+              <th className="sortable" onClick={() => sortBy('util')}>Util{arrow('util')}</th>
+              <th>Src</th><th>Errors</th><th>Discards</th><th>Status</th><th>Age</th>
             </tr>
           </thead>
           <tbody>
-            {interfaces.length === 0 && <tr><td colSpan={14} className="center-note">No interfaces match the current filters.</td></tr>}
-            {interfaces.map((i) => {
+            {sorted.length === 0 && <tr><td colSpan={14} className="center-note">No interfaces match the current filters.</td></tr>}
+            {sorted.map((i) => {
               const m = healthMeta(i.status);
               const bw = bandwidthSourceMeta(i.bandwidthSource);
               const oper = operMeta(i.operState);

@@ -226,3 +226,10 @@ table.matrix tbody tr.row-selected { background: var(--info-bg); cursor: pointer
 .label-input { width: 12ch; max-width: 160px; padding: 0.15rem 0.4rem; border: 1px solid var(--border); border-radius: 4px; background: var(--panel); color: var(--ink); font: inherit; font-size: 0.82rem; }
 .label-input:focus { border-color: var(--info); outline: none; }
 .label-input::placeholder { color: var(--ink-soft); opacity: 0.6; }
+
+/* Sortable table headers */
+table.matrix th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+table.matrix th.sortable:hover { color: var(--info); }
+
+/* Refresh countdown in the telemetry age indicator */
+.refresh-countdown { color: var(--info); font-variant-numeric: tabular-nums; }

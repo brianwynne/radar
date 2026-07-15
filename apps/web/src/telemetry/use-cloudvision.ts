@@ -23,13 +23,17 @@ export interface CloudVisionState {
   notice: string | null;
   loading: boolean;
   error: string | null;
+  /** Epoch ms of the last completed load (success or failure), for a refresh countdown. */
+  lastLoadedAt: number | null;
+  /** The auto-refresh interval in ms (0/undefined when not auto-refreshing). */
+  refreshMs: number;
   refresh: () => void;
 }
 
 export function useCloudVision(refreshMs?: number): CloudVisionState {
-  const [state, setState] = useState<Omit<CloudVisionState, 'refresh'>>({
+  const [state, setState] = useState<Omit<CloudVisionState, 'refresh' | 'refreshMs'>>({
     status: null, summary: null, completeness: null, warnings: [], devices: [], interfaces: [],
-    linkGroups: [], bgpPeers: [], history: [], capturedAt: null, mode: null, notice: null, loading: true, error: null,
+    linkGroups: [], bgpPeers: [], history: [], capturedAt: null, mode: null, notice: null, loading: true, error: null, lastLoadedAt: null,
   });
 
   const load = useCallback(async () => {
@@ -52,9 +56,10 @@ export function useCloudVision(refreshMs?: number): CloudVisionState {
         notice: status.provenance?.notice ?? null,
         loading: false,
         error: null,
+        lastLoadedAt: Date.now(),
       });
     } catch (e) {
-      setState((s) => ({ ...s, loading: false, error: e instanceof ApiError ? `${e.code}: ${e.message}` : 'Network telemetry unavailable.' }));
+      setState((s) => ({ ...s, loading: false, error: e instanceof ApiError ? `${e.code}: ${e.message}` : 'Network telemetry unavailable.', lastLoadedAt: Date.now() }));
     }
   }, []);
 
@@ -68,5 +73,5 @@ export function useCloudVision(refreshMs?: number): CloudVisionState {
     return () => clearInterval(t);
   }, [refreshMs, load]);
 
-  return { ...state, refresh: () => void load() };
+  return { ...state, refreshMs: refreshMs ?? 0, refresh: () => void load() };
 }
