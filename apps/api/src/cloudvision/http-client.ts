@@ -49,8 +49,9 @@ const SKIP_INTERFACE = /(\.\d|^Loopback|^Management|^Vlan|^Vxlan|^Recirc|^Cpu|^F
 const RATE_WINDOW = '1m';
 /** Cap on interfaces fetched per device per poll (defence against a huge device). */
 const MAX_INTERFACES_PER_DEVICE = 200;
-/** Concurrency for per-interface / per-peer analytics leaf fetches. */
-const FETCH_CONCURRENCY = 8;
+/** Concurrency for per-interface / per-peer analytics leaf fetches. Higher = faster polls
+ *  (needed to sustain a short poll interval) at the cost of more simultaneous CVaaS load. */
+const FETCH_CONCURRENCY = 24;
 
 const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 
