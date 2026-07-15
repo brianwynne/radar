@@ -48,8 +48,13 @@ const TS = '1784137260000000000'; // ns epoch
 const wrap = (value: unknown) => ({ key: 'k', value });
 // The 10-second `rates` node carries octet fields as bare `{float}` scalars (octets/sec).
 const rate = (v: number) => wrap({ float: v });
+// The 1-minute `aggregate/rates/1m` node carries rate-STATS `{avg,max,min,…}` — used (matched
+// with the 1-minute utilisation) to derive the stable interface speed.
+const stat = (avg: number) => wrap({ avg: { float: avg }, max: { float: avg }, min: { float: avg }, stddev: { float: 0 }, weight: { float: 1 } });
 const IF_LIST = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['x'] }) } }] };
 const IF_RATES = { notifications: [{ timestamp: TS, updates: { inOctets: rate(1e9), outOctets: rate(5e9), inErrors: rate(0), outErrors: rate(2), inDiscards: rate(0), outDiscards: rate(1) } }] };
+// 1-minute averages (may differ from the 10s snapshot): in 1e9 oct/s ÷ 8% util, out 5e9 ÷ 40% → 100 Gbps.
+const IF_AGG_1M = { notifications: [{ timestamp: TS, updates: { inOctets: stat(1e9), outOctets: stat(5e9) } }] };
 const IF_UTIL = { notifications: [{ updates: { 'inOctets-utilization': wrap({ float: 8 }), 'outOctets-utilization': wrap({ float: 40 }) } }] };
 const BGP_LIST = { notifications: [{ updates: { '185.6.36.1': wrap({ ptr: ['x'] }) } }] };
 const BGP_LEAF = { notifications: [{ timestamp: TS, updates: { bgpState: wrap({ Name: 'Established', Value: { int: 6 } }), bgpPeerAs: wrap({ value: { int: 5466 } }), bgpPeerLocalAddr: wrap('185.6.36.2'), bgpPeerDescription: wrap('[Transit] Cogent 3-002188930') } }] };
@@ -63,7 +68,8 @@ function analyticsHandler(path: string): Response {
   if (path.endsWith('/expectedMembers')) return ok(PC_MEMBERS);
   if (path.endsWith('/portchannel')) return ok(PC_LIST);
   if (path.endsWith('/interfaces/data')) return ok(IF_LIST);
-  if (path.endsWith('/rates')) return ok(IF_RATES); // per-interface 10-second rate node
+  if (path.includes('/aggregate/rates/1m')) return ok(IF_AGG_1M); // 1-minute averages (speed derivation)
+  if (path.endsWith('/rates')) return ok(IF_RATES); // per-interface 10-second rate node (bandwidth)
   if (path.includes('/bgpPeerInfoStatusEntry/')) return ok(BGP_LEAF);
   if (path.endsWith('/bgpPeerInfoStatusEntry')) return ok(BGP_LIST);
   return new Response('', { status: 404 });

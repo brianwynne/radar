@@ -49,6 +49,9 @@ const SKIP_INTERFACE = /(\.\d|^Loopback|^Management|^Vlan|^Vxlan|^Recirc|^Cpu|^F
 const MAX_INTERFACES_PER_DEVICE = 200;
 /** LAG membership is device CONFIG (stable), so cache it and refresh only occasionally. */
 const LAG_CACHE_TTL_MS = 5 * 60_000;
+/** Interface speed is stable config too (derived from the 1-minute utilisation window), so
+ *  cache it and refresh occasionally rather than re-deriving it on every 10-second poll. */
+const SPEED_CACHE_TTL_MS = 5 * 60_000;
 /** Concurrency for per-interface / per-peer analytics leaf fetches. Balanced for a ~10s poll
  *  (CloudVision's analytics engine republishes the interface `rates` node on a ~10-second grid
  *  — verified live — so this is the useful floor); raise it if driving a shorter interval, at
@@ -83,6 +86,8 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
   private readonly now: () => number;
   /** Per-device cache of member-interface → Port-Channel (LAG config; stable). */
   private lagCache = new Map<string, { at: number; membership: Map<string, string> }>();
+  /** Per-interface cache of derived speed (bps); keyed `deviceId::name`. Stable config. */
+  private speedCache = new Map<string, { at: number; speedBps: number }>();
 
   constructor(private readonly opts: HttpCloudVisionClientOptions) {
     if (!/^https?:\/\//i.test(opts.endpoint)) throw new Error('HttpCloudVisionReadClient: endpoint must be an http(s) URL.');
@@ -226,29 +231,16 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
     return built.filter((i): i is RawInterface => i !== null);
   }
 
-  /** One interface: its 10-second rates (bandwidth/errors/discards) + pre-computed utilisation.
+  /** One interface: its 10-second bandwidth (from the `rates` node) plus its configured speed.
    *  Reads the top-level `rates` node — CloudVision's analytics engine republishes it on a
    *  ~10-second grid (the `aggregate/rates` node only carries 1m/15m averages; the raw
    *  `counters` node republishes far slower, ~40s, so 10s is the finest useful resolution the
-   *  analytics REST API exposes). Configured speed is derived from bandwidth ÷ utilisation. */
+   *  analytics REST API exposes). Speed is fetched separately (different, matched window). */
   private async fetchInterface(deviceId: string, name: string, now: number, correlationId?: string): Promise<RawInterface | null> {
     const rates = await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'rates'), correlationId);
     if (Object.keys(rates.updates).length === 0) return null; // no rate data → omit this interface
     const r = parseInterfaceRates(rates.updates);
-    let util: { inPercent: number | null; outPercent: number | null } = { inPercent: null, outPercent: null };
-    try {
-      util = parseUtilisation((await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'utilisation'), correlationId)).updates);
-    } catch {
-      // Utilisation is best-effort; the endpoint spells it "utilization".
-    }
-    if (util.inPercent === null && util.outPercent === null) {
-      try {
-        util = parseUtilisation((await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'utilization'), correlationId)).updates);
-      } catch {
-        // leave null → utilisation unavailable (completeness signal)
-      }
-    }
-    const speedBps = speedFromUtilisation(r.outBps, util.outPercent) ?? speedFromUtilisation(r.inBps, util.inPercent);
+    const speedBps = await this.fetchSpeed(deviceId, name, correlationId);
     const hasData = r.inBps !== null || r.outBps !== null;
     return {
       deviceId,
@@ -267,6 +259,37 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
       outDiscards: r.outDiscards,
       observedAt: rates.observedAt ?? new Date(now),
     };
+  }
+
+  /** Configured interface speed (bps). CloudVision's analytics dataset does not expose the port
+   *  speed directly, but it publishes utilisation = (octet-rate ÷ speed) over a 1-minute window,
+   *  so speed = (1-minute rate) ÷ (1-minute utilisation). BOTH inputs MUST be that same 1-minute
+   *  window — dividing the fresh 10-second bandwidth rate by the 1-minute utilisation mixes
+   *  windows and yields a wrong speed. Speed is stable config, so it is cached; an interface with
+   *  no traffic (utilisation ~0) can't have its speed derived and stays null (a completeness
+   *  signal) and is retried next poll rather than cached. */
+  private async fetchSpeed(deviceId: string, name: string, correlationId?: string): Promise<number | null> {
+    const cacheKey = `${deviceId}::${name}`;
+    const cached = this.speedCache.get(cacheKey);
+    if (cached && this.now() - cached.at < SPEED_CACHE_TTL_MS) return cached.speedBps;
+    const agg = await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'aggregate', 'rates', '1m'), correlationId);
+    const a = parseInterfaceRates(agg.updates); // 1-minute rate — MATCHES the utilisation window
+    let util: { inPercent: number | null; outPercent: number | null } = { inPercent: null, outPercent: null };
+    try {
+      util = parseUtilisation((await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'utilisation'), correlationId)).updates);
+    } catch {
+      // Utilisation is best-effort; the endpoint spells it "utilization".
+    }
+    if (util.inPercent === null && util.outPercent === null) {
+      try {
+        util = parseUtilisation((await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'utilization'), correlationId)).updates);
+      } catch {
+        // leave null → utilisation unavailable (completeness signal)
+      }
+    }
+    const speedBps = speedFromUtilisation(a.outBps, util.outPercent) ?? speedFromUtilisation(a.inBps, util.inPercent);
+    if (speedBps !== null) this.speedCache.set(cacheKey, { at: this.now(), speedBps });
+    return speedBps;
   }
 
   private async fetchBgp(deviceId: string, now: number, correlationId?: string): Promise<RawBgpPeer[]> {
