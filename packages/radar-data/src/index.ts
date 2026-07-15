@@ -27,6 +27,10 @@ export type {
   NewValidationResult,
   ValidationResultQuery,
   ValidationResultRepository,
+  ConnectorSettingsRecord,
+  ConnectorSettingsUpdate,
+  ConnectorSettingsRepository,
+  TokenAction,
 } from './types.js';
 
 export type { SnapshotRepository } from './snapshots/snapshot-repository.js';
@@ -40,6 +44,7 @@ export { PostgresSteeringStateRepository } from './steering/postgres-steering-st
 export { PostgresSteeringEventRepository } from './steering/postgres-steering-event-repository.js';
 export { PostgresDnsObservationRepository } from './dns/postgres-dns-observation-repository.js';
 export { PostgresValidationResultRepository } from './validation/postgres-validation-repository.js';
+export { PostgresConnectorSettingsRepository } from './connector/postgres-connector-settings-repository.js';
 
 export {
   applyMigrations,

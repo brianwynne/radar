@@ -17,6 +17,7 @@ import {
   PostgresSteeringEventRepository,
   PostgresDnsObservationRepository,
   PostgresValidationResultRepository,
+  PostgresConnectorSettingsRepository,
   type NewSteeringState,
   type NewDnsObservation,
   type NewValidationResult,
@@ -58,6 +59,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0002_live_steering', filename: '0002_live_steering.sql', applied: true, checksumMatches: true },
       { version: '0003_dns_observations', filename: '0003_dns_observations.sql', applied: true, checksumMatches: true },
       { version: '0004_ns1_validations', filename: '0004_ns1_validations.sql', applied: true, checksumMatches: true },
+      { version: '0005_connector_settings', filename: '0005_connector_settings.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -303,5 +305,39 @@ describe('PostgresValidationResultRepository (pg-mem)', () => {
     expect(await repo.list()).toHaveLength(2);
     expect(await repo.list({ overallStatus: 'incompatible' })).toHaveLength(1);
     expect(await repo.list({ limit: 1 })).toHaveLength(1);
+  });
+});
+
+describe('PostgresConnectorSettingsRepository (pg-mem)', () => {
+  it('honours retain / replace / clear token actions', async () => {
+    const { db } = await freshDb();
+    const repo = new PostgresConnectorSettingsRepository(db);
+    const ct = Buffer.from('ciphertext'), nn = Buffer.from('nonce-1'), tg = Buffer.from('tag-1');
+
+    // Insert with retain → no token stored.
+    let r = await repo.upsert({ connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp', verifyTls: true, edgeDeviceIds: 'D1', updatedBy: 'eng', tokenAction: 'retain' });
+    expect(r.tokenCiphertext).toBeNull();
+    expect(r.tokenSetAt).toBeNull();
+
+    // Replace → token stored, token_set_at populated.
+    r = await repo.upsert({ connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp', verifyTls: true, edgeDeviceIds: 'D1', updatedBy: 'eng', tokenAction: 'replace', tokenCiphertext: ct, tokenNonce: nn, tokenTag: tg });
+    expect(r.tokenCiphertext).not.toBeNull();
+    expect(Buffer.from(r.tokenCiphertext as Buffer).toString()).toBe('ciphertext');
+    expect(r.tokenSetAt).not.toBeNull();
+
+    // Retain → non-token fields update, token unchanged.
+    r = await repo.upsert({ connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp2', verifyTls: false, edgeDeviceIds: 'D1,D2', updatedBy: 'eng2', tokenAction: 'retain' });
+    expect(r.endpoint).toBe('https://cvp2');
+    expect(r.verifyTls).toBe(false);
+    expect(Buffer.from(r.tokenCiphertext as Buffer).toString()).toBe('ciphertext'); // preserved
+
+    // Clear → token nulled.
+    r = await repo.upsert({ connector: 'cloudvision', enabled: false, mode: 'mock', endpoint: null, verifyTls: true, edgeDeviceIds: null, updatedBy: 'eng', tokenAction: 'clear' });
+    expect(r.tokenCiphertext).toBeNull();
+    expect(r.tokenSetAt).toBeNull();
+
+    const got = await repo.get('cloudvision');
+    expect(got?.mode).toBe('mock');
+    expect(got?.tokenCiphertext).toBeNull();
   });
 });

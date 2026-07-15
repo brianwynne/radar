@@ -60,12 +60,14 @@ export interface CloudVisionPollerDeps {
 }
 
 export class CloudVisionPoller {
-  private readonly client: CloudVisionClient;
-  private readonly source: CloudVisionSource;
-  private readonly intervalMs: number;
+  // Mutable so the connector manager can reconfigure a running poller in place (the routes
+  // hold a stable reference); everything else is fixed for the poller's lifetime.
+  private client: CloudVisionClient;
+  private source: CloudVisionSource;
+  private intervalMs: number;
+  private enabled: boolean;
   private readonly maxBackoffMs: number;
   private readonly historyLimit: number;
-  private readonly enabled: boolean;
   private readonly now: () => number;
   private readonly logger: Logger;
 
@@ -168,6 +170,26 @@ export class CloudVisionPoller {
       clearTimeout(this.timer);
       this.timer = null;
     }
+  }
+
+  /** Swap the client/source/interval/enabled at runtime (Engineer changed the connection).
+   *  Stale data from the previous connection is discarded — a different connection must not
+   *  inherit the old snapshot/history. Restarts polling when enabled. */
+  reconfigure(deps: { client: CloudVisionClient; source: CloudVisionSource; intervalMs: number; enabled: boolean }): void {
+    this.stop();
+    this.client = deps.client;
+    this.source = deps.source;
+    this.intervalMs = deps.intervalMs;
+    this.enabled = deps.enabled;
+    this.latest = null;
+    this.history = [];
+    this.consecutiveFailures = 0;
+    this.lastError = null;
+    this.lastPollAt = null;
+    this.lastSuccessAt = null;
+    this.lastDurationMs = null;
+    // A runtime reconfigure (re)starts polling when enabled; a disabled connector stays stopped.
+    if (deps.enabled) this.start();
   }
 
   status(): CloudVisionConnectorStatus {

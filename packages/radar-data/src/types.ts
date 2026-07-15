@@ -309,3 +309,46 @@ export interface AuditQuery {
   /** Page size, 1..500 (default 100). */
   limit?: number;
 }
+
+// --- Connector settings (Engineer-managed; secret token stored encrypted) -----------------
+
+/** A persisted connector-settings row. The token is present ONLY as opaque encrypted
+ *  material (never plaintext); non-secret fields are stored in the clear. */
+export interface ConnectorSettingsRecord {
+  connector: string;
+  enabled: boolean;
+  mode: string;
+  endpoint: string | null;
+  verifyTls: boolean;
+  edgeDeviceIds: string | null;
+  tokenCiphertext: Buffer | null;
+  tokenNonce: Buffer | null;
+  tokenTag: Buffer | null;
+  tokenSetAt: Date | null;
+  updatedBy: string | null;
+  updatedAt: Date;
+}
+
+/** What the repository does with the token on an update. `retain` leaves the stored token
+ *  untouched; `replace` writes the supplied ciphertext; `clear` removes it. */
+export type TokenAction = 'retain' | 'replace' | 'clear';
+
+export interface ConnectorSettingsUpdate {
+  connector: string;
+  enabled: boolean;
+  mode: string;
+  endpoint: string | null;
+  verifyTls: boolean;
+  edgeDeviceIds: string | null;
+  updatedBy: string | null;
+  tokenAction: TokenAction;
+  /** Present only when tokenAction === 'replace'. Opaque ciphertext, never plaintext. */
+  tokenCiphertext?: Buffer | null;
+  tokenNonce?: Buffer | null;
+  tokenTag?: Buffer | null;
+}
+
+export interface ConnectorSettingsRepository {
+  get(connector: string): Promise<ConnectorSettingsRecord | null>;
+  upsert(update: ConnectorSettingsUpdate): Promise<ConnectorSettingsRecord>;
+}
