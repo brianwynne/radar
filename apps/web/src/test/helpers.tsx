@@ -187,6 +187,63 @@ export const ORIGIN_BODY = {
   item: { originId: 'origin', originName: 'Réalta origin', requestRate: 9000, outboundBandwidthBps: 120e9, cpuUtilisationPercent: 62, status: 'healthy', stale: false, freshness: { ageSeconds: 3, staleAfterSeconds: 120, fresh: true }, observedAt: '2026-07-12T09:59:57Z', source: 'mock', provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, note: 'x' } },
 };
 
+const cvProv = { source: 'radar', telemetryMode: 'mock', readOnly: true, informationalOnly: true, notice: 'Network telemetry is read-only and informational. RADAR issues no device, CloudVision or NS1 writes.', retrievedAt: '2026-07-15T12:00:00Z' };
+const cvFresh = { level: 'FRESH', ageSeconds: 4, staleAfterSeconds: 30 };
+
+export const NETWORK_STATUS_BODY = {
+  provenance: cvProv,
+  status: { enabled: true, running: true, source: 'mock', intervalMs: 10000, lastPollAt: '2026-07-15T12:00:00Z', lastSuccessAt: '2026-07-15T12:00:00Z', lastDurationMs: 12, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: 4, historyLength: 3, deviceCount: 2, interfaceCount: 3, unknownInterfaceCount: 0 },
+  summary: { totalEdgeThroughputBps: 130e9, totalPeeringThroughputBps: 110e9, totalTransitThroughputBps: 20e9, operationalCapacityBps: 300e9, operationalHeadroomBps: 170e9, unhealthyLinks: 1, unhealthyBgpPeers: 1, deviceCount: 2, interfaceCount: 3, unknownInterfaceCount: 0, telemetryAgeSeconds: 4 },
+  freshness: cvFresh,
+  completeness: { expectedDevices: 2, observedDevices: 2, interfacesWithBandwidth: 3, totalInterfaces: 3, level: 'complete' },
+  warnings: [],
+  capturedAt: '2026-07-15T12:00:00Z',
+};
+export const NETWORK_DEVICES_BODY = {
+  provenance: cvProv, count: 2,
+  items: [
+    { id: 'JPE00000001', hostname: 'edge1.dub.rte.ie', modelName: 'DCS-7280SR3', softwareVersion: '4.31.2F', streaming: true, reachable: true, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+    { id: 'JPE00000002', hostname: 'edge2.dub.rte.ie', modelName: 'DCS-7280SR3', softwareVersion: '4.31.2F', streaming: true, reachable: true, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+  ],
+};
+const cvItf = (device: string, name: string, desc: string, provider: string, linkType: string, speed: number, out: number, oper: string, status: string) => ({
+  deviceId: device, deviceHostname: `${device === 'JPE00000001' ? 'edge1' : 'edge2'}.dub.rte.ie`, name, description: desc, provider, location: 'Dublin', linkType,
+  adminState: 'up', operState: oper, speedBps: speed, inBps: out / 5, outBps: out, primaryBps: oper === 'down' ? 0 : out, bandwidthSource: 'REPORTED',
+  utilisationPercent: oper === 'down' ? 0 : (out / speed) * 100, headroomBps: speed - out, inErrors: 0, outErrors: 0, inDiscards: 0, outDiscards: 0,
+  status, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock', classificationSource: 'description_regex', warnings: [],
+});
+export const NETWORK_INTERFACES_BODY = {
+  provenance: cvProv, count: 3,
+  items: [
+    cvItf('JPE00000001', 'Ethernet1', 'Eir PNI Dublin', 'Eir', 'PRIVATE_PEERING', 100e9, 40e9, 'up', 'healthy'),
+    cvItf('JPE00000001', 'Ethernet2', 'INEX IXP Dublin', 'INEX', 'IX_PEERING', 100e9, 88e9, 'up', 'warning'),
+    cvItf('JPE00000001', 'Ethernet4', 'Transit Cogent', 'Transit', 'TRANSIT', 100e9, 0, 'down', 'down'),
+  ],
+};
+export const NETWORK_LINK_GROUPS_BODY = {
+  provenance: cvProv, count: 3,
+  items: [
+    { key: 'eir', label: 'Eir', linkType: 'PRIVATE_PEERING', capacityBps: 100e9, currentBps: 40e9, utilisationPercent: 40, headroomBps: 60e9, healthyLinks: 1, totalLinks: 1, status: 'healthy', freshness: cvFresh, interfaceIds: ['JPE00000001::Ethernet1'] },
+    { key: 'inex', label: 'INEX', linkType: 'IX_PEERING', capacityBps: 100e9, currentBps: 88e9, utilisationPercent: 88, headroomBps: 12e9, healthyLinks: 0, totalLinks: 1, status: 'warning', freshness: cvFresh, interfaceIds: ['JPE00000001::Ethernet2'] },
+    { key: 'transit', label: 'Transit', linkType: 'TRANSIT', capacityBps: 0, currentBps: 0, utilisationPercent: null, headroomBps: 0, healthyLinks: 0, totalLinks: 1, status: 'down', freshness: cvFresh, interfaceIds: ['JPE00000001::Ethernet4'] },
+  ],
+};
+export const NETWORK_BGP_BODY = {
+  provenance: cvProv, count: 2,
+  items: [
+    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', peerAddress: '185.6.36.1', peerAsn: 5466, provider: 'Eir', state: 'ESTABLISHED', established: true, uptimeSeconds: 864000, prefixesReceived: 850000, prefixesAdvertised: 40, status: 'healthy', freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', peerAddress: '154.54.1.1', peerAsn: 174, provider: null, state: 'IDLE', established: false, uptimeSeconds: 0, prefixesReceived: 0, prefixesAdvertised: 40, status: 'critical', freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+  ],
+};
+export const NETWORK_HISTORY_BODY = {
+  provenance: cvProv, count: 3,
+  items: [
+    { at: '2026-07-15T11:59:40Z', totalEdgeThroughputBps: 120e9, totalPeeringThroughputBps: 100e9, totalTransitThroughputBps: 20e9, operationalCapacityBps: 300e9, operationalHeadroomBps: 180e9, unhealthyLinks: 0, unhealthyBgpPeers: 0, freshness: 'FRESH' },
+    { at: '2026-07-15T11:59:50Z', totalEdgeThroughputBps: 125e9, totalPeeringThroughputBps: 105e9, totalTransitThroughputBps: 20e9, operationalCapacityBps: 300e9, operationalHeadroomBps: 175e9, unhealthyLinks: 1, unhealthyBgpPeers: 0, freshness: 'FRESH' },
+    { at: '2026-07-15T12:00:00Z', totalEdgeThroughputBps: 130e9, totalPeeringThroughputBps: 110e9, totalTransitThroughputBps: 20e9, operationalCapacityBps: 300e9, operationalHeadroomBps: 170e9, unhealthyLinks: 1, unhealthyBgpPeers: 1, freshness: 'FRESH' },
+  ],
+};
+
 export function stubApi(principal: Principal): void {
   vi.stubGlobal(
     'fetch',
@@ -199,6 +256,12 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/telemetry/cache-pools')) body = CACHE_POOLS_BODY;
       else if (p.endsWith('/telemetry/cache-nodes')) body = CACHE_NODES_BODY;
       else if (p.endsWith('/telemetry/origin')) body = ORIGIN_BODY;
+      else if (p.endsWith('/network/status')) body = NETWORK_STATUS_BODY;
+      else if (p.endsWith('/network/devices')) body = NETWORK_DEVICES_BODY;
+      else if (p.endsWith('/network/interfaces')) body = NETWORK_INTERFACES_BODY;
+      else if (p.endsWith('/network/link-groups')) body = NETWORK_LINK_GROUPS_BODY;
+      else if (p.endsWith('/network/bgp-peers')) body = NETWORK_BGP_BODY;
+      else if (p.endsWith('/network/history')) body = NETWORK_HISTORY_BODY;
       else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;

@@ -198,3 +198,12 @@ ul.notes li { margin: 0.15rem 0; }
 .observation-tier.changed.no-animate, .reduce-motion .observation-tier.changed { animation: none; }
 @keyframes obs-pulse { 0%, 100% { box-shadow: 0 0 0 2px rgba(15, 157, 143, 0.18); } 50% { box-shadow: 0 0 0 5px rgba(15, 157, 143, 0.18); } }
 @media (prefers-reduced-motion: reduce) { .observation-tier.changed { animation: none; } }
+
+/* Network Telemetry (CloudVision) */
+.grid.cols-4 { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+.head-meta { display: flex; align-items: center; gap: 0.6rem; }
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
+.stat-sm { font-size: 1.05rem; font-weight: 600; margin-top: 0.3rem; }
+.badge.badge-sm { font-size: 0.62rem; padding: 0.02rem 0.4rem; }
+.sparkline { display: block; width: 100%; height: auto; color: var(--info); }
+.sparkline .sparkline-empty { fill: var(--ink-soft); font-size: 11px; }

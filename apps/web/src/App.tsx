@@ -8,6 +8,7 @@ import { ExplainDns } from './pages/ExplainDns';
 import { Steering } from './pages/Steering';
 import { LiveSteering } from './pages/LiveSteering';
 import { Topology } from './pages/Topology';
+import { NetworkTelemetry } from './pages/NetworkTelemetry';
 import { Activity } from './pages/Activity';
 import { SnapshotDetail } from './pages/SnapshotDetail';
 import { Settings } from './pages/Placeholders';
@@ -39,6 +40,7 @@ export function App() {
         <Route path="live-steering" element={<LiveSteering />} />
         <Route path="steering" element={<Steering />} />
         <Route path="topology" element={<Topology />} />
+        <Route path="network" element={<NetworkTelemetry />} />
         <Route path="explorer" element={<Ns1Explorer />} />
         <Route path="explorer/:zone" element={<Ns1Explorer />} />
         <Route path="explorer/:zone/:domain/:type" element={<Ns1Explorer />} />

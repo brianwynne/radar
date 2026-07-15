@@ -733,3 +733,170 @@ export interface ValidationUnsupportedFeaturesResponse {
   unsupportedFilters: { name: string; count: number }[];
   unknownMetadataFields: { name: string; count: number }[];
 }
+
+// --- CloudVision network telemetry (read-only, informational) ---
+
+export type CloudVisionSource = 'mock' | 'cloudvision' | 'disabled';
+export type FreshnessLevel = 'FRESH' | 'DEGRADED' | 'STALE' | 'UNAVAILABLE';
+export type LinkType = 'PRIVATE_PEERING' | 'IX_PEERING' | 'TRANSIT' | 'INTERNAL' | 'UNKNOWN';
+export type OperState = 'up' | 'down' | 'unknown';
+export type BgpState = 'ESTABLISHED' | 'IDLE' | 'CONNECT' | 'ACTIVE' | 'OPENSENT' | 'OPENCONFIRM' | 'UNKNOWN';
+export type BandwidthSource = 'REPORTED' | 'DERIVED' | 'UNAVAILABLE';
+export type NetworkHealth = 'healthy' | 'warning' | 'critical' | 'down' | 'unavailable' | 'unknown';
+
+export interface CvFreshness {
+  level: FreshnessLevel;
+  ageSeconds: number | null;
+  staleAfterSeconds: number;
+}
+
+export interface NetworkProvenance {
+  source: 'radar';
+  telemetryMode: CloudVisionSource;
+  readOnly: true;
+  informationalOnly: true;
+  notice: string;
+  retrievedAt: string;
+}
+
+export interface NetworkDevice {
+  id: string;
+  hostname: string;
+  modelName: string | null;
+  softwareVersion: string | null;
+  streaming: boolean;
+  reachable: boolean;
+  freshness: CvFreshness;
+  observedAt: string | null;
+  source: CloudVisionSource;
+  warnings?: string[];
+}
+
+export interface NetworkInterface {
+  deviceId: string;
+  deviceHostname: string;
+  name: string;
+  description: string | null;
+  provider: string | null;
+  location: string | null;
+  linkType: LinkType;
+  adminState: OperState;
+  operState: OperState;
+  speedBps: number | null;
+  inBps: number | null;
+  outBps: number | null;
+  primaryBps: number | null;
+  bandwidthSource: BandwidthSource;
+  utilisationPercent: number | null;
+  headroomBps: number | null;
+  inErrors: number | null;
+  outErrors: number | null;
+  inDiscards: number | null;
+  outDiscards: number | null;
+  status: NetworkHealth;
+  freshness: CvFreshness;
+  observedAt: string | null;
+  source: CloudVisionSource;
+  // Engineering detail (present only with ns1.detail.read).
+  classificationSource?: string;
+  warnings?: string[];
+}
+
+export interface BgpPeer {
+  deviceId: string;
+  deviceHostname: string;
+  peerAddress: string;
+  peerAsn: number | null;
+  provider: string | null;
+  state: BgpState;
+  established: boolean;
+  uptimeSeconds: number | null;
+  prefixesReceived: number | null;
+  prefixesAdvertised: number | null;
+  status: NetworkHealth;
+  freshness: CvFreshness;
+  observedAt: string | null;
+  source: CloudVisionSource;
+  warnings?: string[];
+}
+
+export interface LinkGroup {
+  key: string;
+  label: string;
+  linkType: LinkType;
+  capacityBps: number | null;
+  currentBps: number | null;
+  utilisationPercent: number | null;
+  headroomBps: number | null;
+  healthyLinks: number;
+  totalLinks: number;
+  status: NetworkHealth;
+  freshness: CvFreshness;
+  interfaceIds: string[];
+}
+
+export interface NetworkSummary {
+  totalEdgeThroughputBps: number | null;
+  totalPeeringThroughputBps: number | null;
+  totalTransitThroughputBps: number | null;
+  operationalCapacityBps: number | null;
+  operationalHeadroomBps: number | null;
+  unhealthyLinks: number;
+  unhealthyBgpPeers: number;
+  deviceCount: number;
+  interfaceCount: number;
+  unknownInterfaceCount: number;
+  telemetryAgeSeconds: number | null;
+}
+
+export interface NetworkCompleteness {
+  expectedDevices: number;
+  observedDevices: number;
+  interfacesWithBandwidth: number;
+  totalInterfaces: number;
+  level: 'complete' | 'partial' | 'empty';
+}
+
+export interface ConnectorStatus {
+  enabled: boolean;
+  running: boolean;
+  source: CloudVisionSource;
+  intervalMs: number;
+  lastPollAt: string | null;
+  lastSuccessAt: string | null;
+  lastDurationMs: number | null;
+  consecutiveFailures: number;
+  lastError: string | null;
+  snapshotAgeSeconds: number | null;
+  historyLength: number;
+  deviceCount: number;
+  interfaceCount: number;
+  unknownInterfaceCount: number;
+}
+
+export interface HistoryPoint {
+  at: string;
+  totalEdgeThroughputBps: number | null;
+  totalPeeringThroughputBps: number | null;
+  totalTransitThroughputBps: number | null;
+  operationalCapacityBps: number | null;
+  operationalHeadroomBps: number | null;
+  unhealthyLinks: number;
+  unhealthyBgpPeers: number;
+  freshness: FreshnessLevel;
+}
+
+export interface NetworkStatusResponse {
+  provenance: NetworkProvenance;
+  status: ConnectorStatus;
+  summary: NetworkSummary | null;
+  freshness: CvFreshness | null;
+  completeness: NetworkCompleteness | null;
+  warnings: string[];
+  capturedAt: string | null;
+}
+export interface NetworkDevicesResponse { provenance: NetworkProvenance; count: number; items: NetworkDevice[] }
+export interface NetworkInterfacesResponse { provenance: NetworkProvenance; count: number; items: NetworkInterface[] }
+export interface NetworkLinkGroupsResponse { provenance: NetworkProvenance; count: number; items: LinkGroup[] }
+export interface NetworkBgpPeersResponse { provenance: NetworkProvenance; count: number; items: BgpPeer[] }
+export interface NetworkHistoryResponse { provenance: NetworkProvenance; count: number; items: HistoryPoint[] }

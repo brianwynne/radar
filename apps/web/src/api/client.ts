@@ -20,6 +20,12 @@ import type {
   DnsObservationStateResponse,
   NetworkPathResponse,
   NetworkPathsResponse,
+  NetworkStatusResponse,
+  NetworkDevicesResponse,
+  NetworkInterfacesResponse,
+  NetworkLinkGroupsResponse,
+  NetworkBgpPeersResponse,
+  NetworkHistoryResponse,
   Ns1Status,
   OriginResponse,
   Principal,
@@ -171,4 +177,29 @@ export const api = {
   },
   validationResult: (id: string) => request<ValidationResultResponse>(`/api/v1/validation/ns1/results/${enc(id)}`),
   validationUnsupportedFeatures: () => request<ValidationUnsupportedFeaturesResponse>('/api/v1/validation/ns1/unsupported-features'),
+
+  // CloudVision network telemetry (read-only, informational).
+  networkStatus: () => request<NetworkStatusResponse>('/api/v1/network/status'),
+  networkDevices: () => request<NetworkDevicesResponse>('/api/v1/network/devices'),
+  networkInterfaces: (q: { deviceId?: string; provider?: string; linkType?: string; status?: string; unknownOnly?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (q.deviceId) p.set('deviceId', q.deviceId);
+    if (q.provider) p.set('provider', q.provider);
+    if (q.linkType) p.set('linkType', q.linkType);
+    if (q.status) p.set('status', q.status);
+    if (q.unknownOnly) p.set('unknownOnly', 'true');
+    const qs = p.toString();
+    return request<NetworkInterfacesResponse>(`/api/v1/network/interfaces${qs ? `?${qs}` : ''}`);
+  },
+  networkLinkGroups: () => request<NetworkLinkGroupsResponse>('/api/v1/network/link-groups'),
+  networkBgpPeers: (q: { deviceId?: string; provider?: string; state?: string; established?: boolean } = {}) => {
+    const p = new URLSearchParams();
+    if (q.deviceId) p.set('deviceId', q.deviceId);
+    if (q.provider) p.set('provider', q.provider);
+    if (q.state) p.set('state', q.state);
+    if (q.established !== undefined) p.set('established', String(q.established));
+    const qs = p.toString();
+    return request<NetworkBgpPeersResponse>(`/api/v1/network/bgp-peers${qs ? `?${qs}` : ''}`);
+  },
+  networkHistory: (limit?: number) => request<NetworkHistoryResponse>(`/api/v1/network/history${limit ? `?limit=${limit}` : ''}`),
 };
