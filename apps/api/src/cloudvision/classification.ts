@@ -1,0 +1,93 @@
+// Configuration-driven interface classification. RADAR-owned: an interface is bound to a
+// provider/location/link-type here, never by the device. Rules are tried most-specific
+// first — exact device+interface, then exact description, then description regex — and the
+// first match wins. An interface that matches no rule is UNKNOWN and stays fully visible
+// (never silently discarded), so operators can see and then classify it.
+import type { ClassificationSource, LinkType } from './types.js';
+
+export type ClassificationMatch =
+  | { kind: 'device_interface'; deviceId: string; interface: string }
+  | { kind: 'description_exact'; description: string }
+  | { kind: 'description_regex'; pattern: string; flags?: string };
+
+export interface ClassificationRule {
+  match: ClassificationMatch;
+  linkType: LinkType;
+  provider?: string;
+  location?: string;
+}
+
+export interface ClassificationInput {
+  deviceId: string;
+  name: string;
+  description: string | null;
+}
+
+export interface ClassificationResult {
+  linkType: LinkType;
+  provider: string | null;
+  location: string | null;
+  classificationSource: ClassificationSource;
+}
+
+/** Most-specific-first ordering. Lower = tried earlier. */
+const KIND_PRIORITY: Record<ClassificationMatch['kind'], number> = {
+  device_interface: 0,
+  description_exact: 1,
+  description_regex: 2,
+};
+
+const UNKNOWN: ClassificationResult = { linkType: 'UNKNOWN', provider: null, location: null, classificationSource: 'unknown' };
+
+const sourceOf = (kind: ClassificationMatch['kind']): ClassificationSource =>
+  kind === 'device_interface' ? 'device_interface' : kind === 'description_exact' ? 'description_exact' : 'description_regex';
+
+function matches(rule: ClassificationRule, input: ClassificationInput): boolean {
+  const m = rule.match;
+  switch (m.kind) {
+    case 'device_interface':
+      return input.deviceId === m.deviceId && input.name === m.interface;
+    case 'description_exact':
+      return input.description !== null && input.description === m.description;
+    case 'description_regex': {
+      if (input.description === null) return false;
+      try {
+        return new RegExp(m.pattern, m.flags).test(input.description);
+      } catch {
+        // An invalid regex never matches (and is rejected at config-load time).
+        return false;
+      }
+    }
+  }
+}
+
+/** Classify one interface. Rules are evaluated in specificity order regardless of the order
+ *  they were supplied, so a deployment can list them in any order. */
+export function classifyInterface(rules: ClassificationRule[], input: ClassificationInput): ClassificationResult {
+  const ordered = [...rules].sort((a, b) => KIND_PRIORITY[a.match.kind] - KIND_PRIORITY[b.match.kind]);
+  for (const rule of ordered) {
+    if (matches(rule, input)) {
+      return {
+        linkType: rule.linkType,
+        provider: rule.provider ?? null,
+        location: rule.location ?? null,
+        classificationSource: sourceOf(rule.match.kind),
+      };
+    }
+  }
+  return UNKNOWN;
+}
+
+/** Validate rule set at load time (compiles every regex). Throws on a bad pattern so a
+ *  deployment misconfiguration fails fast rather than silently never-matching. */
+export function validateClassificationRules(rules: ClassificationRule[]): void {
+  for (const rule of rules) {
+    if (rule.match.kind === 'description_regex') {
+      try {
+        new RegExp(rule.match.pattern, rule.match.flags);
+      } catch (err) {
+        throw new Error(`Invalid classification regex "${rule.match.pattern}": ${err instanceof Error ? err.message : 'bad pattern'}`, { cause: err });
+      }
+    }
+  }
+}
