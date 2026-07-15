@@ -17,6 +17,8 @@ import { createDnsObservationService } from './dns-observation/index.js';
 import { createDnsObservationStore } from './database/dns-observation-store.js';
 import { createValidationService } from './validation/index.js';
 import { createValidationStore } from './database/validation-store.js';
+import { createCloudVisionClient } from './cloudvision/index.js';
+import { CloudVisionPoller } from './cloudvision/poller.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -51,6 +53,17 @@ async function main(): Promise<void> {
   const validationRepository = createValidationStore(pool);
   const validationService = createValidationService({ client: ns1Client, mode: config.ns1.mode, config: config.validation, repository: validationRepository });
 
+  // CloudVision network telemetry: read-only client + poller. Disabled by default; the
+  // poller holds the latest snapshot + bounded history in memory (no persistence).
+  const cloudVisionSource = !config.cloudVision.enabled ? 'disabled' : config.cloudVision.mode === 'mock' ? 'mock' : 'cloudvision';
+  const cloudVisionClient = createCloudVisionClient(config.cloudVision, { logger: undefined });
+  const cloudVisionPoller = new CloudVisionPoller({
+    client: cloudVisionClient,
+    source: cloudVisionSource,
+    intervalMs: config.cloudVision.pollIntervalSeconds * 1000,
+    enabled: config.cloudVision.enabled,
+  });
+
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
     database,
@@ -66,6 +79,8 @@ async function main(): Promise<void> {
     dnsObservationStaleAfterSeconds: config.dnsObservation.staleAfterSeconds,
     validationService,
     validationRepository,
+    cloudVisionPoller,
+    cloudVisionMode: cloudVisionSource,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -76,6 +91,7 @@ async function main(): Promise<void> {
     app.log.info({ signal }, 'radar-api shutting down');
     await changeDetection?.stop();
     dnsObservationService.stop();
+    cloudVisionPoller.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -93,6 +109,10 @@ async function main(): Promise<void> {
     if (config.dnsObservation.periodic.enabled) {
       dnsObservationService.start();
       app.log.info({ intervalSeconds: config.dnsObservation.periodic.minIntervalSeconds }, 'periodic DNS observation started');
+    }
+    if (config.cloudVision.enabled) {
+      cloudVisionPoller.start();
+      app.log.info({ mode: cloudVisionSource, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision telemetry polling started');
     }
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

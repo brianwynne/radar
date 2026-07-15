@@ -19,6 +19,7 @@ import { telemetryRoutes } from './routes/telemetry.js';
 import { cacheTelemetryRoutes } from './routes/telemetry-cache.js';
 import { dnsObservationRoutes } from './routes/dns-observation.js';
 import { validationRoutes } from './routes/validation.js';
+import { cloudVisionRoutes } from './routes/cloudvision.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 import type { DatabaseHealthCheck } from './database/health.js';
@@ -31,6 +32,8 @@ import type { CacheTelemetryClient } from './telemetry/cache-types.js';
 import type { DnsObservationService } from './dns-observation/index.js';
 import type { DnsObservationRepository, ValidationResultRepository } from '@radar/data';
 import type { ValidationService } from './validation/index.js';
+import type { CloudVisionPoller } from './cloudvision/poller.js';
+import type { CloudVisionSource } from './cloudvision/types.js';
 import { createNs1Client } from './ns1/index.js';
 import type { Ns1ReadClient } from './ns1/index.js';
 
@@ -54,6 +57,8 @@ export interface BuildDeps extends AuthDeps {
   dnsObservationStaleAfterSeconds?: number;
   validationService?: ValidationService;
   validationRepository?: ValidationResultRepository;
+  cloudVisionPoller?: CloudVisionPoller;
+  cloudVisionMode?: CloudVisionSource;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -134,6 +139,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
         { name: 'snapshots', description: 'Configuration snapshots and version history' },
         { name: 'audit', description: 'RADAR audit history (read-only)' },
         { name: 'change-detection', description: 'NS1 change-detection service status (read-only)' },
+        { name: 'network-telemetry', description: 'CloudVision network telemetry (read-only)' },
       ],
       components: {
         securitySchemes: {
@@ -173,6 +179,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(cacheTelemetryRoutes, { prefix: '/api/v1', client: deps.cacheTelemetryClient, mode: deps.cacheTelemetryMode });
   await app.register(dnsObservationRoutes, { prefix: '/api/v1', service: deps.dnsObservationService, repository: deps.dnsObservationRepository, staleAfterSeconds: deps.dnsObservationStaleAfterSeconds });
   await app.register(validationRoutes, { prefix: '/api/v1', service: deps.validationService, repository: deps.validationRepository });
+  await app.register(cloudVisionRoutes, { prefix: '/api/v1', poller: deps.cloudVisionPoller, mode: deps.cloudVisionMode });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());
