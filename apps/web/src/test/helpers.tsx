@@ -213,7 +213,7 @@ const cvItf = (device: string, name: string, desc: string, provider: string, lin
   status, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock', classificationSource: 'description_regex', warnings: [],
 });
 export const NETWORK_INTERFACES_BODY = {
-  provenance: cvProv, count: 6,
+  provenance: cvProv, count: 7,
   items: [
     cvItf('JPE00000001', 'Port-Channel7', 'INEX LAG', 'INEX', 'IX_PEERING', 200e9, 128e9, 'up', 'healthy'),
     cvItf('JPE00000001', 'Ethernet1', 'Eir PNI Dublin', 'Eir', 'PRIVATE_PEERING', 100e9, 40e9, 'up', 'healthy', 'Port-Channel7'),
@@ -222,6 +222,8 @@ export const NETWORK_INTERFACES_BODY = {
     // A DIFFERENT router with its OWN Port-Channel7 — members must not merge across devices.
     cvItf('JPE00000002', 'Port-Channel7', 'Transit LAG', 'Transit', 'TRANSIT', 100e9, 30e9, 'up', 'healthy'),
     cvItf('JPE00000002', 'Ethernet9', 'Transit member', 'Transit', 'TRANSIT', 100e9, 30e9, 'up', 'healthy', 'Port-Channel7'),
+    // An empty port — no optic ⇒ no capacity reported (speedBps null).
+    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', name: 'Ethernet50', friendlyName: null, description: null, provider: null, location: null, linkType: 'UNKNOWN', memberOf: null, adminState: 'unknown', operState: 'unknown', speedBps: null, inBps: null, outBps: null, primaryBps: null, bandwidthSource: 'UNAVAILABLE', utilisationPercent: null, headroomBps: null, inErrors: null, outErrors: null, inDiscards: null, outDiscards: null, status: 'unknown', freshness: cvFresh, observedAt: null, source: 'mock', classificationSource: 'unknown', warnings: [] },
   ],
 };
 export const NETWORK_LINK_GROUPS_BODY = {

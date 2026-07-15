@@ -87,6 +87,17 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Transit member')).toBeInTheDocument();
   });
 
+  it('hides ports without capacity (empty optic) when toggled', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    // The empty port (no capacity) is visible by default.
+    expect(await screen.findByText('Ethernet50')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Hide ports without capacity/));
+    expect(screen.queryByText('Ethernet50')).not.toBeInTheDocument();
+    // A port with capacity stays.
+    expect(screen.getByText('Eir PNI Dublin')).toBeInTheDocument();
+  });
+
   it('summary tiles reflect the connector snapshot', async () => {
     stubApi(NOC);
     renderAt('/network');
