@@ -60,10 +60,16 @@ const BGP_LIST = { notifications: [{ updates: { '185.6.36.1': wrap({ ptr: ['x'] 
 const BGP_LEAF = { notifications: [{ timestamp: TS, updates: { bgpState: wrap({ Name: 'Established', Value: { int: 6 } }), bgpPeerAs: wrap({ value: { int: 5466 } }), bgpPeerLocalAddr: wrap('185.6.36.2'), bgpPeerDescription: wrap('[Transit] Cogent 3-002188930') } }] };
 const PC_LIST = { notifications: [{ updates: { 'Port-Channel7': wrap({ ptr: ['x'] }) } }] };
 const PC_MEMBERS = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['x'] }) } }] }; // Ethernet1 ∈ Port-Channel7
+// Device Sysdb interface-status: the flat map resolves each interface to a pointer; the record
+// carries the authoritative speed (physical port → speedEnum; speedMbps 0). speed100Gbps → 100G.
+const IF_STATUS_MAP = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['Sysdb', 'interface', 'status', 'eth', 'phy', 'slice', 'Linecard1', 'intfStatus', 'Ethernet1'] }) } }] };
+const IF_STATUS_REC = { notifications: [{ updates: { speedEnum: wrap({ Name: 'speed100Gbps', Value: { int: 10 } }), speedMbps: wrap({ int: 0 }) } }] };
 
 /** Route a request path to the right analytics fixture. */
 function analyticsHandler(path: string): Response {
   if (path.includes('/inventory/v1/Device/all')) return ok(INVENTORY);
+  if (path.endsWith('/status/all/intfStatus')) return ok(IF_STATUS_MAP); // real-speed pointer map
+  if (path.includes('/intfStatus/Ethernet1')) return ok(IF_STATUS_REC); // real-speed record (100G)
   if (path.includes('/utilisation') || path.includes('/utilization')) return ok(IF_UTIL);
   if (path.endsWith('/expectedMembers')) return ok(PC_MEMBERS);
   if (path.endsWith('/portchannel')) return ok(PC_LIST);
@@ -111,7 +117,8 @@ describe('HttpCloudVisionReadClient', () => {
     expect(snap.source).toBe('cloudvision');
     expect(snap.devices).toHaveLength(1);
     expect(snap.devices[0]).toMatchObject({ id: 'DEV1', hostname: 'edge1.rte.ie', streaming: true });
-    // Interface: outOctets 5e9/s ×8 = 40 Gbps; utilisation 40% → derived speed 100 Gbps.
+    // Interface: outOctets 5e9/s ×8 = 40 Gbps bandwidth (10s rate); speed 100 Gbps is READ from
+    // the Sysdb status record (speedEnum "speed100Gbps"), not derived; utilisation = 40/100 = 40%.
     const eth1 = snap.interfaces.find((i) => i.name === 'Ethernet1')!;
     expect(eth1.outBps).toBe(40e9);
     expect(eth1.inBps).toBe(8e9);
@@ -125,6 +132,18 @@ describe('HttpCloudVisionReadClient', () => {
     expect(peer).toMatchObject({ state: 'ESTABLISHED', peerAsn: 5466, provider: 'Cogent', established: true });
     // Every request carried the bearer token.
     expect(calls.every((c) => c.auth === `Bearer ${TOKEN}`)).toBe(true);
+  });
+
+  it('falls back to deriving speed when the Sysdb status record has no usable speed', async () => {
+    // Status map present but the record reports speedUnknown / speedMbps 0 → realSpeed is null,
+    // so speed is derived from the matched 1-minute rate (5e9×8=40G) ÷ utilisation (40%) = 100G.
+    const { fn } = routingFetch((path) => {
+      if (path.includes('/intfStatus/Ethernet1')) return ok({ notifications: [{ updates: { speedEnum: wrap({ Name: 'speedUnknown', Value: { int: 0 } }), speedMbps: wrap({ int: 0 }) } }] });
+      return analyticsHandler(path);
+    });
+    const snap = await httpClient({}, fn).getSnapshot();
+    const eth1 = snap.interfaces.find((i) => i.name === 'Ethernet1')!;
+    expect(eth1.speedBps).toBeCloseTo(100e9, -8); // derived fallback still resolves the speed
   });
 
   it('parses the real CVaaS camelCase inventory shape and INACTIVE streaming', async () => {

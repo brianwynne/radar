@@ -81,6 +81,32 @@ export function speedFromUtilisation(bps: number | null, utilPercent: number | n
   return (bps / utilPercent) * 100;
 }
 
+/** Interface operational speed (bps) read straight from a device Sysdb interface-status record
+ *  (the authoritative value, not a derivation). LAGs carry `speedMbps` (Mbps — the summed
+ *  bandwidth of active members); physical ports carry a `speedEnum` like {Name:"speed100Gbps"}.
+ *  Prefer speedMbps when it's a real value (>0), else parse the enum. Returns null when neither
+ *  is usable — e.g. a down/optic-less port or a LAG with no active members reporting
+ *  speedUnknown (the caller then falls back to deriving speed from utilisation). */
+export function speedFromStatus(updates: Record<string, unknown>): number | null {
+  const mbps = num(updates.speedMbps);
+  if (mbps !== null && mbps > 0) return mbps * 1_000_000;
+  const e = unwrap(updates.speedEnum);
+  const name = isObj(e) && typeof e.Name === 'string' ? e.Name : typeof e === 'string' ? e : null;
+  return speedFromEnumName(name);
+}
+
+const SPEED_ENUM = /^speed(\d+(?:p\d+)?)(Mbps|Gbps|Tbps)$/;
+/** Parse an EOS speed enum name → bps: "speed100Gbps"→1e11, "speed2p5Gbps"→2.5e9 (the "p" is a
+ *  decimal point), "speed1p6Tbps"→1.6e12. Returns null for "speedUnknown"/unrecognised names. */
+export function speedFromEnumName(name: string | null): number | null {
+  if (!name) return null;
+  const m = SPEED_ENUM.exec(name);
+  if (!m) return null;
+  const value = parseFloat(m[1].replace('p', '.'));
+  const unit = m[2] === 'Tbps' ? 1e12 : m[2] === 'Gbps' ? 1e9 : 1e6;
+  return Number.isFinite(value) ? value * unit : null;
+}
+
 export interface BgpPeerFields {
   asn: number | null;
   state: string | null;

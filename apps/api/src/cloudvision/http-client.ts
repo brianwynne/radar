@@ -13,7 +13,7 @@
 //     surfaced as UNAVAILABLE — never fabricated. See the live-validation command.
 import { CloudVisionError } from './errors.js';
 import { buildSnapshot, type AdapterConfig, type RawBgpPeer, type RawDevice, type RawInterface, type RawSnapshot } from './adapter.js';
-import { parseBgpPeer, parseInterfaceRates, parseUtilisation, speedFromUtilisation } from './analytics-shapes.js';
+import { parseBgpPeer, parseInterfaceRates, parseUtilisation, speedFromStatus, speedFromUtilisation, unwrap } from './analytics-shapes.js';
 import type { ClassificationRule } from './classification.js';
 import type { CloudVisionClient, NetworkStateSnapshot } from './types.js';
 
@@ -86,8 +86,11 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
   private readonly now: () => number;
   /** Per-device cache of member-interface → Port-Channel (LAG config; stable). */
   private lagCache = new Map<string, { at: number; membership: Map<string, string> }>();
-  /** Per-interface cache of derived speed (bps); keyed `deviceId::name`. Stable config. */
+  /** Per-interface cache of resolved speed (bps); keyed `deviceId::name`. Stable config. */
   private speedCache = new Map<string, { at: number; speedBps: number }>();
+  /** Per-device cache of interface-name → Sysdb status pointer (the map that resolves each
+   *  interface to its real speed record). Stable, so refreshed only occasionally. */
+  private intfStatusCache = new Map<string, { at: number; ptrs: Map<string, string[]> }>();
 
   constructor(private readonly opts: HttpCloudVisionClientOptions) {
     if (!/^https?:\/\//i.test(opts.endpoint)) throw new Error('HttpCloudVisionReadClient: endpoint must be an http(s) URL.');
@@ -170,7 +173,15 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
     return `/api/v1/rest/analytics/Devices/${enc(deviceId)}/versioned-data/${tail}`;
   }
 
-  /** GET an analytics path → merged updates map + the freshest source timestamp (epoch ms). */
+  /** Path into a device's OWN dataset (its raw Sysdb state), keyed by serial. Used to read the
+   *  authoritative interface speed, and to follow `{ptr:[...]}` pointers the analytics dataset
+   *  hands out (their `_dataset` is the serial). */
+  private deviceBase(serial: string, ...elements: string[]): string {
+    const tail = elements.map((e) => enc(e)).join('/');
+    return `/api/v1/rest/${enc(serial)}/${tail}`;
+  }
+
+  /** GET a REST telemetry path → merged updates map + the freshest source timestamp (epoch ms). */
   private async analyticsGet(path: string, correlationId?: string): Promise<{ updates: Record<string, unknown>; observedAt: Date | null }> {
     const payload = await this.getJson(path, correlationId);
     const updates: Record<string, unknown> = {};
@@ -261,19 +272,63 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
     };
   }
 
-  /** Configured interface speed (bps). CloudVision's analytics dataset does not expose the port
-   *  speed directly, but it publishes utilisation = (octet-rate ÷ speed) over a 1-minute window,
-   *  so speed = (1-minute rate) ÷ (1-minute utilisation). BOTH inputs MUST be that same 1-minute
-   *  window — dividing the fresh 10-second bandwidth rate by the 1-minute utilisation mixes
-   *  windows and yields a wrong speed. Speed is stable config, so it is cached; an interface with
-   *  no traffic (utilisation ~0) can't have its speed derived and stays null (a completeness
-   *  signal) and is retried next poll rather than cached. */
+  /** Configured interface speed (bps). Preferred source is the AUTHORITATIVE value from the
+   *  device's Sysdb interface-status record (read, not derived); if that isn't usable for this
+   *  interface (a down/optic-less port or a memberless LAG reporting speedUnknown) it falls back
+   *  to deriving speed from the 1-minute rate ÷ 1-minute utilisation. Speed is stable config, so
+   *  the resolved value is cached; an interface with no resolvable speed stays null (a
+   *  completeness signal) and is retried next poll rather than cached. */
   private async fetchSpeed(deviceId: string, name: string, correlationId?: string): Promise<number | null> {
     const cacheKey = `${deviceId}::${name}`;
     const cached = this.speedCache.get(cacheKey);
     if (cached && this.now() - cached.at < SPEED_CACHE_TTL_MS) return cached.speedBps;
+    const speedBps = (await this.realSpeed(deviceId, name, correlationId)) ?? (await this.deriveSpeed(deviceId, name, correlationId));
+    if (speedBps !== null) this.speedCache.set(cacheKey, { at: this.now(), speedBps });
+    return speedBps;
+  }
+
+  /** Real interface speed, read from the device Sysdb status record via its pointer. Null when
+   *  the interface isn't in the status map, the device dataset is unreachable, or the record has
+   *  no usable speed (speedUnknown / 0) — leaving fetchSpeed to fall back to derivation. */
+  private async realSpeed(deviceId: string, name: string, correlationId?: string): Promise<number | null> {
+    const ptrs = await this.fetchInterfacePointers(deviceId, correlationId);
+    const ptr = ptrs.get(name);
+    if (!ptr) return null;
+    try {
+      const rec = await this.analyticsGet(this.deviceBase(deviceId, ...ptr), correlationId);
+      return speedFromStatus(rec.updates);
+    } catch {
+      return null;
+    }
+  }
+
+  /** interface-name → Sysdb status pointer, from `Sysdb/interface/status/all/intfStatus` (each
+   *  value is a `{ptr:[...]}` to the per-interface record). Cached per device (stable). A failure
+   *  yields an empty map (speed falls back to derivation), never a fabricated pointer. */
+  private async fetchInterfacePointers(deviceId: string, correlationId?: string): Promise<Map<string, string[]>> {
+    const cached = this.intfStatusCache.get(deviceId);
+    if (cached && this.now() - cached.at < SPEED_CACHE_TTL_MS) return cached.ptrs;
+    const ptrs = new Map<string, string[]>();
+    try {
+      const map = await this.analyticsGet(this.deviceBase(deviceId, 'Sysdb', 'interface', 'status', 'all', 'intfStatus'), correlationId);
+      for (const [name, raw] of Object.entries(map.updates)) {
+        const v = unwrap(raw);
+        if (isObj(v) && Array.isArray(v.ptr) && v.ptr.every((e) => typeof e === 'string')) ptrs.set(name, v.ptr as string[]);
+      }
+    } catch (err) {
+      this.opts.logger?.warn({ deviceId, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: interface status map fetch failed');
+      return ptrs;
+    }
+    this.intfStatusCache.set(deviceId, { at: this.now(), ptrs });
+    return ptrs;
+  }
+
+  /** Fallback speed derivation: speed = (1-minute rate) ÷ (1-minute utilisation). BOTH inputs
+   *  MUST be that same 1-minute window — dividing the fresh 10-second bandwidth rate by the
+   *  1-minute utilisation mixes windows and yields a wrong speed. Null when there's no traffic. */
+  private async deriveSpeed(deviceId: string, name: string, correlationId?: string): Promise<number | null> {
     const agg = await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'aggregate', 'rates', '1m'), correlationId);
-    const a = parseInterfaceRates(agg.updates); // 1-minute rate — MATCHES the utilisation window
+    const a = parseInterfaceRates(agg.updates);
     let util: { inPercent: number | null; outPercent: number | null } = { inPercent: null, outPercent: null };
     try {
       util = parseUtilisation((await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'utilisation'), correlationId)).updates);
@@ -287,9 +342,7 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
         // leave null → utilisation unavailable (completeness signal)
       }
     }
-    const speedBps = speedFromUtilisation(a.outBps, util.outPercent) ?? speedFromUtilisation(a.inBps, util.inPercent);
-    if (speedBps !== null) this.speedCache.set(cacheKey, { at: this.now(), speedBps });
-    return speedBps;
+    return speedFromUtilisation(a.outBps, util.outPercent) ?? speedFromUtilisation(a.inBps, util.inPercent);
   }
 
   private async fetchBgp(deviceId: string, now: number, correlationId?: string): Promise<RawBgpPeer[]> {

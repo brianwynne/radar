@@ -4,7 +4,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   num, rateAvg, str, bgpStateName, parseInterfaceRates, parseUtilisation, speedFromUtilisation,
-  parseBgpPeer, parseBgpDescription,
+  parseBgpPeer, parseBgpDescription, speedFromStatus, speedFromEnumName,
 } from '../src/cloudvision/analytics-shapes.js';
 
 const wrap = (value: unknown) => ({ key: 'k', value });
@@ -49,6 +49,26 @@ describe('parseInterfaceRates', () => {
   });
   it('malformed row → null (no throw)', () => {
     expect(parseInterfaceRates({ outOctets: wrap('garbage') }).outBps).toBeNull();
+  });
+});
+
+describe('speedFromStatus + speedFromEnumName (authoritative speed)', () => {
+  it('parses EOS speed enum names to bps', () => {
+    expect(speedFromEnumName('speed100Gbps')).toBe(100e9);
+    expect(speedFromEnumName('speed400Gbps')).toBe(400e9);
+    expect(speedFromEnumName('speed10Gbps')).toBe(10e9);
+    expect(speedFromEnumName('speed2p5Gbps')).toBe(2.5e9); // 'p' = decimal point
+    expect(speedFromEnumName('speed1p6Tbps')).toBeCloseTo(1.6e12, -9);
+    expect(speedFromEnumName('speed100Mbps')).toBe(100e6);
+    expect(speedFromEnumName('speedUnknown')).toBeNull();
+    expect(speedFromEnumName(null)).toBeNull();
+  });
+
+  it('prefers speedMbps (LAGs) over the enum, and returns null for no usable speed', () => {
+    expect(speedFromStatus({ speedMbps: wrap({ int: 100000 }), speedEnum: wrap({ Name: 'speedUnknown' }) })).toBe(100e9); // LAG 100000 Mbps
+    expect(speedFromStatus({ speedMbps: wrap({ int: 3200000 }) })).toBe(3.2e12); // a real 3.2T LAG
+    expect(speedFromStatus({ speedMbps: wrap({ int: 0 }), speedEnum: wrap({ Name: 'speed100Gbps', Value: { int: 10 } }) })).toBe(100e9); // physical port
+    expect(speedFromStatus({ speedMbps: wrap({ int: 0 }), speedEnum: wrap({ Name: 'speedUnknown' }) })).toBeNull(); // down/memberless
   });
 });
 
