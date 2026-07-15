@@ -1,5 +1,6 @@
-// Application shell: header, permission-filtered navigation, principal chip, and the
-// global mock/live mode banner. Navigation hiding is cosmetic — the API enforces RBAC.
+// Application shell: header, permission-filtered navigation, principal chip, and the global
+// LIVE mode banner (the mock banner is intentionally suppressed — synthetic data is flagged
+// per-view by the provenance tags). Navigation hiding is cosmetic — the API enforces RBAC.
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -55,12 +56,8 @@ export function AppShell() {
           </div>
         )}
       </header>
-      {mode && (
-        <div className={`mode-banner ${mode.mode}`} role="status">
-          {mode.mode === 'mock'
-            ? 'MOCK MODE — data is SYNTHETIC and NON-PRODUCTION. Not real RTÉ or NS1 configuration.'
-            : 'LIVE — read-only NS1 Connect data.'}
-        </div>
+      {mode && mode.mode !== 'mock' && (
+        <div className="mode-banner live" role="status">LIVE — read-only NS1 Connect data.</div>
       )}
       <main className="content">
         <Outlet />

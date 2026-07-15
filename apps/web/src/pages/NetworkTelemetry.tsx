@@ -176,6 +176,14 @@ export function NetworkTelemetry() {
     return () => clearInterval(id);
   }, []);
   const secondsToRefresh = t.refreshMs && t.lastLoadedAt !== null ? Math.max(0, Math.ceil((t.lastLoadedAt + t.refreshMs - now) / 1000)) : null;
+  // Countdown to the next live read, rendered beside the Interfaces heading so it stays in view
+  // while monitoring the table. Its own pill; shown whenever auto-refresh is running.
+  const countdownPill = secondsToRefresh !== null && (
+    <span className="badge live-countdown" title="Countdown to the next live read from CloudVision (auto-refreshes every 10s)">
+      <span className="live-dot" />
+      {secondsToRefresh === 0 ? 'reading…' : `next read in ${secondsToRefresh}s`}
+    </span>
+  );
 
   return (
     <section className="page">
@@ -185,14 +193,6 @@ export function NetworkTelemetry() {
           <span className={`badge ${t.mode === 'cloudvision' ? 'ok' : t.mode === 'mock' ? 'warn' : 'neutral'}`}>
             {t.mode === 'cloudvision' ? 'LIVE · CloudVision' : t.mode === 'mock' ? 'MOCK · SYNTHETIC' : 'NOT CONNECTED'}
           </span>
-          {/* Countdown to the next live read — its own pill so it's always visible and never
-              hidden by the telemetry-age condition. Shown whenever auto-refresh is running. */}
-          {secondsToRefresh !== null && (
-            <span className="badge live-countdown" title="Countdown to the next live read from CloudVision (auto-refreshes every 10s)">
-              <span className="live-dot" />
-              {secondsToRefresh === 0 ? 'reading…' : `next read in ${secondsToRefresh}s`}
-            </span>
-          )}
           {t.status?.snapshotAgeSeconds !== undefined && t.status?.snapshotAgeSeconds !== null && (
             <span className="muted">telemetry {formatFreshness(t.status.snapshotAgeSeconds)}</span>
           )}
@@ -288,7 +288,10 @@ export function NetworkTelemetry() {
       </div>
 
       {/* Interface table */}
-      <h2>Interfaces {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
+      <div className="section-head">
+        <h2>Interfaces {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
+        {countdownPill}
+      </div>
       {t.devices.length > 0 && t.interfaces.length === 0 && (
         <div className="notice info">Device inventory is live, but per-interface telemetry is not yet connected for this device set — interface throughput/state will populate once the interface feed is wired.</div>
       )}

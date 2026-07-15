@@ -104,10 +104,11 @@ const renderAt = (path: string) =>
 afterEach(() => vi.unstubAllGlobals());
 
 describe('mock/synthetic disclosure', () => {
-  it('shows the MOCK MODE synthetic banner globally', async () => {
+  it('suppresses the global MOCK MODE banner (synthetic data is disclosed per-view instead)', async () => {
     stubApi(VE);
     renderAt('/');
-    expect(await screen.findByText(/MOCK MODE — data is SYNTHETIC and NON-PRODUCTION/i)).toBeInTheDocument();
+    await screen.findByRole('link', { name: 'Network Telemetry' }); // app shell rendered + effects settled
+    expect(screen.queryByText(/MOCK MODE — data is SYNTHETIC/i)).not.toBeInTheDocument();
   });
 });
 

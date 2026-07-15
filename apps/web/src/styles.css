@@ -234,6 +234,8 @@ table.matrix th.sortable:hover { color: var(--info); }
 /* Refresh countdown in the telemetry age indicator */
 .refresh-countdown { color: var(--info); font-variant-numeric: tabular-nums; }
 /* Live-read countdown pill in the page header (tabular-nums keeps the number from jittering). */
+/* A section heading with an inline control/indicator (e.g. the live-read countdown) to its right. */
+.section-head { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
 .live-countdown { display: inline-flex; align-items: center; gap: 0.4rem; background: var(--ok-bg); color: var(--ok); font-variant-numeric: tabular-nums; }
 .live-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--ok); animation: live-pulse 1.1s ease-in-out infinite; }
 @keyframes live-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(0.7); } }

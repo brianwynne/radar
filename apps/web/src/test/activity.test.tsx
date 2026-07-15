@@ -69,9 +69,7 @@ describe('Activity — NS1 tab is separate and mock-labelled', () => {
     await screen.findByText('snapshot.create'); // RADAR tab first
     await userEvent.click(screen.getByRole('button', { name: 'NS1 Activity' }));
     expect(await screen.findByText('brian@rte.ie')).toBeInTheDocument(); // NS1 activity actor
-    expect(screen.getByText(/fixture-derived/i)).toBeInTheDocument(); // NS1 mapping note
-    // The global mock banner remains visible.
-    expect(screen.getByText(/MOCK MODE — data is SYNTHETIC/i)).toBeInTheDocument();
+    expect(screen.getByText(/fixture-derived/i)).toBeInTheDocument(); // NS1 mapping note (per-view disclosure)
   });
 });
 
