@@ -215,3 +215,9 @@ ul.notes li { margin: 0.15rem 0; }
 .btn { padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-muted); color: var(--ink); cursor: pointer; font-weight: 600; }
 .btn.primary { background: var(--info); color: #fff; border-color: var(--info); }
 .btn:hover { filter: brightness(1.05); }
+
+/* Selectable device rows */
+table.matrix.selectable tbody tr.row-click { cursor: pointer; }
+table.matrix.selectable tbody tr.row-click:hover { background: var(--panel-muted); }
+table.matrix tbody tr.row-selected { background: var(--info-bg); cursor: pointer; }
+.linklike { background: none; border: none; color: var(--info); cursor: pointer; padding: 0; font: inherit; text-decoration: underline; }

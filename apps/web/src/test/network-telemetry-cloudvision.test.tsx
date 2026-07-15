@@ -39,6 +39,20 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Transit Cogent')).toBeInTheDocument();
   });
 
+  it('lists devices and drills into one to filter interfaces + BGP', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    // Devices panel lists both devices (edge2 appears only there).
+    const edge2 = await screen.findByText('edge2.dub.rte.ie');
+    expect(screen.getByRole('heading', { name: /Devices/ })).toBeInTheDocument();
+    // Before selecting, the edge1 Eir interface is visible.
+    expect(screen.getByText('Eir PNI Dublin')).toBeInTheDocument();
+    // Select edge2 (which has no interfaces) → edge1 interfaces filtered out.
+    fireEvent.click(edge2);
+    expect(await screen.findByText(/Showing/)).toBeInTheDocument();
+    expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
+  });
+
   it('summary tiles reflect the connector snapshot', async () => {
     stubApi(NOC);
     renderAt('/network');

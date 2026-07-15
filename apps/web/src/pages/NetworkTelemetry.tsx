@@ -30,12 +30,17 @@ export function NetworkTelemetry() {
   const [linkType, setLinkType] = useState('');
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
+  const [device, setDevice] = useState(''); // selected device id (drill-down)
+
+  const selectedDevice = t.devices.find((d) => d.id === device) ?? null;
+  const toggleDevice = (id: string) => setDevice((cur) => (cur === id ? '' : id));
 
   const providers = useMemo(() => [...new Set(t.interfaces.map((i) => i.provider).filter((p): p is string => !!p))].sort(), [t.interfaces]);
 
   const interfaces = useMemo(
     () =>
       t.interfaces.filter((i) => {
+        if (device && i.deviceId !== device) return false;
         if (provider && i.provider !== provider) return false;
         if (linkType && i.linkType !== linkType) return false;
         if (status && i.status !== status) return false;
@@ -45,8 +50,10 @@ export function NetworkTelemetry() {
         }
         return true;
       }),
-    [t.interfaces, provider, linkType, status, search],
+    [t.interfaces, device, provider, linkType, status, search],
   );
+
+  const bgpPeers = useMemo(() => t.bgpPeers.filter((p) => !device || p.deviceId === device), [t.bgpPeers, device]);
 
   const history = t.history;
   const series = (key: 'totalEdgeThroughputBps' | 'totalPeeringThroughputBps' | 'totalTransitThroughputBps' | 'operationalHeadroomBps') => history.map((h) => h[key]);
@@ -121,8 +128,44 @@ export function NetworkTelemetry() {
         })}
       </div>
 
+      {/* Devices — selectable; click a device to drill into its interfaces + BGP peers */}
+      <h2>Devices {t.devices.length > 0 && <span className="muted">({t.devices.length})</span>}</h2>
+      {selectedDevice && (
+        <div className="notice info">
+          Showing <strong>{selectedDevice.hostname}</strong> only.{' '}
+          <button className="linklike" onClick={() => setDevice('')}>Show all devices</button>
+        </div>
+      )}
+      <div className="matrix-wrap">
+        <table className="matrix selectable">
+          <thead>
+            <tr><th>Router</th><th>Device ID</th><th>Model</th><th>Software</th><th>Streaming</th><th>Interfaces</th><th>Age</th></tr>
+          </thead>
+          <tbody>
+            {t.devices.length === 0 && <tr><td colSpan={7} className="center-note">No devices.</td></tr>}
+            {t.devices.map((d) => {
+              const ifCount = t.interfaces.filter((i) => i.deviceId === d.id).length;
+              return (
+                <tr key={d.id} className={device === d.id ? 'row-selected' : 'row-click'} onClick={() => toggleDevice(d.id)}>
+                  <td>{d.hostname}</td>
+                  <td className="muted">{d.id}</td>
+                  <td>{d.modelName ?? '—'}</td>
+                  <td className="muted">{d.softwareVersion ?? '—'}</td>
+                  <td><span className={`badge ${d.streaming ? 'ok' : 'neutral'} badge-sm`}>{d.streaming ? 'streaming' : 'not streaming'}</span></td>
+                  <td>{ifCount}</td>
+                  <td className="muted">{formatFreshness(d.freshness.ageSeconds)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
       {/* Interface table */}
-      <h2>Interfaces</h2>
+      <h2>Interfaces {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
+      {t.devices.length > 0 && t.interfaces.length === 0 && (
+        <div className="notice info">Device inventory is live, but per-interface telemetry is not yet connected for this device set — interface throughput/state will populate once the interface feed is wired.</div>
+      )}
       <div className="filters">
         <label className="field"><span>Provider</span>
           <select value={provider} onChange={(e) => setProvider(e.target.value)}>
@@ -181,15 +224,15 @@ export function NetworkTelemetry() {
       </div>
 
       {/* BGP table */}
-      <h2>BGP peers</h2>
+      <h2>BGP peers {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
             <tr><th>Router</th><th>Provider</th><th>Peer</th><th>ASN</th><th>State</th><th>Uptime</th><th>Received</th><th>Advertised</th></tr>
           </thead>
           <tbody>
-            {t.bgpPeers.length === 0 && <tr><td colSpan={8} className="center-note">No BGP peers.</td></tr>}
-            {t.bgpPeers.map((p) => {
+            {bgpPeers.length === 0 && <tr><td colSpan={8} className="center-note">No BGP peers.</td></tr>}
+            {bgpPeers.map((p) => {
               const m = bgpMeta(p.state);
               return (
                 <tr key={`${p.deviceId}::${p.peerAddress}`}>
