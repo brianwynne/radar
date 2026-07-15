@@ -126,16 +126,20 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
       // gRPC-gateway streaming shape: { result: { value: {...Device} } }.
       const value = isObj(row) && isObj(row.result) && isObj(row.result.value) ? row.result.value : isObj(row) ? row : null;
       if (!value) continue;
+      // The gRPC-gateway JSON transcoding uses proto3 camelCase (deviceId, modelName,
+      // streamingStatus); accept snake_case too for portability across gateways.
+      const s = (camel: string, snake: string): string | undefined => (value[camel] ?? value[snake]) as string | undefined;
       const key = isObj(value.key) ? value.key : {};
-      const id = String((key.device_id as string | undefined) ?? (value.device_id as string | undefined) ?? '');
+      const id = String((key.deviceId as string | undefined) ?? (key.device_id as string | undefined) ?? s('deviceId', 'device_id') ?? '');
       if (!id) continue;
-      const streamingStatus = String(value.streaming_status ?? '');
+      const streamingStatus = String(s('streamingStatus', 'streaming_status') ?? '');
       devices.push({
         id,
         hostname: String(value.hostname ?? value.fqdn ?? id),
-        modelName: (value.model_name as string | undefined) ?? null,
-        softwareVersion: (value.software_version as string | undefined) ?? null,
-        streaming: /active/i.test(streamingStatus),
+        modelName: s('modelName', 'model_name') ?? null,
+        softwareVersion: s('softwareVersion', 'software_version') ?? null,
+        // Streaming when the status ends in ACTIVE (STREAMING_STATUS_ACTIVE) but NOT INACTIVE.
+        streaming: /(^|_)ACTIVE$/i.test(streamingStatus),
         reachable: true,
         observedAt: new Date(this.now()),
       });

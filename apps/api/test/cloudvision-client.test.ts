@@ -95,6 +95,19 @@ describe('HttpCloudVisionReadClient', () => {
     expect(calls.every((c) => c.auth === `Bearer ${TOKEN}`)).toBe(true);
   });
 
+  it('parses the real CVaaS camelCase inventory shape and INACTIVE streaming', async () => {
+    // gRPC-gateway proto3 JSON is camelCase (deviceId/modelName/streamingStatus).
+    const camel = [
+      { result: { value: { key: { deviceId: 'FGN1' }, hostname: 'spine-a', modelName: 'DCS-7280CR3-96', softwareVersion: '4.30.5M', streamingStatus: 'STREAMING_STATUS_ACTIVE' } } },
+      { result: { value: { key: { deviceId: 'FGN2' }, hostname: 'spine-b', modelName: 'DCS-7280CR3-96', softwareVersion: '4.30.5M', streamingStatus: 'STREAMING_STATUS_INACTIVE' } } },
+    ];
+    const { fn } = routingFetch((path) => (path.includes('/Device/all') ? ok(camel) : ok({ notifications: [] })));
+    const snap = await httpClient({}, fn).getSnapshot();
+    expect(snap.devices).toHaveLength(2);
+    expect(snap.devices[0]).toMatchObject({ id: 'FGN1', hostname: 'spine-a', modelName: 'DCS-7280CR3-96', streaming: true });
+    expect(snap.devices[1]).toMatchObject({ id: 'FGN2', streaming: false }); // INACTIVE ≠ streaming
+  });
+
   it('retries a transient 503 then succeeds', async () => {
     const sleep = vi.fn(async () => undefined);
     const { fn } = routingFetch((path, call) => {
