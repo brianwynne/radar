@@ -98,6 +98,14 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Eir PNI Dublin')).toBeInTheDocument();
   });
 
+  it('shows a live-read countdown pill', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    // Countdown to the next live read is present (auto-refresh is running).
+    expect(screen.getByText(/next read in \d+s|reading…/)).toBeInTheDocument();
+  });
+
   it('colour-codes utilisation: amber ≥60% of capacity, red ≥80%, clear below', async () => {
     stubApi(NOC);
     renderAt('/network');

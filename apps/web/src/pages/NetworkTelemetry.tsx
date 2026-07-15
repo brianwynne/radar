@@ -185,11 +185,16 @@ export function NetworkTelemetry() {
           <span className={`badge ${t.mode === 'cloudvision' ? 'ok' : t.mode === 'mock' ? 'warn' : 'neutral'}`}>
             {t.mode === 'cloudvision' ? 'LIVE · CloudVision' : t.mode === 'mock' ? 'MOCK · SYNTHETIC' : 'NOT CONNECTED'}
           </span>
-          {t.status?.snapshotAgeSeconds !== undefined && t.status?.snapshotAgeSeconds !== null && (
-            <span className="muted">
-              telemetry {formatFreshness(t.status.snapshotAgeSeconds)}
-              {secondsToRefresh !== null && <> · <span className="refresh-countdown">{secondsToRefresh === 0 ? 'refreshing…' : `next in ${secondsToRefresh}s`}</span></>}
+          {/* Countdown to the next live read — its own pill so it's always visible and never
+              hidden by the telemetry-age condition. Shown whenever auto-refresh is running. */}
+          {secondsToRefresh !== null && (
+            <span className="badge live-countdown" title="Countdown to the next live read from CloudVision (auto-refreshes every 10s)">
+              <span className="live-dot" />
+              {secondsToRefresh === 0 ? 'reading…' : `next read in ${secondsToRefresh}s`}
             </span>
+          )}
+          {t.status?.snapshotAgeSeconds !== undefined && t.status?.snapshotAgeSeconds !== null && (
+            <span className="muted">telemetry {formatFreshness(t.status.snapshotAgeSeconds)}</span>
           )}
         </div>
       </header>
