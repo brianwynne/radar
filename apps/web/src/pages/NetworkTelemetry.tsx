@@ -27,7 +27,7 @@ function formatUptime(seconds: number | null): string {
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : String(n));
 
 export function NetworkTelemetry() {
-  const t = useCloudVision(5_000);
+  const t = useCloudVision(15_000);
   const [provider, setProvider] = useState('');
   const [linkType, setLinkType] = useState('');
   const [status, setStatus] = useState('');
