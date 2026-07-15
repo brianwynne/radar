@@ -207,7 +207,7 @@ export const NETWORK_DEVICES_BODY = {
   ],
 };
 const cvItf = (device: string, name: string, desc: string, provider: string, linkType: string, speed: number, out: number, oper: string, status: string) => ({
-  deviceId: device, deviceHostname: `${device === 'JPE00000001' ? 'edge1' : 'edge2'}.dub.rte.ie`, name, description: desc, provider, location: 'Dublin', linkType,
+  deviceId: device, deviceHostname: `${device === 'JPE00000001' ? 'edge1' : 'edge2'}.dub.rte.ie`, name, friendlyName: null, description: desc, provider, location: 'Dublin', linkType,
   adminState: 'up', operState: oper, speedBps: speed, inBps: out / 5, outBps: out, primaryBps: oper === 'down' ? 0 : out, bandwidthSource: 'REPORTED',
   utilisationPercent: oper === 'down' ? 0 : (out / speed) * 100, headroomBps: speed - out, inErrors: 0, outErrors: 0, inDiscards: 0, outDiscards: 0,
   status, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock', classificationSource: 'description_regex', warnings: [],
@@ -262,6 +262,7 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/telemetry/origin')) body = ORIGIN_BODY;
       else if (p.endsWith('/network/status')) body = NETWORK_STATUS_BODY;
       else if (p.endsWith('/network/devices')) body = NETWORK_DEVICES_BODY;
+      else if (p.endsWith('/network/interfaces/label')) { const b = JSON.parse(String(init?.body ?? '{}')); body = { deviceId: b.deviceId, name: b.name, friendlyName: b.friendlyName || null }; }
       else if (p.endsWith('/network/interfaces')) body = NETWORK_INTERFACES_BODY;
       else if (p.endsWith('/network/link-groups')) body = NETWORK_LINK_GROUPS_BODY;
       else if (p.endsWith('/network/bgp-peers')) body = NETWORK_BGP_BODY;

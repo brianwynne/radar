@@ -4,6 +4,8 @@
 // shown distinctly from observed telemetry, and a missing/stale value is shown as such —
 // never invented. Auto-refreshes; clearly indicates stale data.
 import { useMemo, useState } from 'react';
+import { api } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { useCloudVision } from '../telemetry/use-cloudvision';
 import { Sparkline } from '../telemetry/Sparkline';
 import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
@@ -31,6 +33,25 @@ export function NetworkTelemetry() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [device, setDevice] = useState(''); // selected device id (drill-down)
+  const { hasPermission } = useAuth();
+  const canLabel = hasPermission('mapping.manage');
+  // Local overrides for friendly names being edited (survive the auto-refresh).
+  const [labelEdits, setLabelEdits] = useState<Record<string, string>>({});
+  const [labelSaving, setLabelSaving] = useState<Record<string, boolean>>({});
+  const ifKey = (deviceId: string, name: string) => `${deviceId}::${name}`;
+
+  const saveLabel = async (deviceId: string, name: string, value: string) => {
+    const key = ifKey(deviceId, name);
+    setLabelSaving((s) => ({ ...s, [key]: true }));
+    try {
+      await api.networkSetInterfaceLabel({ deviceId, name, friendlyName: value });
+      t.refresh();
+    } catch {
+      // leave the typed value in place; the persisted value will reconcile on next refresh
+    } finally {
+      setLabelSaving((s) => ({ ...s, [key]: false }));
+    }
+  };
 
   const selectedDevice = t.devices.find((d) => d.id === device) ?? null;
   const toggleDevice = (id: string) => setDevice((cur) => (cur === id ? '' : id));
@@ -191,20 +212,37 @@ export function NetworkTelemetry() {
         <table className="matrix">
           <thead>
             <tr>
-              <th>Router</th><th>Interface</th><th>Description</th><th>Provider</th><th>Link type</th>
+              <th>Router</th><th>Interface</th><th>Name</th><th>Description</th><th>Provider</th><th>Link type</th>
               <th>Capacity</th><th>Current</th><th>Util</th><th>Src</th><th>Errors</th><th>Discards</th><th>Status</th><th>Age</th>
             </tr>
           </thead>
           <tbody>
-            {interfaces.length === 0 && <tr><td colSpan={13} className="center-note">No interfaces match the current filters.</td></tr>}
+            {interfaces.length === 0 && <tr><td colSpan={14} className="center-note">No interfaces match the current filters.</td></tr>}
             {interfaces.map((i) => {
               const m = healthMeta(i.status);
               const bw = bandwidthSourceMeta(i.bandwidthSource);
               const oper = operMeta(i.operState);
+              const key = ifKey(i.deviceId, i.name);
+              const labelValue = labelEdits[key] ?? i.friendlyName ?? '';
               return (
-                <tr key={`${i.deviceId}::${i.name}`}>
+                <tr key={key}>
                   <td>{i.deviceHostname}</td>
                   <td>{i.name} <span className={`badge ${oper.badge} badge-sm`}>{oper.label}</span></td>
+                  <td>
+                    {canLabel ? (
+                      <input
+                        className="label-input"
+                        value={labelValue}
+                        placeholder="add name"
+                        disabled={labelSaving[key]}
+                        onChange={(e) => setLabelEdits((s) => ({ ...s, [key]: e.target.value }))}
+                        onBlur={() => { if ((labelEdits[key] ?? i.friendlyName ?? '') !== (i.friendlyName ?? '')) void saveLabel(i.deviceId, i.name, labelValue); }}
+                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
+                      />
+                    ) : (
+                      <span>{i.friendlyName ?? '—'}</span>
+                    )}
+                  </td>
                   <td className="muted">{i.description ?? '—'}</td>
                   <td>{i.provider ?? '—'}</td>
                   <td>{i.linkType}</td>

@@ -19,6 +19,7 @@ import { createValidationService } from './validation/index.js';
 import { createValidationStore } from './database/validation-store.js';
 import { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
+import { createInterfaceLabelStore } from './database/interface-label-store.js';
 import { SecretBox } from './security/secret-box.js';
 
 async function main(): Promise<void> {
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
     cloudVisionPoller,
     cloudVisionMode: cloudVisionPoller.status().source,
     cloudVisionManager,
+    interfaceLabels: createInterfaceLabelStore(pool),
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
