@@ -12,9 +12,10 @@
 //     GROUNDED-BUT-PENDING live confirmation: any field the live shape does not provide is
 //     surfaced as UNAVAILABLE — never fabricated. See the live-validation command.
 import { CloudVisionError } from './errors.js';
-import { buildSnapshot, counterKey, type AdapterConfig, type PreviousCounters, type RawBgpPeer, type RawDevice, type RawInterface, type RawSnapshot } from './adapter.js';
+import { buildSnapshot, type AdapterConfig, type RawBgpPeer, type RawDevice, type RawInterface, type RawSnapshot } from './adapter.js';
+import { parseBgpPeer, parseInterfaceRates, parseUtilisation, speedFromUtilisation } from './analytics-shapes.js';
 import type { ClassificationRule } from './classification.js';
-import type { CloudVisionClient, NetworkStateSnapshot, OperState } from './types.js';
+import type { CloudVisionClient, NetworkStateSnapshot } from './types.js';
 
 export interface HttpCloudVisionClientOptions {
   endpoint: string;
@@ -41,35 +42,42 @@ export interface HttpCloudVisionClientOptions {
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const enc = encodeURIComponent;
 
-/** Interface state NetDB path (documented default; deployment-overridable in future work). */
-const IF_PATH = 'Smash/interface/status/eth/phy/slice/1/intfStatus';
-/** BGP peer state NetDB path (documented default). */
-const BGP_PATH = 'Sysdb/routing/bgp/export/vrf/default/peerInfoStatus';
+// Interface names to skip (not steering-relevant): subinterfaces, loopback, management,
+// VLAN/VXLAN, recirc, CPU, fabric. RADAR cares about physical edge interfaces.
+const SKIP_INTERFACE = /(\.\d|^Loopback|^Management|^Vlan|^Vxlan|^Recirc|^Cpu|^Fabric)/i;
+/** Analytics rate window used for the reported bandwidth (1-minute average). */
+const RATE_WINDOW = '1m';
+/** Cap on interfaces fetched per device per poll (defence against a huge device). */
+const MAX_INTERFACES_PER_DEVICE = 200;
+/** Concurrency for per-interface / per-peer analytics leaf fetches. */
+const FETCH_CONCURRENCY = 8;
 
-function asNum(v: unknown): number | null {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
-}
-function asBig(v: unknown): bigint | null {
-  if (typeof v === 'bigint') return v;
-  if (typeof v === 'number' && Number.isInteger(v)) return BigInt(v);
-  if (typeof v === 'string' && /^\d+$/.test(v)) return BigInt(v);
-  return null;
-}
-function operOf(v: unknown): OperState {
-  const s = String(v ?? '').toLowerCase();
-  if (s === 'up' || s === 'linkup' || s === 'connected') return 'up';
-  if (s === 'down' || s === 'linkdown' || s === 'notconnect') return 'down';
-  return 'unknown';
-}
 const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** Run `fn` over `items` with bounded concurrency, preserving order; a failed item → null. */
+async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<(R | null)[]> {
+  const out: (R | null)[] = new Array(items.length).fill(null);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      try {
+        out[i] = await fn(items[i]);
+      } catch {
+        out[i] = null;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
 
 export class HttpCloudVisionReadClient implements CloudVisionClient {
   private readonly fetchImpl: typeof fetch;
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly random: () => number;
   private readonly now: () => number;
-  /** Previous counter readings per interface, held between polls for bandwidth derivation. */
-  private previous = new Map<string, PreviousCounters>();
 
   constructor(private readonly opts: HttpCloudVisionClientOptions) {
     if (!/^https?:\/\//i.test(opts.endpoint)) throw new Error('HttpCloudVisionReadClient: endpoint must be an http(s) URL.');
@@ -81,26 +89,19 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
 
   async getSnapshot(correlationId?: string): Promise<NetworkStateSnapshot> {
     const now = this.now();
-    const devices = await this.discoverDevices(correlationId);
-    const wanted = this.opts.expectedDeviceIds.length > 0 ? devices.filter((d) => this.opts.expectedDeviceIds.includes(d.id)) : devices;
+    const discovered = await this.discoverDevices(correlationId);
+    // When edge devices are configured, the snapshot is SCOPED to exactly those — the view
+    // shows only the selected routers/switches. Add more later by extending the device list.
+    const devices = this.opts.expectedDeviceIds.length > 0 ? discovered.filter((d) => this.opts.expectedDeviceIds.includes(d.id)) : discovered;
 
     const interfaces: RawInterface[] = [];
     const bgpPeers: RawBgpPeer[] = [];
-    const nextPrevious = new Map<string, PreviousCounters>();
-    for (const d of wanted) {
-      const ifs = await this.fetchInterfaces(d.id, now, correlationId);
-      for (const itf of ifs) {
-        interfaces.push(itf);
-        // Roll the counters forward for the next poll's derivation.
-        if (itf.inOctets !== null || itf.outOctets !== null) {
-          nextPrevious.set(counterKey(itf.deviceId, itf.name), { inOctets: itf.inOctets, outOctets: itf.outOctets, at: itf.observedAt });
-        }
-      }
+    for (const d of devices) {
+      interfaces.push(...(await this.fetchInterfaces(d.id, now, correlationId)));
       bgpPeers.push(...(await this.fetchBgp(d.id, now, correlationId)));
     }
 
-    const raw: RawSnapshot = { devices, interfaces, bgpPeers, previousCounters: this.previous };
-    this.previous = nextPrevious;
+    const raw: RawSnapshot = { devices, interfaces, bgpPeers };
 
     const cfg: AdapterConfig = {
       source: 'cloudvision',
@@ -147,79 +148,119 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
     return devices;
   }
 
-  // ---- NetDB telemetry (grounded; pending live confirmation) --------------------------------
+  // ---- analytics-dataset telemetry (verified live against CVaaS) -----------------------------
+  // Interface rates/utilisation + BGP peer state live in the `analytics` dataset under
+  // /Devices/<id>/versioned-data/... (NOT the per-device Sysdb dataset, and NOT AQL). Paths
+  // are code-defined + allow-listed here — there is no generic query proxy. All values are
+  // parsed by analytics-shapes.ts; an absent field stays null (a completeness signal).
+
+  private analyticsBase(deviceId: string, ...elements: string[]): string {
+    // Each element is a single path segment (interface names contain '/', so encode the whole).
+    const tail = elements.map((e) => enc(e)).join('/');
+    return `/api/v1/rest/analytics/Devices/${enc(deviceId)}/versioned-data/${tail}`;
+  }
+
+  /** GET an analytics path → merged updates map + the freshest source timestamp (epoch ms). */
+  private async analyticsGet(path: string, correlationId?: string): Promise<{ updates: Record<string, unknown>; observedAt: Date | null }> {
+    const payload = await this.getJson(path, correlationId);
+    const updates: Record<string, unknown> = {};
+    let tsNs: bigint | null = null;
+    if (isObj(payload) && Array.isArray(payload.notifications)) {
+      for (const n of payload.notifications) {
+        if (!isObj(n)) continue;
+        if (isObj(n.updates)) Object.assign(updates, n.updates);
+        const t = n.timestamp ?? n.time;
+        if (typeof t === 'string' && /^\d+$/.test(t)) {
+          const v = BigInt(t);
+          if (tsNs === null || v > tsNs) tsNs = v;
+        }
+      }
+    }
+    const observedAt = tsNs === null ? null : new Date(Number(tsNs / 1_000_000n));
+    return { updates, observedAt };
+  }
 
   private async fetchInterfaces(deviceId: string, now: number, correlationId?: string): Promise<RawInterface[]> {
-    let payload: unknown;
+    let names: string[];
     try {
-      payload = await this.getJson(`/api/v1/rest/${enc(deviceId)}/${IF_PATH}`, correlationId);
+      const list = await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data'), correlationId);
+      names = Object.keys(list.updates).filter((n) => !SKIP_INTERFACE.test(n)).slice(0, MAX_INTERFACES_PER_DEVICE);
     } catch (err) {
-      this.opts.logger?.warn({ deviceId, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: interface fetch failed');
+      this.opts.logger?.warn({ deviceId, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: interface list fetch failed');
       return [];
     }
-    const updates = this.updatesOf(payload);
-    const out: RawInterface[] = [];
-    for (const [name, raw] of Object.entries(updates)) {
-      if (!isObj(raw)) continue;
-      const counters = isObj(raw.counters) ? raw.counters : {};
-      out.push({
-        deviceId,
-        name,
-        description: (raw.description as string | undefined) ?? null,
-        adminState: operOf(raw.adminStatus ?? raw.admin_status),
-        operState: operOf(raw.linkStatus ?? raw.oper_status ?? raw.operStatus),
-        speedBps: asNum(raw.speed ?? raw.bandwidth),
-        reportedInBps: asNum(raw.inBitsRate ?? raw.rxBps),
-        reportedOutBps: asNum(raw.outBitsRate ?? raw.txBps),
-        inOctets: asBig(counters.inOctets ?? raw.inOctets),
-        outOctets: asBig(counters.outOctets ?? raw.outOctets),
-        inErrors: asNum(counters.inErrors ?? raw.inErrors),
-        outErrors: asNum(counters.outErrors ?? raw.outErrors),
-        inDiscards: asNum(counters.inDiscards ?? raw.inDiscards),
-        outDiscards: asNum(counters.outDiscards ?? raw.outDiscards),
-        observedAt: new Date(now),
-      });
+    const built = await mapLimit(names, FETCH_CONCURRENCY, (name) => this.fetchInterface(deviceId, name, now, correlationId));
+    return built.filter((i): i is RawInterface => i !== null);
+  }
+
+  /** One interface: its 1-minute rates (bandwidth/errors/discards) + pre-computed utilisation.
+   *  Configured speed is derived from bandwidth ÷ utilisation. */
+  private async fetchInterface(deviceId: string, name: string, now: number, correlationId?: string): Promise<RawInterface | null> {
+    const rates = await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'aggregate', 'rates', RATE_WINDOW), correlationId);
+    if (Object.keys(rates.updates).length === 0) return null; // no rate data → omit this interface
+    const r = parseInterfaceRates(rates.updates);
+    let util: { inPercent: number | null; outPercent: number | null } = { inPercent: null, outPercent: null };
+    try {
+      util = parseUtilisation((await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'utilisation'), correlationId)).updates);
+    } catch {
+      // Utilisation is best-effort; the endpoint spells it "utilization".
     }
-    return out;
+    if (util.inPercent === null && util.outPercent === null) {
+      try {
+        util = parseUtilisation((await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'utilization'), correlationId)).updates);
+      } catch {
+        // leave null → utilisation unavailable (completeness signal)
+      }
+    }
+    const speedBps = speedFromUtilisation(r.outBps, util.outPercent) ?? speedFromUtilisation(r.inBps, util.inPercent);
+    const hasData = r.inBps !== null || r.outBps !== null;
+    return {
+      deviceId,
+      name,
+      description: null, // interface description is not on the analytics node (future enrichment)
+      adminState: 'unknown',
+      operState: hasData ? 'up' : 'unknown',
+      speedBps,
+      reportedInBps: r.inBps,
+      reportedOutBps: r.outBps,
+      inOctets: null,
+      outOctets: null,
+      inErrors: r.inErrors,
+      outErrors: r.outErrors,
+      inDiscards: r.inDiscards,
+      outDiscards: r.outDiscards,
+      observedAt: rates.observedAt ?? new Date(now),
+    };
   }
 
   private async fetchBgp(deviceId: string, now: number, correlationId?: string): Promise<RawBgpPeer[]> {
-    let payload: unknown;
+    let peerAddrs: string[];
     try {
-      payload = await this.getJson(`/api/v1/rest/${enc(deviceId)}/${BGP_PATH}`, correlationId);
+      const list = await this.analyticsGet(this.analyticsBase(deviceId, 'routing', 'bgp', 'status', 'vrf', 'default', 'bgpPeerInfoStatusEntry'), correlationId);
+      peerAddrs = Object.keys(list.updates);
     } catch (err) {
-      this.opts.logger?.warn({ deviceId, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: bgp fetch failed');
+      this.opts.logger?.warn({ deviceId, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: bgp list fetch failed');
       return [];
     }
-    const updates = this.updatesOf(payload);
-    const out: RawBgpPeer[] = [];
-    for (const [address, raw] of Object.entries(updates)) {
-      if (!isObj(raw)) continue;
-      out.push({
+    const built = await mapLimit(peerAddrs, FETCH_CONCURRENCY, async (address) => {
+      const leaf = await this.analyticsGet(this.analyticsBase(deviceId, 'routing', 'bgp', 'status', 'vrf', 'default', 'bgpPeerInfoStatusEntry', address), correlationId);
+      if (Object.keys(leaf.updates).length === 0) return null;
+      const p = parseBgpPeer(leaf.updates);
+      const peer: RawBgpPeer = {
         deviceId,
         peerAddress: address,
-        peerAsn: asNum(raw.asn ?? raw.peerAsn),
-        state: String(raw.state ?? raw.peerState ?? ''),
-        uptimeSeconds: asNum(raw.uptime ?? raw.establishedTime),
-        prefixesReceived: asNum(raw.prefixesReceived ?? raw.prefixReceived),
-        prefixesAdvertised: asNum(raw.prefixesAdvertised ?? raw.prefixSent),
-        observedAt: new Date(now),
-      });
-    }
-    return out;
-  }
-
-  /** Extract a `{ key: value }` map from the documented NetDB REST shape. Tolerant: an
-   *  unexpected shape yields `{}` (→ the device simply contributes no interfaces/peers,
-   *  surfaced honestly), never a fabricated entry. */
-  private updatesOf(payload: unknown): Record<string, unknown> {
-    if (isObj(payload) && Array.isArray(payload.notifications)) {
-      const merged: Record<string, unknown> = {};
-      for (const n of payload.notifications) if (isObj(n) && isObj(n.updates)) Object.assign(merged, n.updates);
-      return merged;
-    }
-    if (isObj(payload) && isObj(payload.updates)) return payload.updates as Record<string, unknown>;
-    return {};
+        peerAsn: p.asn,
+        state: p.state ?? '',
+        uptimeSeconds: null, // not on this leaf (a different afi/safi table); left null
+        prefixesReceived: null,
+        prefixesAdvertised: null,
+        observedAt: leaf.observedAt ?? new Date(now),
+        // Provider is taken ONLY from the verified peer description tag, never fabricated.
+        providerHint: p.provider,
+      };
+      return peer;
+    });
+    return built.filter((p): p is RawBgpPeer => p !== null);
   }
 
   // ---- Transport ----------------------------------------------------------------------------

@@ -66,6 +66,9 @@ export interface RawBgpPeer {
   prefixesReceived: number | null;
   prefixesAdvertised: number | null;
   observedAt: Date | null;
+  /** Provider derived from a verified source (e.g. the peer description tag); preferred over
+   *  the ASN map. Never a fabricated association. */
+  providerHint?: string | null;
   warnings?: string[];
 }
 
@@ -257,7 +260,8 @@ function bgpStatus(state: BgpState, hasObservation: boolean): HealthStatus {
 function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, cfg: AdapterConfig): BgpPeer {
   const state = normaliseBgpState(raw.state);
   const warnings = [...(raw.warnings ?? [])];
-  const provider = raw.peerAsn !== null ? cfg.providerForAsn?.[raw.peerAsn] ?? null : null;
+  // A verified description hint wins over the ASN map; neither is fabricated.
+  const provider = raw.providerHint ?? (raw.peerAsn !== null ? cfg.providerForAsn?.[raw.peerAsn] ?? null : null);
   if (state === 'UNKNOWN') warnings.push(`Unrecognised BGP state "${raw.state}".`);
   return {
     deviceId: raw.deviceId,

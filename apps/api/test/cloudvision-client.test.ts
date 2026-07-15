@@ -43,8 +43,26 @@ const TOKEN = 'super-secret-token';
 const INVENTORY = [
   { result: { value: { key: { device_id: 'DEV1' }, hostname: 'edge1.rte.ie', model_name: 'DCS-7280SR3', software_version: '4.31.2F', streaming_status: 'STREAMING_STATUS_ACTIVE' } } },
 ];
-const IF_STATE = { notifications: [{ updates: { Ethernet1: { description: 'Eir PNI Dublin', adminStatus: 'up', linkStatus: 'up', speed: 100e9, inBitsRate: 8e9, outBitsRate: 40e9, counters: { inErrors: 0, outErrors: 1, inDiscards: 0, outDiscards: 0 } } } }] };
-const BGP_STATE = { notifications: [{ updates: { '185.6.36.1': { asn: 5466, state: 'Established', uptime: 8640, prefixesReceived: 850000, prefixesAdvertised: 40 } } }] };
+// analytics-dataset shapes (as verified live against CVaaS): every field is `{ key, value }`.
+const TS = '1784137260000000000'; // ns epoch
+const wrap = (value: unknown) => ({ key: 'k', value });
+const stat = (avg: number) => wrap({ avg: { float: avg }, max: { float: avg }, min: { float: avg }, stddev: { float: 0 }, weight: { float: 1 } });
+const IF_LIST = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['x'] }) } }] };
+const IF_RATES = { notifications: [{ timestamp: TS, updates: { inOctets: stat(1e9), outOctets: stat(5e9), inErrors: stat(0), outErrors: stat(2), inDiscards: stat(0), outDiscards: stat(1) } }] };
+const IF_UTIL = { notifications: [{ updates: { 'inOctets-utilization': wrap({ float: 8 }), 'outOctets-utilization': wrap({ float: 40 }) } }] };
+const BGP_LIST = { notifications: [{ updates: { '185.6.36.1': wrap({ ptr: ['x'] }) } }] };
+const BGP_LEAF = { notifications: [{ timestamp: TS, updates: { bgpState: wrap({ Name: 'Established', Value: { int: 6 } }), bgpPeerAs: wrap({ value: { int: 5466 } }), bgpPeerLocalAddr: wrap('185.6.36.2'), bgpPeerDescription: wrap('[Transit] Cogent 3-002188930') } }] };
+
+/** Route a request path to the right analytics fixture. */
+function analyticsHandler(path: string): Response {
+  if (path.includes('/inventory/v1/Device/all')) return ok(INVENTORY);
+  if (path.includes('/aggregate/rates/1m')) return ok(IF_RATES);
+  if (path.includes('/utilisation') || path.includes('/utilization')) return ok(IF_UTIL);
+  if (path.endsWith('/interfaces/data')) return ok(IF_LIST);
+  if (path.includes('/bgpPeerInfoStatusEntry/')) return ok(BGP_LEAF);
+  if (path.endsWith('/bgpPeerInfoStatusEntry')) return ok(BGP_LIST);
+  return new Response('', { status: 404 });
+}
 
 function httpClient(overrides: Partial<ConstructorParameters<typeof HttpCloudVisionReadClient>[0]> = {}, fetchImpl?: typeof fetch) {
   return new HttpCloudVisionReadClient({
@@ -76,21 +94,23 @@ function routingFetch(handler: (path: string, call: number) => Response | Error)
 const ok = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 
 describe('HttpCloudVisionReadClient', () => {
-  it('discovers devices, interfaces and BGP peers and classifies them', async () => {
-    const { fn, calls } = routingFetch((path) => {
-      if (path.includes('/inventory/v1/Device/all')) return ok(INVENTORY);
-      if (path.includes('/intfStatus')) return ok(IF_STATE);
-      if (path.includes('peerInfoStatus')) return ok(BGP_STATE);
-      return new Response('', { status: 404 });
-    });
+  it('discovers devices + interface bandwidth (analytics rates) and BGP peers', async () => {
+    const { fn, calls } = routingFetch((path) => analyticsHandler(path));
     const snap = await httpClient({}, fn).getSnapshot('cid-1');
     expect(snap.source).toBe('cloudvision');
     expect(snap.devices).toHaveLength(1);
     expect(snap.devices[0]).toMatchObject({ id: 'DEV1', hostname: 'edge1.rte.ie', streaming: true });
-    const eir = snap.interfaces.find((i) => i.name === 'Ethernet1')!;
-    expect(eir).toMatchObject({ provider: 'Eir', linkType: 'PRIVATE_PEERING', bandwidthSource: 'REPORTED' });
-    expect(eir.utilisationPercent).toBeCloseTo(40, 5);
-    expect(snap.bgpPeers[0]).toMatchObject({ peerAsn: 5466, state: 'ESTABLISHED', established: true });
+    // Interface: outOctets 5e9/s ×8 = 40 Gbps; utilisation 40% → derived speed 100 Gbps.
+    const eth1 = snap.interfaces.find((i) => i.name === 'Ethernet1')!;
+    expect(eth1.outBps).toBe(40e9);
+    expect(eth1.inBps).toBe(8e9);
+    expect(eth1.utilisationPercent).toBeCloseTo(40, 1);
+    expect(eth1.speedBps).toBeCloseTo(100e9, -8);
+    expect(eth1.bandwidthSource).toBe('REPORTED');
+    expect(eth1.observedAt).toBe(new Date(Number(BigInt(TS) / 1_000_000n)).toISOString());
+    // BGP peer: state + ASN + provider parsed from the "[Transit] Cogent" description.
+    const peer = snap.bgpPeers.find((p) => p.peerAddress === '185.6.36.1')!;
+    expect(peer).toMatchObject({ state: 'ESTABLISHED', peerAsn: 5466, provider: 'Cogent', established: true });
     // Every request carried the bearer token.
     expect(calls.every((c) => c.auth === `Bearer ${TOKEN}`)).toBe(true);
   });
@@ -112,9 +132,7 @@ describe('HttpCloudVisionReadClient', () => {
     const sleep = vi.fn(async () => undefined);
     const { fn } = routingFetch((path, call) => {
       if (path.includes('/Device/all')) return call === 1 ? new Response('', { status: 503 }) : ok(INVENTORY);
-      if (path.includes('/intfStatus')) return ok(IF_STATE);
-      if (path.includes('peerInfoStatus')) return ok(BGP_STATE);
-      return new Response('', { status: 404 });
+      return analyticsHandler(path);
     });
     const snap = await httpClient({ sleep }, fn).getSnapshot();
     expect(snap.devices).toHaveLength(1);
@@ -133,9 +151,8 @@ describe('HttpCloudVisionReadClient', () => {
     const warn = vi.fn();
     const { fn } = routingFetch((path) => {
       if (path.includes('/Device/all')) return ok(INVENTORY);
-      if (path.includes('/intfStatus')) return new Response('', { status: 500 });
-      if (path.includes('peerInfoStatus')) return ok(BGP_STATE);
-      return new Response('', { status: 404 });
+      if (path.endsWith('/interfaces/data')) return new Response('', { status: 500 }); // interface list fails
+      return analyticsHandler(path);
     });
     const snap = await httpClient({ logger: { warn } }, fn).getSnapshot();
     expect(snap.devices).toHaveLength(1);
