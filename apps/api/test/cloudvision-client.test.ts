@@ -46,9 +46,10 @@ const INVENTORY = [
 // analytics-dataset shapes (as verified live against CVaaS): every field is `{ key, value }`.
 const TS = '1784137260000000000'; // ns epoch
 const wrap = (value: unknown) => ({ key: 'k', value });
-const stat = (avg: number) => wrap({ avg: { float: avg }, max: { float: avg }, min: { float: avg }, stddev: { float: 0 }, weight: { float: 1 } });
+// The 10-second `rates` node carries octet fields as bare `{float}` scalars (octets/sec).
+const rate = (v: number) => wrap({ float: v });
 const IF_LIST = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['x'] }) } }] };
-const IF_RATES = { notifications: [{ timestamp: TS, updates: { inOctets: stat(1e9), outOctets: stat(5e9), inErrors: stat(0), outErrors: stat(2), inDiscards: stat(0), outDiscards: stat(1) } }] };
+const IF_RATES = { notifications: [{ timestamp: TS, updates: { inOctets: rate(1e9), outOctets: rate(5e9), inErrors: rate(0), outErrors: rate(2), inDiscards: rate(0), outDiscards: rate(1) } }] };
 const IF_UTIL = { notifications: [{ updates: { 'inOctets-utilization': wrap({ float: 8 }), 'outOctets-utilization': wrap({ float: 40 }) } }] };
 const BGP_LIST = { notifications: [{ updates: { '185.6.36.1': wrap({ ptr: ['x'] }) } }] };
 const BGP_LEAF = { notifications: [{ timestamp: TS, updates: { bgpState: wrap({ Name: 'Established', Value: { int: 6 } }), bgpPeerAs: wrap({ value: { int: 5466 } }), bgpPeerLocalAddr: wrap('185.6.36.2'), bgpPeerDescription: wrap('[Transit] Cogent 3-002188930') } }] };
@@ -58,11 +59,11 @@ const PC_MEMBERS = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['x'] }
 /** Route a request path to the right analytics fixture. */
 function analyticsHandler(path: string): Response {
   if (path.includes('/inventory/v1/Device/all')) return ok(INVENTORY);
-  if (path.includes('/aggregate/rates/1m')) return ok(IF_RATES);
   if (path.includes('/utilisation') || path.includes('/utilization')) return ok(IF_UTIL);
   if (path.endsWith('/expectedMembers')) return ok(PC_MEMBERS);
   if (path.endsWith('/portchannel')) return ok(PC_LIST);
   if (path.endsWith('/interfaces/data')) return ok(IF_LIST);
+  if (path.endsWith('/rates')) return ok(IF_RATES); // per-interface 10-second rate node
   if (path.includes('/bgpPeerInfoStatusEntry/')) return ok(BGP_LEAF);
   if (path.endsWith('/bgpPeerInfoStatusEntry')) return ok(BGP_LIST);
   return new Response('', { status: 404 });

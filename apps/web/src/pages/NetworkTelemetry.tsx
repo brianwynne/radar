@@ -27,7 +27,9 @@ function formatUptime(seconds: number | null): string {
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : String(n));
 
 export function NetworkTelemetry() {
-  const t = useCloudVision(15_000);
+  // Poll on CloudVision's ~10-second publish grid — the interface `rates` node republishes
+  // every ~10s, so this is the freshest the analytics API meaningfully offers.
+  const t = useCloudVision(10_000);
   const [provider, setProvider] = useState('');
   const [linkType, setLinkType] = useState('');
   const [status, setStatus] = useState('');

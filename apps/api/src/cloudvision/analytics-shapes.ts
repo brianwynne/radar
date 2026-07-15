@@ -51,8 +51,9 @@ export interface InterfaceRates {
   outDiscards: number | null;
 }
 
-/** Parse a `interfaces/data/<intf>/rates/1m` updates map. Octet *rates* are octets/sec →
- *  ×8 = bits/sec. Errors/discards are their per-second rates. */
+/** Parse a `interfaces/data/<intf>/rates` updates map (the 10-second rate node). Octet fields
+ *  are octets/sec scalars → ×8 = bits/sec; `rateAvg` also tolerates the `{avg,…}` rate-stats
+ *  shape of the aggregate windows. Errors/discards are their per-second rates. */
 export function parseInterfaceRates(updates: Record<string, unknown>): InterfaceRates {
   const bps = (k: string): number | null => {
     const oct = rateAvg(updates[k]);

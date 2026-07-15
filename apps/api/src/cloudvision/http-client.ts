@@ -45,15 +45,14 @@ const enc = encodeURIComponent;
 // Interface names to skip (not steering-relevant): subinterfaces, loopback, management,
 // VLAN/VXLAN, recirc, CPU, fabric. RADAR cares about physical edge interfaces.
 const SKIP_INTERFACE = /(\.\d|^Loopback|^Management|^Vlan|^Vxlan|^Recirc|^Cpu|^Fabric)/i;
-/** Analytics rate window used for the reported bandwidth (1-minute average). */
-const RATE_WINDOW = '1m';
 /** Cap on interfaces fetched per device per poll (defence against a huge device). */
 const MAX_INTERFACES_PER_DEVICE = 200;
 /** LAG membership is device CONFIG (stable), so cache it and refresh only occasionally. */
 const LAG_CACHE_TTL_MS = 5 * 60_000;
-/** Concurrency for per-interface / per-peer analytics leaf fetches. Balanced for a ~15s poll
- *  (CloudVision's analytics data only republishes ~once a minute, so speed isn't needed);
- *  raise it if driving a shorter interval, at the cost of more simultaneous CVaaS load. */
+/** Concurrency for per-interface / per-peer analytics leaf fetches. Balanced for a ~10s poll
+ *  (CloudVision's analytics engine republishes the interface `rates` node on a ~10-second grid
+ *  — verified live — so this is the useful floor); raise it if driving a shorter interval, at
+ *  the cost of more simultaneous CVaaS load. */
 const FETCH_CONCURRENCY = 12;
 
 const isObj = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -227,10 +226,13 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
     return built.filter((i): i is RawInterface => i !== null);
   }
 
-  /** One interface: its 1-minute rates (bandwidth/errors/discards) + pre-computed utilisation.
-   *  Configured speed is derived from bandwidth ÷ utilisation. */
+  /** One interface: its 10-second rates (bandwidth/errors/discards) + pre-computed utilisation.
+   *  Reads the top-level `rates` node — CloudVision's analytics engine republishes it on a
+   *  ~10-second grid (the `aggregate/rates` node only carries 1m/15m averages; the raw
+   *  `counters` node republishes far slower, ~40s, so 10s is the finest useful resolution the
+   *  analytics REST API exposes). Configured speed is derived from bandwidth ÷ utilisation. */
   private async fetchInterface(deviceId: string, name: string, now: number, correlationId?: string): Promise<RawInterface | null> {
-    const rates = await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'aggregate', 'rates', RATE_WINDOW), correlationId);
+    const rates = await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'rates'), correlationId);
     if (Object.keys(rates.updates).length === 0) return null; // no rate data → omit this interface
     const r = parseInterfaceRates(rates.updates);
     let util: { inPercent: number | null; outPercent: number | null } = { inPercent: null, outPercent: null };
