@@ -10,6 +10,7 @@
     "dev": "tsx watch src/server.ts",
     "migrate": "node dist/database/migrate.js",
     "migrate:dev": "tsx src/database/migrate.ts",
+    "cloudvision:validate": "tsx src/cloudvision/validate.ts",
     "test": "vitest run --exclude \"**/*.integration.test.ts\"",
     "test:unit": "vitest run --exclude \"**/*.integration.test.ts\"",
     "test:integration": "vitest run integration --no-file-parallelism",
