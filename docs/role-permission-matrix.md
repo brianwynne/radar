@@ -30,6 +30,7 @@ may hide unavailable controls but never enforces.
 | `topology.manage` | — | — | ✅ |
 | `mapping.manage` | — | — | ✅ |
 | `threshold.manage` | — | — | ✅ |
+| `connector.manage` | — | — | ✅ |
 | `audit.read` | — | ✅ | ✅ |
 
 NOC Viewer explicitly **cannot** see raw NS1 JSON, Filter Chain internals, ASN/prefix
@@ -55,5 +56,6 @@ metadata, engineering simulations, or topology administration.
 | `POST /api/v1/validation/ns1/run` | `validation.run` |
 | `GET/PUT /api/v1/admin/mappings...` | `mapping.manage` |
 | `GET/PUT /api/v1/admin/thresholds...` | `threshold.manage` |
+| `GET/PUT /api/v1/network/connection`, `POST /network/connection/test` | `connector.manage` (token write-only; never returned) |
 
 **No NS1 write routes exist.** No generic passthrough endpoint exists.

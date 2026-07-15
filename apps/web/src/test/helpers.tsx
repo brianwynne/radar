@@ -23,7 +23,7 @@ export const ENGINEER: Principal = {
   ...VE,
   displayName: 'Engineer',
   roles: ['ENGINEER'],
-  permissions: [...VE.permissions, 'snapshot.create', 'topology.manage', 'mapping.manage', 'threshold.manage'],
+  permissions: [...VE.permissions, 'snapshot.create', 'topology.manage', 'mapping.manage', 'threshold.manage', 'connector.manage'],
 };
 
 export const PROV: Provenance = {
@@ -244,7 +244,11 @@ export const NETWORK_HISTORY_BODY = {
   ],
 };
 
+const defaultConnection = { connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp.test', verifyTls: true, edgeDeviceIds: ['DEV1'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
+let connectionState: Record<string, unknown> = { ...defaultConnection };
+
 export function stubApi(principal: Principal): void {
+  connectionState = { ...defaultConnection };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -262,6 +266,22 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/network/link-groups')) body = NETWORK_LINK_GROUPS_BODY;
       else if (p.endsWith('/network/bgp-peers')) body = NETWORK_BGP_BODY;
       else if (p.endsWith('/network/history')) body = NETWORK_HISTORY_BODY;
+      else if (p.endsWith('/network/connection/test')) body = { result: { ok: true, source: 'cloudvision', summary: { devices: 2, interfaces: 8, bgpPeers: 5, freshness: 'FRESH' } } };
+      else if (p.endsWith('/network/connection')) {
+        if (init?.method === 'PUT') {
+          const b = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+          connectionState = {
+            ...connectionState,
+            enabled: b.enabled ?? connectionState.enabled,
+            mode: b.mode ?? connectionState.mode,
+            endpoint: b.endpoint !== undefined ? b.endpoint : connectionState.endpoint,
+            verifyTls: b.verifyTls ?? connectionState.verifyTls,
+            edgeDeviceIds: b.edgeDeviceIds ?? connectionState.edgeDeviceIds,
+            tokenConfigured: b.clearToken ? false : b.token ? true : connectionState.tokenConfigured,
+          };
+        }
+        body = { settings: connectionState };
+      }
       else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;

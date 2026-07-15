@@ -77,6 +77,64 @@ write operations**. Exit codes: `0` pass; `1` a check failed (missing routers, n
 peering/transit interfaces, no devices, or critically stale telemetry); `2` authentication or
 transport failure. The token and endpoint URL are never printed (only the endpoint host).
 
+## Engineer-managed connection (UI)
+
+Engineers (permission `connector.manage`) can manage the endpoint and token from the
+**CloudVision Setup** screen (`/network/connection`) — no restart or redeploy needed. When
+settings are managed here they are persisted in Postgres and **override the environment base
+config**; the running poller is reconfigured in place.
+
+- The **token is write-only**: it is never fetched, displayed, logged or returned. The field
+  starts blank — *leave it blank to keep the stored token*, type a value to replace it, or
+  tick **Clear the stored token** to remove it. The masked placeholder is never sent as a value.
+- **Storing a token requires the master key** (below). Without it, non-secret settings are
+  editable but a token cannot be saved (the API returns `409 MASTER_KEY_UNAVAILABLE`).
+- **Test connection** runs one read-only snapshot against the saved connection and reports
+  pass/fail — it never persists or returns the token.
+- Every change is audited (`connector.settings.updated`) recording the action taken
+  (`tokenAction: replace|clear|retain`) but **never the secret**.
+- Non-secret settings can also still be provided by env (they are the base/default); the
+  encrypted token can additionally be supplied out-of-band via `/run/secrets/cloudvision_token`
+  for a first live connection before anything is saved in the UI.
+
+## Master key (`/run/secrets/radar_master_key`)
+
+The token is stored in Postgres **only as AES-256-GCM ciphertext**. The encryption master key
+is supplied solely at runtime via the mounted secret `/run/secrets/radar_master_key` and is
+**never stored in the database** — a database backup therefore contains ciphertext alone.
+
+Provision a 32-byte key (recommended: base64 or hex; a long passphrase is also accepted and
+hashed to 32 bytes):
+
+```bash
+openssl rand -base64 32    # → put the output in the secret
+```
+
+Mount it as `radar_master_key` (Docker/K8s secret) on `radar-api`. If it is absent or invalid,
+the connector **fails closed**: no token can be stored or decrypted, and a live connection
+degrades to "not connected" (the UI shows a master-key warning) — it never falls back to
+plaintext or a guess.
+
+### Master-key rotation
+
+Rotating the master key means re-wrapping the stored token under a new key. Because the API
+decrypts with the mounted key and re-encrypts on the next token write, the safe procedure is:
+
+1. **Before rotating**, in the CloudVision Setup screen, confirm the current token works
+   (**Test connection**) and have the plaintext token to hand (you will re-enter it once).
+2. Generate the new key (`openssl rand -base64 32`).
+3. Update the `radar_master_key` secret with the new value and roll the `radar-api` replicas.
+   (The old ciphertext can no longer be decrypted with the new key — expected; the connector
+   will report degraded until step 4.)
+4. In the UI, **re-enter the token and Save**. This encrypts it under the new key (unique
+   nonce) and reconfigures the connector. Confirm with **Test connection**.
+5. Destroy the old key material.
+
+If you cannot re-enter the token, instead: set the connector to mock (or clear the token)
+before rotating, rotate the key, then re-add the token afterwards. There is deliberately no
+way to export the stored token to re-wrap it automatically — the plaintext never leaves the
+connector boundary.
+
 ## Token rotation
 
 1. Issue a new read-only service-account token in CloudVision (Settings → Access Management →

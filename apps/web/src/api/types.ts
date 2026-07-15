@@ -900,3 +900,42 @@ export interface NetworkInterfacesResponse { provenance: NetworkProvenance; coun
 export interface NetworkLinkGroupsResponse { provenance: NetworkProvenance; count: number; items: LinkGroup[] }
 export interface NetworkBgpPeersResponse { provenance: NetworkProvenance; count: number; items: BgpPeer[] }
 export interface NetworkHistoryResponse { provenance: NetworkProvenance; count: number; items: HistoryPoint[] }
+
+// --- CloudVision connection settings (Engineer-managed; token write-only) ---
+
+export interface ConnectorSettingsView {
+  connector: 'cloudvision';
+  enabled: boolean;
+  mode: 'mock' | 'live';
+  endpoint: string | null;
+  verifyTls: boolean;
+  edgeDeviceIds: string[];
+  /** Whether a token is configured — the token itself is never returned. */
+  tokenConfigured: boolean;
+  tokenSetAt: string | null;
+  updatedBy: string | null;
+  updatedAt: string | null;
+  source: 'database' | 'environment';
+  masterKeyAvailable: boolean;
+  degraded: string | null;
+}
+export interface ConnectorSettingsResponse { settings: ConnectorSettingsView }
+
+export interface ConnectorSettingsUpdateRequest {
+  enabled?: boolean;
+  mode?: 'mock' | 'live';
+  endpoint?: string | null;
+  verifyTls?: boolean;
+  edgeDeviceIds?: string[] | null;
+  /** Write-only. Omit or leave blank to keep the stored token; non-empty replaces it. */
+  token?: string;
+  clearToken?: boolean;
+}
+
+export interface ConnectorTestResult {
+  ok: boolean;
+  source: string;
+  error?: string;
+  summary?: { devices: number; interfaces: number; bgpPeers: number; freshness: string };
+}
+export interface ConnectorTestResponse { result: ConnectorTestResult }

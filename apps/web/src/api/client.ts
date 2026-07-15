@@ -26,6 +26,9 @@ import type {
   NetworkLinkGroupsResponse,
   NetworkBgpPeersResponse,
   NetworkHistoryResponse,
+  ConnectorSettingsResponse,
+  ConnectorSettingsUpdateRequest,
+  ConnectorTestResponse,
   Ns1Status,
   OriginResponse,
   Principal,
@@ -202,4 +205,9 @@ export const api = {
     return request<NetworkBgpPeersResponse>(`/api/v1/network/bgp-peers${qs ? `?${qs}` : ''}`);
   },
   networkHistory: (limit?: number) => request<NetworkHistoryResponse>(`/api/v1/network/history${limit ? `?limit=${limit}` : ''}`),
+
+  // CloudVision connection settings (Engineer only). The token is write-only.
+  networkConnection: () => request<ConnectorSettingsResponse>('/api/v1/network/connection'),
+  networkConnectionUpdate: (body: ConnectorSettingsUpdateRequest) => request<ConnectorSettingsResponse>('/api/v1/network/connection', { method: 'PUT', body: JSON.stringify(body) }),
+  networkConnectionTest: () => request<ConnectorTestResponse>('/api/v1/network/connection/test', { method: 'POST', body: JSON.stringify({}) }),
 };

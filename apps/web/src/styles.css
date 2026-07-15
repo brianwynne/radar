@@ -207,3 +207,11 @@ ul.notes li { margin: 0.15rem 0; }
 .badge.badge-sm { font-size: 0.62rem; padding: 0.02rem 0.4rem; }
 .sparkline { display: block; width: 100%; height: auto; color: var(--info); }
 .sparkline .sparkline-empty { fill: var(--ink-soft); font-size: 11px; }
+
+/* Connector settings form */
+.field-row { margin: 0.5rem 0; }
+.switch { display: inline-flex; align-items: center; gap: 0.45rem; cursor: pointer; }
+.actions { display: flex; gap: 0.6rem; margin-top: 0.8rem; }
+.btn { padding: 0.4rem 0.9rem; border-radius: 6px; border: 1px solid var(--border); background: var(--panel-muted); color: var(--ink); cursor: pointer; font-weight: 600; }
+.btn.primary { background: var(--info); color: #fff; border-color: var(--info); }
+.btn:hover { filter: brightness(1.05); }
