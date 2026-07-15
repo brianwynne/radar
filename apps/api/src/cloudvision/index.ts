@@ -15,6 +15,7 @@ export { classifyInterface, validateClassificationRules, type ClassificationRule
 export { deriveBandwidthBps, resolveBandwidth, utilisationPercent, headroomBps } from './throughput.js';
 export { MockCloudVisionClient, DisabledCloudVisionClient } from './mock-client.js';
 export { HttpCloudVisionReadClient } from './http-client.js';
+export { CloudVisionPoller, type CloudVisionConnectorStatus, type CloudVisionHistoryPoint, type CloudVisionPollerDeps } from './poller.js';
 export { SCENARIOS, MOCK_EDGE_DEVICE_IDS, type ScenarioName } from './fixtures.js';
 export { DEFAULT_CLASSIFICATION_RULES, DEFAULT_PROVIDER_FOR_ASN } from './classification-rules.js';
 export type * from './types.js';
