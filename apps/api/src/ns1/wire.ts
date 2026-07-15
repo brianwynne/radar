@@ -27,9 +27,14 @@ export const Ns1ZoneShape = z.object({
 /** Zones list: an array of zone summaries. */
 export const Ns1ZonesListShape = z.array(z.unknown());
 
-/** Activity log: schema is FIXTURE-PENDING (guide §5); accept any JSON value so a real
- *  capture can tighten it without risking false negatives. */
-export const Ns1ActivityShape = z.unknown();
+/** Activity log: the exact wire fields are FIXTURE-PENDING (guide §5), so we do NOT model
+ *  entries. We assert only the one thing RADAR's activity handling actually relies on — the
+ *  response is a CONTAINER we can extract entries from: an array, or an object (which may
+ *  carry the list under `activity`/`items`; see `entriesOf` in activity.ts). Scalars/null
+ *  are impossible for an activity log and today silently yield zero events, so we reject
+ *  them loudly instead. `passthrough()` keeps every unknown field (raw preservation, guide
+ *  §6). A real capture can narrow this to the confirmed envelope. */
+export const Ns1ActivityShape = z.union([z.array(z.unknown()), z.object({}).passthrough()]);
 
 /** Validate `value` against `shape` and return the ORIGINAL value on success (raw
  *  preservation). Returns null on failure so the caller can raise NS1_INVALID_RESPONSE. */

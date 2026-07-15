@@ -88,6 +88,61 @@ describe('analyse (record)', () => {
   });
 });
 
+describe('analyse (activity)', () => {
+  const goodEntry = { id: 'a1', timestamp: '2026-07-01T09:00:00Z', user: 'brian@rte.ie', action: 'update', resource_type: 'record', resource_id: 'live.rte.ie/A', status: 'success', note: 'weight adjusted' };
+
+  it('reports a compatible activity array (heuristic maps every tracked field)', () => {
+    const a = analyse('activity', [goodEntry]);
+    expect(a.schemaCompatible).toBe(true);
+    expect(a.adapterCompatible).toBe(true);
+    expect(a.unsupportedFeatures).toHaveLength(0);
+    expect(a.overallStatus).toBe('compatible');
+  });
+
+  it('accepts an object envelope carrying entries under "activity"', () => {
+    const a = analyse('activity', { activity: [goodEntry] });
+    expect(a.schemaCompatible).toBe(true);
+    expect(a.adapterCompatible).toBe(true);
+    expect(a.overallStatus).toBe('compatible');
+  });
+
+  it('rejects a non-container payload → schema-incompatible', () => {
+    const a = analyse('activity', 'not-a-container');
+    expect(a.schemaCompatible).toBe(false);
+    expect(a.adapterCompatible).toBe(false);
+    expect(a.overallStatus).toBe('incompatible');
+    expect(a.warnings.some((w) => /not an extractable container/.test(w))).toBe(true);
+  });
+
+  it('flags a container with no extractable entries → adapter-incompatible (RADAR blind)', () => {
+    const a = analyse('activity', { unexpected_envelope: { rows: [goodEntry] } });
+    expect(a.schemaCompatible).toBe(true); // it IS an object (passthrough)
+    expect(a.adapterCompatible).toBe(false); // ...but entriesOf finds nothing
+    expect(a.unsupportedFeatures.some((f) => f.name === 'activity-entries')).toBe(true);
+    expect(a.warnings.some((w) => /change detection would see nothing/.test(w))).toBe(true);
+  });
+
+  it('reports partial when a CRITICAL field is unmapped by the heuristic', () => {
+    // No recognisable timestamp key → occurredAt (critical) maps for zero entries.
+    const { timestamp, ...noTime } = goodEntry;
+    void timestamp;
+    const a = analyse('activity', [noTime]);
+    expect(a.missingExpectedFields).toContain('occurredAt');
+    expect(a.unsupportedFeatures.some((f) => f.name === 'activity.occurredAt')).toBe(true);
+    expect(a.overallStatus).toBe('partial');
+  });
+
+  it('reports warnings (not partial) when only a NON-critical field is unmapped', () => {
+    // Drop actor and detail keys (non-critical); criticals still map.
+    const { user, ...noActor } = goodEntry;
+    void user;
+    const a = analyse('activity', [noActor]);
+    expect(a.missingExpectedFields).toHaveLength(0);
+    expect(a.warnings.some((w) => /did not map "actor"/.test(w))).toBe(true);
+    expect(a.overallStatus).toBe('compatible_with_warnings');
+  });
+});
+
 describe('buildFixtureCandidate', () => {
   it('produces a redacted, review-flagged candidate with provenance (never a committed fixture)', () => {
     const raw = { ...compatibleRecord, secret_token: 'x', filters: [{ filter: 'shed_load' }] };

@@ -169,6 +169,22 @@ describe('HttpNs1ReadClient — error handling', () => {
       .catch((e) => e as Ns1Error);
     expect(err.code).toBe('NS1_INVALID_RESPONSE');
   });
+
+  it('rejects a non-container activity payload as NS1_INVALID_RESPONSE', async () => {
+    // A scalar is impossible for an activity log; previously it slipped through (z.unknown)
+    // and silently yielded zero events. It must now surface loudly.
+    const { fn } = recordingFetch(() => ok('unexpected-string'));
+    const err = await httpClient({}, fn)
+      .getActivity({ limit: 5 })
+      .catch((e) => e as Ns1Error);
+    expect(err.code).toBe('NS1_INVALID_RESPONSE');
+  });
+
+  it('accepts an activity object envelope, preserving all fields', async () => {
+    const { fn } = recordingFetch(() => ok({ activity: [{ id: 'a1' }], next: 'cursor-2' }));
+    const res = await httpClient({}, fn).getActivity({ limit: 5 });
+    expect(res).toEqual({ activity: [{ id: 'a1' }], next: 'cursor-2' }); // passthrough: raw preserved
+  });
 });
 
 describe('MockNs1ReadClient', () => {

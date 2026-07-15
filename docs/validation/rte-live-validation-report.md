@@ -92,12 +92,14 @@ outcomes and say nothing about live NS1.**
 | zone `rte.ie` | `compatible` | — | — | no | absent | zone endpoint = schema check only (D-04) |
 | record `live.rte.ie/A` | `compatible_with_warnings` | up, geotarget_country, netfence_asn, netfence_prefix, weighted_shuffle, select_first_n | none | **yes** | enabled | warning = feed-controlled `meta.up` |
 | record `vod.rte.ie/A` | `partial` | up, weighted_shuffle, select_first_n | **shed_load** | no | enabled | fixture diff noisy vs single anchor fixture (D-03) |
-| activity | `compatible` | — | — | no | absent | **schema is `z.unknown()` → check is a no-op (D-01)** |
+| activity | `compatible` | — | — | no | absent | *(at rehearsal)* schema was `z.unknown()` → check was a no-op (D-01). **SINCE FIXED** — activity now has a dedicated analyser (container + per-field heuristic-coverage; critical-field miss → `partial`); field-name lock still pending-live. |
 | zones listing | `compatible` | — | — | no | absent | `z.array(z.unknown())`; not wired into run() (D-02) |
 
-Rehearsal takeaways (real, code-derived): redaction + fixture-candidate generation work; but the
-**activity schema is unvalidated**, the **fixture comparison is anchored to one record fixture**,
-and **zone-listing isn't a run() target** — logged as D-01/D-02/D-03.
+Rehearsal takeaways (real, code-derived): redaction + fixture-candidate generation work; the
+**activity schema no-op has since been fixed** (D-01 partially resolved — the report now proves
+whether the heuristic maps the live payload; exact field-name lock remains pending-live), while the
+**fixture comparison is still anchored to one record fixture** and **zone-listing still isn't a
+run() target** — logged as D-01/D-02/D-03.
 
 ## 7. Discrepancies
 See [discrepancy-register.md](discrepancy-register.md). At parking time: **6 open** — 4 tooling

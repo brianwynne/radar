@@ -49,8 +49,10 @@ Assess after the live run:
 - **D-02** (zone-listing not a run() target) and **D-03** (fixture comparison anchored to one
   fixture) limit T1/T4 coverage; both have narrow recommended fixes (deferred to their own
   commits). The zone (T2), records (T3/T4) and activity (T5) can be validated today.
-- **D-01** (activity schema is a no-op) means T5 confidence depends on manual field-mapping
-  confirmation until the schema is tightened against a live payload.
+- **D-01** (activity schema was a no-op) is now **partially resolved**: the T5 validation target
+  actively verifies the container contract and reports per-field heuristic coverage (critical-field
+  miss → `partial`), and the live poll rejects non-container payloads. Remaining pending-live work
+  is to **lock** the normaliser field names against a confirmed live capture.
 
 ## Sign-off (to complete after the live run)
 - Live cycle executed: ☐  ·  Discrepancies dispositioned: ☐  ·  Security review passed: ☐

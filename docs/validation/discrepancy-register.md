@@ -14,16 +14,29 @@ live payload) · **resolved**.
 
 ### D-01 — Activity schema/adapter validation is effectively a no-op
 - **Endpoint/record:** `GET /v1/account/activity` (T5)
-- **Live field/structure:** *(PENDING live)* — the real NS1 activity wire fields.
-- **Current RADAR assumption:** `Ns1ActivityShape = z.unknown()` (wire.ts) and the activity
+- **Live field/structure:** *(PENDING live)* — the real NS1 activity wire **field names/envelope**.
+- **Original RADAR assumption:** `Ns1ActivityShape = z.unknown()` (wire.ts) and the activity
   normaliser (`ns1/activity.ts`) maps fields **heuristically** (e.g. `occurredAt ← timestamp|
   occurred_at|date|time|created_at`, `actor ← user|username|user_id|actor|api_key_name|
-  api_key_id`). So schema compatibility for activity is trivially "compatible" and proves nothing.
+  api_key_id`). So schema compatibility for activity was trivially "compatible" and proved nothing.
 - **Operational impact:** the Activity screen's field mapping (time/actor/action/resource) is
   unverified; wrong mapping could mislabel who/what/when.
-- **Severity:** high (for activity confidence). **Fixture update required:** yes (confirmed
-  activity fixture). **Required code change:** tighten `Ns1ActivityShape` and lock the normaliser
-  mapping **once live fields are confirmed** — not before. **Status:** pending-live.
+- **RESOLVED (partial) — the no-op is fixed** without inventing NS1's schema:
+  - `Ns1ActivityShape` now asserts the one contract RADAR relies on: the response is an
+    **extractable container** (`array` | object) — a scalar/null now raises `NS1_INVALID_RESPONSE`
+    loudly instead of silently yielding zero events. `passthrough()` keeps all raw fields.
+  - The `activity` validation target has a dedicated `analyseActivity` (no longer `analyseGeneric`
+    with `z.unknown()`): it reuses the exact `entriesOf` extraction, then reports **per-field
+    heuristic coverage** over `normaliseActivity` — an unmapped **critical** field (`occurredAt`,
+    `resourceKey`, `action`) → **partial**; an unmapped non-critical field → warning; a container
+    with zero extractable entries → adapter-incompatible ("change detection would be blind").
+  - So the T5 report now *proves* whether RADAR's heuristic actually works against the live payload.
+- **STILL PENDING-LIVE:** confirm the exact wire field names/envelope from a real capture, then
+  **lock** the normaliser mapping (replace the heuristic key-lists with the confirmed keys) and
+  optionally narrow `Ns1ActivityShape` to the confirmed envelope. Do NOT lock before live confirms.
+- **Severity:** high (for activity confidence) → **medium** (no-op removed; field-name lock outstanding).
+  **Fixture update required:** yes (confirmed activity fixture). **Status:** partially-resolved;
+  field-name lock pending-live.
 
 ### D-02 — "Zone listing" is not a run() target
 - **Endpoint/record:** `GET /v1/zones` (T1)

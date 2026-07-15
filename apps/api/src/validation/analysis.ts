@@ -5,6 +5,7 @@
 // presence, ECS config, and a structural fixture diff.
 import { evaluate, type NS1Record, type Scenario } from '@radar/engine';
 import { normaliseRecord } from '../ns1/normalise.js';
+import { entriesOf, normaliseActivity, type ActivityItem } from '../ns1/activity.js';
 import { Ns1ActivityShape, Ns1RecordShape, Ns1ZoneShape, Ns1ZonesListShape } from '../ns1/wire.js';
 import { RECORD_LIVE_RTE_IE_A } from '../ns1/fixtures.js';
 import type { z } from 'zod';
@@ -194,6 +195,69 @@ function analyseRecord(raw: unknown): Analysis {
   };
 }
 
+/** Normalised activity fields RADAR reports on, and the subset change detection depends on
+ *  to identify a steering-relevant event (an unmapped critical field → partial, not a mere
+ *  warning). `raw` is excluded — it always maps. */
+const ACTIVITY_TRACKED_FIELDS = ['id', 'occurredAt', 'actor', 'action', 'resourceType', 'resourceKey', 'outcome', 'detail'] as const;
+const ACTIVITY_CRITICAL_FIELDS = new Set<string>(['occurredAt', 'resourceKey', 'action']);
+
+/** Analyse the activity log. The wire schema is fixture-pending, so we do NOT model entries;
+ *  instead we verify the contract RADAR actually relies on — the payload is an extractable
+ *  container (`entriesOf`) and the field-map heuristic (`normaliseActivity`) actually maps
+ *  the fields change detection needs. Honest about what the heuristic achieved; no invented
+ *  semantics. */
+function analyseActivity(raw: unknown): Analysis {
+  const warnings: string[] = [];
+  const unsupportedFeatures: UnsupportedFeature[] = [];
+  const missing: string[] = [];
+  const schema = validate(Ns1ActivityShape, raw); // now meaningful: rejects non-containers
+  const container = Array.isArray(raw) ? 'array' : isObj(raw) ? 'object' : typeOf(raw);
+  const entries = entriesOf(raw);
+
+  if (entries.length === 0) {
+    unsupportedFeatures.push({
+      kind: 'structure',
+      name: 'activity-entries',
+      detail: `RADAR extracted zero entries from a ${container} activity payload; change detection would be blind to steering changes (entriesOf recognises an array, or an object with an "activity"/"items" array).`,
+    });
+    warnings.push('No activity entries could be extracted; change detection would see nothing.');
+  } else {
+    const items: ActivityItem[] = normaliseActivity(raw);
+    for (const field of ACTIVITY_TRACKED_FIELDS) {
+      const hits = items.filter((i) => i[field] !== undefined && i[field] !== '').length;
+      if (hits === 0) {
+        const critical = ACTIVITY_CRITICAL_FIELDS.has(field);
+        unsupportedFeatures.push({
+          kind: 'structure',
+          name: `activity.${field}`,
+          detail: `The activity field-map heuristic produced no "${field}" for any of ${items.length} entries; the live wire key is unconfirmed.${critical ? ' Change detection relies on this field.' : ''}`,
+        });
+        warnings.push(`Activity heuristic did not map "${field}"${critical ? ' (change detection relies on it)' : ''}.`);
+        if (critical) missing.push(field); // → overall status "partial"
+      }
+    }
+  }
+
+  return {
+    schemaCompatible: schema.ok,
+    schemaIssues: schema.issues,
+    // "Adapter" here = can RADAR extract usable events at all.
+    adapterCompatible: schema.ok && entries.length > 0,
+    supportedFilters: [],
+    unsupportedFilters: [],
+    unknownMetadataFields: [],
+    unexpectedFields: [],
+    missingExpectedFields: missing,
+    fieldTypeMismatches: [],
+    unsupportedFeatures,
+    answerGroupsPresent: false,
+    feedControlledMetadataPresent: false,
+    ecs: { present: false },
+    fixtureComparison: { provisionalFixtureFields: [], liveOnlyFields: [], typeMismatches: [], matches: true },
+    warnings: schema.ok ? warnings : ['Live activity payload is not an extractable container (array or object).', ...warnings],
+  };
+}
+
 function analyseGeneric(raw: unknown, shape: z.ZodType<unknown>): Analysis {
   const schema = validate(shape, raw);
   return {
@@ -227,6 +291,9 @@ function overallStatus(a: Analysis): OverallStatus {
 /** Analyse a live payload for the given endpoint. Returns everything except the transport
  *  metadata (checksums, timestamps, sanitised sample) which the service supplies. */
 export function analyse(endpoint: ValidationEndpoint, raw: unknown): Omit<ValidationResult, 'endpoint' | 'resourceKey' | 'zone' | 'domain' | 'recordType' | 'sourceMode' | 'retrievedAt' | 'rawChecksum' | 'structuralChecksum' | 'sanitisedSample' | 'fixtureCandidate'> {
-  const a = endpoint === 'record' ? analyseRecord(raw) : analyseGeneric(raw, endpoint === 'zone' ? Ns1ZoneShape : endpoint === 'zones' ? Ns1ZonesListShape : Ns1ActivityShape);
+  const a =
+    endpoint === 'record' ? analyseRecord(raw)
+    : endpoint === 'activity' ? analyseActivity(raw)
+    : analyseGeneric(raw, endpoint === 'zone' ? Ns1ZoneShape : Ns1ZonesListShape);
   return { ...a, overallStatus: overallStatus(a) };
 }

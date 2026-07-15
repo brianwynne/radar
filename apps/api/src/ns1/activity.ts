@@ -50,7 +50,10 @@ function first(entry: Record<string, unknown>, keys: string[]): string | undefin
   return undefined;
 }
 
-function entriesOf(raw: unknown): Record<string, unknown>[] {
+/** Extract the entry list RADAR operates on. Accepts an array, or an object carrying the
+ *  list under `activity`/`items` (envelope is FIXTURE-PENDING). Anything else → no entries,
+ *  meaning change detection sees nothing. Exported so validation checks the SAME contract. */
+export function entriesOf(raw: unknown): Record<string, unknown>[] {
   const list = Array.isArray(raw)
     ? raw
     : isObject(raw) && Array.isArray(raw.activity)
