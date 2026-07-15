@@ -50,7 +50,7 @@ function presentDevice(d: NetworkDevice, detail: boolean): Record<string, unknow
 function presentInterface(i: NetworkInterface, detail: boolean, friendlyName: string | null): Record<string, unknown> {
   const core = {
     deviceId: i.deviceId, deviceHostname: i.deviceHostname, name: i.name, friendlyName, description: i.description,
-    provider: i.provider, location: i.location, linkType: i.linkType, adminState: i.adminState, operState: i.operState,
+    provider: i.provider, location: i.location, linkType: i.linkType, memberOf: i.memberOf, adminState: i.adminState, operState: i.operState,
     speedBps: i.speedBps, inBps: i.inBps, outBps: i.outBps, primaryBps: i.primaryBps, bandwidthSource: i.bandwidthSource,
     utilisationPercent: i.utilisationPercent, headroomBps: i.headroomBps,
     inErrors: i.inErrors, outErrors: i.outErrors, inDiscards: i.inDiscards, outDiscards: i.outDiscards,

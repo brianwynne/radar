@@ -46,6 +46,8 @@ export interface RawInterface {
   inDiscards: number | null;
   outDiscards: number | null;
   observedAt: Date | null;
+  /** Port-Channel this interface is a member of (from device LAG config), if any. */
+  memberOf?: string | null;
   warnings?: string[];
 }
 
@@ -228,6 +230,7 @@ function buildInterface(raw: RawInterface, prev: PreviousCounters | undefined, d
     location: cls.location,
     linkType: cls.linkType,
     classificationSource: cls.classificationSource,
+    memberOf: raw.memberOf ?? null,
     adminState: raw.adminState,
     operState: raw.operState,
     speedBps: raw.speedBps,
@@ -327,7 +330,9 @@ function buildLinkGroups(interfaces: NetworkInterface[], cfg: AdapterConfig): Li
 }
 
 function buildSummary(devices: NetworkDevice[], interfaces: NetworkInterface[], peers: BgpPeer[], snapshotFreshness: Freshness): NetworkSummary {
-  const external = interfaces.filter((i) => EXTERNAL.includes(i.linkType));
+  // Exclude LAG members from throughput aggregates — the Port-Channel already represents their
+  // combined traffic, so counting both would double-count.
+  const external = interfaces.filter((i) => EXTERNAL.includes(i.linkType) && i.memberOf === null);
   const peering = interfaces.filter((i) => PEERING.includes(i.linkType));
   const transit = interfaces.filter((i) => i.linkType === 'TRANSIT');
   const totalEdge = sumOrNull(external.map((i) => i.primaryBps));

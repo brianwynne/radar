@@ -49,6 +49,8 @@ const SKIP_INTERFACE = /(\.\d|^Loopback|^Management|^Vlan|^Vxlan|^Recirc|^Cpu|^F
 const RATE_WINDOW = '1m';
 /** Cap on interfaces fetched per device per poll (defence against a huge device). */
 const MAX_INTERFACES_PER_DEVICE = 200;
+/** LAG membership is device CONFIG (stable), so cache it and refresh only occasionally. */
+const LAG_CACHE_TTL_MS = 5 * 60_000;
 /** Concurrency for per-interface / per-peer analytics leaf fetches. Balanced for a ~15s poll
  *  (CloudVision's analytics data only republishes ~once a minute, so speed isn't needed);
  *  raise it if driving a shorter interval, at the cost of more simultaneous CVaaS load. */
@@ -80,6 +82,8 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
   private readonly sleep: (ms: number) => Promise<void>;
   private readonly random: () => number;
   private readonly now: () => number;
+  /** Per-device cache of member-interface → Port-Channel (LAG config; stable). */
+  private lagCache = new Map<string, { at: number; membership: Map<string, string> }>();
 
   constructor(private readonly opts: HttpCloudVisionClientOptions) {
     if (!/^https?:\/\//i.test(opts.endpoint)) throw new Error('HttpCloudVisionReadClient: endpoint must be an http(s) URL.');
@@ -182,6 +186,29 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
     return { updates, observedAt };
   }
 
+  /** member-interface → Port-Channel map for a device, from `portchannel/<Po>/expectedMembers`.
+   *  Cached (LAG membership is stable config); a fetch failure yields an empty map (no LAG
+   *  grouping this poll), never a fabricated association. */
+  private async fetchLagMembership(deviceId: string, correlationId?: string): Promise<Map<string, string>> {
+    const cached = this.lagCache.get(deviceId);
+    if (cached && this.now() - cached.at < LAG_CACHE_TTL_MS) return cached.membership;
+    const membership = new Map<string, string>();
+    try {
+      const list = await this.analyticsGet(this.analyticsBase(deviceId, 'portchannel'), correlationId);
+      const pos = Object.keys(list.updates);
+      const results = await mapLimit(pos, FETCH_CONCURRENCY, async (po) => {
+        const m = await this.analyticsGet(this.analyticsBase(deviceId, 'portchannel', po, 'expectedMembers'), correlationId);
+        return { po, members: Object.keys(m.updates) };
+      });
+      for (const r of results) if (r) for (const member of r.members) membership.set(member, r.po);
+    } catch (err) {
+      this.opts.logger?.warn({ deviceId, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: LAG membership fetch failed');
+      return membership;
+    }
+    this.lagCache.set(deviceId, { at: this.now(), membership });
+    return membership;
+  }
+
   private async fetchInterfaces(deviceId: string, now: number, correlationId?: string): Promise<RawInterface[]> {
     let names: string[];
     try {
@@ -191,7 +218,12 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
       this.opts.logger?.warn({ deviceId, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: interface list fetch failed');
       return [];
     }
-    const built = await mapLimit(names, FETCH_CONCURRENCY, (name) => this.fetchInterface(deviceId, name, now, correlationId));
+    const membership = await this.fetchLagMembership(deviceId, correlationId);
+    const built = await mapLimit(names, FETCH_CONCURRENCY, async (name) => {
+      const itf = await this.fetchInterface(deviceId, name, now, correlationId);
+      if (itf) itf.memberOf = membership.get(name) ?? null;
+      return itf;
+    });
     return built.filter((i): i is RawInterface => i !== null);
   }
 

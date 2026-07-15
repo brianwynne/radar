@@ -233,3 +233,11 @@ table.matrix th.sortable:hover { color: var(--info); }
 
 /* Refresh countdown in the telemetry age indicator */
 .refresh-countdown { color: var(--info); font-variant-numeric: tabular-nums; }
+
+/* Port-Channel tree in the interface table */
+table.matrix tr.lag-parent > td { font-weight: 600; }
+table.matrix tr.lag-member > td { background: var(--panel-muted); }
+.tree-toggle { background: none; border: none; color: var(--ink-soft); cursor: pointer; font-size: 0.8rem; padding: 0 0.35rem 0 0; }
+.tree-toggle:hover { color: var(--info); }
+table.matrix td.itf-member { padding-left: 2.4rem; }
+.tree-branch { color: var(--ink-soft); font-family: monospace; }

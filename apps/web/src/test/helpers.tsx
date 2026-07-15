@@ -206,18 +206,22 @@ export const NETWORK_DEVICES_BODY = {
     { id: 'JPE00000002', hostname: 'edge2.dub.rte.ie', modelName: 'DCS-7280SR3', softwareVersion: '4.31.2F', streaming: true, reachable: true, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
   ],
 };
-const cvItf = (device: string, name: string, desc: string, provider: string, linkType: string, speed: number, out: number, oper: string, status: string) => ({
-  deviceId: device, deviceHostname: `${device === 'JPE00000001' ? 'edge1' : 'edge2'}.dub.rte.ie`, name, friendlyName: null, description: desc, provider, location: 'Dublin', linkType,
+const cvItf = (device: string, name: string, desc: string, provider: string, linkType: string, speed: number, out: number, oper: string, status: string, memberOf: string | null = null) => ({
+  deviceId: device, deviceHostname: `${device === 'JPE00000001' ? 'edge1' : 'edge2'}.dub.rte.ie`, name, friendlyName: null, description: desc, provider, location: 'Dublin', linkType, memberOf,
   adminState: 'up', operState: oper, speedBps: speed, inBps: out / 5, outBps: out, primaryBps: oper === 'down' ? 0 : out, bandwidthSource: 'REPORTED',
   utilisationPercent: oper === 'down' ? 0 : (out / speed) * 100, headroomBps: speed - out, inErrors: 0, outErrors: 0, inDiscards: 0, outDiscards: 0,
   status, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock', classificationSource: 'description_regex', warnings: [],
 });
 export const NETWORK_INTERFACES_BODY = {
-  provenance: cvProv, count: 3,
+  provenance: cvProv, count: 6,
   items: [
-    cvItf('JPE00000001', 'Ethernet1', 'Eir PNI Dublin', 'Eir', 'PRIVATE_PEERING', 100e9, 40e9, 'up', 'healthy'),
+    cvItf('JPE00000001', 'Port-Channel7', 'INEX LAG', 'INEX', 'IX_PEERING', 200e9, 128e9, 'up', 'healthy'),
+    cvItf('JPE00000001', 'Ethernet1', 'Eir PNI Dublin', 'Eir', 'PRIVATE_PEERING', 100e9, 40e9, 'up', 'healthy', 'Port-Channel7'),
     cvItf('JPE00000001', 'Ethernet2', 'INEX IXP Dublin', 'INEX', 'IX_PEERING', 100e9, 88e9, 'up', 'warning'),
     cvItf('JPE00000001', 'Ethernet4', 'Transit Cogent', 'Transit', 'TRANSIT', 100e9, 0, 'down', 'down'),
+    // A DIFFERENT router with its OWN Port-Channel7 — members must not merge across devices.
+    cvItf('JPE00000002', 'Port-Channel7', 'Transit LAG', 'Transit', 'TRANSIT', 100e9, 30e9, 'up', 'healthy'),
+    cvItf('JPE00000002', 'Ethernet9', 'Transit member', 'Transit', 'TRANSIT', 100e9, 30e9, 'up', 'healthy', 'Port-Channel7'),
   ],
 };
 export const NETWORK_LINK_GROUPS_BODY = {

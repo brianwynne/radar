@@ -87,6 +87,9 @@ export interface NetworkInterface {
   location: string | null;
   linkType: LinkType;
   classificationSource: ClassificationSource;
+  /** The Port-Channel this interface is a member of (from device LAG config); null if it is
+   *  a standalone port or itself a Port-Channel. */
+  memberOf: string | null;
   // Observed operational state.
   adminState: OperState;
   operState: OperState;

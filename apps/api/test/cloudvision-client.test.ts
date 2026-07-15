@@ -52,12 +52,16 @@ const IF_RATES = { notifications: [{ timestamp: TS, updates: { inOctets: stat(1e
 const IF_UTIL = { notifications: [{ updates: { 'inOctets-utilization': wrap({ float: 8 }), 'outOctets-utilization': wrap({ float: 40 }) } }] };
 const BGP_LIST = { notifications: [{ updates: { '185.6.36.1': wrap({ ptr: ['x'] }) } }] };
 const BGP_LEAF = { notifications: [{ timestamp: TS, updates: { bgpState: wrap({ Name: 'Established', Value: { int: 6 } }), bgpPeerAs: wrap({ value: { int: 5466 } }), bgpPeerLocalAddr: wrap('185.6.36.2'), bgpPeerDescription: wrap('[Transit] Cogent 3-002188930') } }] };
+const PC_LIST = { notifications: [{ updates: { 'Port-Channel7': wrap({ ptr: ['x'] }) } }] };
+const PC_MEMBERS = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['x'] }) } }] }; // Ethernet1 ∈ Port-Channel7
 
 /** Route a request path to the right analytics fixture. */
 function analyticsHandler(path: string): Response {
   if (path.includes('/inventory/v1/Device/all')) return ok(INVENTORY);
   if (path.includes('/aggregate/rates/1m')) return ok(IF_RATES);
   if (path.includes('/utilisation') || path.includes('/utilization')) return ok(IF_UTIL);
+  if (path.endsWith('/expectedMembers')) return ok(PC_MEMBERS);
+  if (path.endsWith('/portchannel')) return ok(PC_LIST);
   if (path.endsWith('/interfaces/data')) return ok(IF_LIST);
   if (path.includes('/bgpPeerInfoStatusEntry/')) return ok(BGP_LEAF);
   if (path.endsWith('/bgpPeerInfoStatusEntry')) return ok(BGP_LIST);
@@ -107,6 +111,7 @@ describe('HttpCloudVisionReadClient', () => {
     expect(eth1.utilisationPercent).toBeCloseTo(40, 1);
     expect(eth1.speedBps).toBeCloseTo(100e9, -8);
     expect(eth1.bandwidthSource).toBe('REPORTED');
+    expect(eth1.memberOf).toBe('Port-Channel7'); // LAG membership from portchannel/expectedMembers
     expect(eth1.observedAt).toBe(new Date(Number(BigInt(TS) / 1_000_000n)).toISOString());
     // BGP peer: state + ASN + provider parsed from the "[Transit] Cogent" description.
     const peer = snap.bgpPeers.find((p) => p.peerAddress === '185.6.36.1')!;

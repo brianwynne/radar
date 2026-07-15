@@ -42,12 +42,12 @@ describe('Network Telemetry page', () => {
   it('lists devices and drills into one to filter interfaces + BGP', async () => {
     stubApi(NOC);
     renderAt('/network');
-    // Devices panel lists both devices (edge2 appears only there).
-    const edge2 = await screen.findByText('edge2.dub.rte.ie');
+    // Select edge2 by its device id (unique to the Devices table).
+    const edge2 = await screen.findByText('JPE00000002');
     expect(screen.getByRole('heading', { name: /Devices/ })).toBeInTheDocument();
-    // Before selecting, the edge1 Eir interface is visible.
+    // Before selecting, an edge1 interface (Eir) is visible.
     expect(screen.getByText('Eir PNI Dublin')).toBeInTheDocument();
-    // Select edge2 (which has no interfaces) → edge1 interfaces filtered out.
+    // Select edge2 → edge1 interfaces filtered out.
     fireEvent.click(edge2);
     expect(await screen.findByText(/Showing/)).toBeInTheDocument();
     expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
@@ -74,6 +74,17 @@ describe('Network Telemetry page', () => {
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin');
     expect(screen.queryByPlaceholderText('add name')).not.toBeInTheDocument();
+  });
+
+  it('groups Port-Channel members per device (no cross-device merge)', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    // Both routers have a Port-Channel7 with 1 member each — must read "1 member", never "2".
+    expect(screen.getAllByText(/1 member/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/2 members/)).not.toBeInTheDocument();
+    // The member renders (indented) under its Port-Channel.
+    expect(screen.getByText('Transit member')).toBeInTheDocument();
   });
 
   it('summary tiles reflect the connector snapshot', async () => {

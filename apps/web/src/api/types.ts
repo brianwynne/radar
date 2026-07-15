@@ -782,6 +782,8 @@ export interface NetworkInterface {
   provider: string | null;
   location: string | null;
   linkType: LinkType;
+  /** Port-Channel this interface is a member of; null if standalone or a Port-Channel itself. */
+  memberOf: string | null;
   adminState: OperState;
   operState: OperState;
   speedBps: number | null;

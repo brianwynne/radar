@@ -33,7 +33,7 @@ export function NetworkTelemetry() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [device, setDevice] = useState(''); // selected device id (drill-down)
-  const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'current', dir: 'desc' });
+  const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' });
   const sortBy = (col: 'name' | 'current' | 'util') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'name' ? 'asc' : 'desc' }));
   const arrow = (col: 'name' | 'current' | 'util') => (sort.col === col ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '');
   const { hasPermission } = useAuth();
@@ -77,26 +77,54 @@ export function NetworkTelemetry() {
     [t.interfaces, device, provider, linkType, status, search],
   );
 
-  // Sort the filtered interfaces. Nulls always sink to the bottom; default = current
-  // bandwidth, highest first. Name sorts alphabetically by router+interface.
-  const sorted = useMemo(() => {
-    const val = (i: (typeof interfaces)[number]): number | null => (sort.col === 'current' ? i.primaryBps : sort.col === 'util' ? i.utilisationPercent : null);
-    const rows = [...interfaces];
-    if (sort.col === 'name') {
-      rows.sort((a, b) => `${a.deviceHostname} ${a.name}`.localeCompare(`${b.deviceHostname} ${b.name}`));
-      if (sort.dir === 'desc') rows.reverse();
-    } else {
-      rows.sort((a, b) => {
-        const av = val(a);
-        const bv = val(b);
-        if (av === null && bv === null) return 0;
-        if (av === null) return 1; // nulls last
-        if (bv === null) return -1;
-        return sort.dir === 'desc' ? bv - av : av - bv;
-      });
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggleCollapse = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
+
+  // Build the interface tree: Port-Channels + standalone ports at the top level (sorted),
+  // each LAG's member ports indented beneath it. Members are excluded from the top-level
+  // sort so a Port-Channel stays grouped with its members.
+  const rows = useMemo(() => {
+    type Itf = (typeof interfaces)[number];
+    const cmp = (a: Itf, b: Itf): number => {
+      if (sort.col === 'name') {
+        // Natural order (Ethernet2/1 < Ethernet2/10 < Port-Channel2 < Port-Channel10), by device.
+        const c = `${a.deviceHostname} ${a.name}`.localeCompare(`${b.deviceHostname} ${b.name}`, undefined, { numeric: true });
+        return sort.dir === 'desc' ? -c : c;
+      }
+      const av = sort.col === 'current' ? a.primaryBps : a.utilisationPercent;
+      const bv = sort.col === 'current' ? b.primaryBps : b.utilisationPercent;
+      if (av === null && bv === null) return 0;
+      if (av === null) return 1; // nulls last
+      if (bv === null) return -1;
+      return sort.dir === 'desc' ? bv - av : av - bv;
+    };
+    // Group by DEVICE + Port-Channel — a LAG name is only unique within a device (both edge
+    // routers have a Port-Channel7), so members must be keyed per-device.
+    const byPo = new Map<string, Itf[]>();
+    const tops: Itf[] = [];
+    for (const i of interfaces) {
+      if (i.memberOf) {
+        const k = ifKey(i.deviceId, i.memberOf);
+        const arr = byPo.get(k);
+        if (arr) arr.push(i);
+        else byPo.set(k, [i]);
+      } else tops.push(i); // Port-Channels + standalone ports
     }
-    return rows;
-  }, [interfaces, sort]);
+    tops.sort(cmp);
+    const out: { i: Itf; depth: number; children: number; expanded: boolean }[] = [];
+    const claimed = new Set<string>();
+    for (const t of tops) {
+      const key = ifKey(t.deviceId, t.name);
+      const members = t.name.startsWith('Port-Channel') ? (byPo.get(key) ?? []).slice().sort(cmp) : [];
+      if (members.length) claimed.add(key);
+      const expanded = !collapsed[key];
+      out.push({ i: t, depth: 0, children: members.length, expanded });
+      if (expanded) for (const m of members) out.push({ i: m, depth: 1, children: 0, expanded: false });
+    }
+    // Members whose Port-Channel isn't in the current view → show at top level (never hidden).
+    for (const [k, members] of byPo) if (!claimed.has(k)) for (const m of members.slice().sort(cmp)) out.push({ i: m, depth: 0, children: 0, expanded: false });
+    return out;
+  }, [interfaces, sort, collapsed]);
 
   const bgpPeers = useMemo(() => t.bgpPeers.filter((p) => !device || p.deviceId === device), [t.bgpPeers, device]);
 
@@ -242,6 +270,11 @@ export function NetworkTelemetry() {
           </select>
         </label>
         <label className="field"><span>Search</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="interface / description" /></label>
+        <label className="field"><span>Order</span>
+          <button className="btn" onClick={() => setSort(sort.col === 'name' ? { col: 'current', dir: 'desc' } : { col: 'name', dir: 'asc' })}>
+            {sort.col === 'name' ? 'By bandwidth ↓' : 'By name'}
+          </button>
+        </label>
       </div>
       <div className="matrix-wrap">
         <table className="matrix">
@@ -257,17 +290,24 @@ export function NetworkTelemetry() {
             </tr>
           </thead>
           <tbody>
-            {sorted.length === 0 && <tr><td colSpan={14} className="center-note">No interfaces match the current filters.</td></tr>}
-            {sorted.map((i) => {
+            {rows.length === 0 && <tr><td colSpan={14} className="center-note">No interfaces match the current filters.</td></tr>}
+            {rows.map(({ i, depth, children, expanded }) => {
               const m = healthMeta(i.status);
               const bw = bandwidthSourceMeta(i.bandwidthSource);
               const oper = operMeta(i.operState);
               const key = ifKey(i.deviceId, i.name);
               const labelValue = labelEdits[key] ?? i.friendlyName ?? '';
               return (
-                <tr key={key}>
-                  <td>{i.deviceHostname}</td>
-                  <td>{i.name} <span className={`badge ${oper.badge} badge-sm`}>{oper.label}</span></td>
+                <tr key={key} className={depth ? 'lag-member' : children ? 'lag-parent' : undefined}>
+                  <td>{depth ? '' : i.deviceHostname}</td>
+                  <td className={depth ? 'itf-member' : undefined}>
+                    {children > 0 && (
+                      <button className="tree-toggle" onClick={() => toggleCollapse(key)} aria-label={expanded ? 'collapse' : 'expand'}>{expanded ? '▾' : '▸'}</button>
+                    )}
+                    {depth > 0 && <span className="tree-branch">└─ </span>}
+                    {i.name} <span className={`badge ${oper.badge} badge-sm`}>{oper.label}</span>
+                    {children > 0 && <span className="muted"> · {children} member{children > 1 ? 's' : ''}</span>}
+                  </td>
                   <td>
                     {canLabel ? (
                       <input
