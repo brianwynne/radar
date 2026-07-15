@@ -70,8 +70,10 @@ const presentLinkGroup = (g: LinkGroupState): Record<string, unknown> => ({
 });
 
 export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = async (app, opts) => {
-  const mode: CloudVisionSource = opts.mode ?? 'disabled';
-  const envelope = (retrievedAt: string) => ({ source: 'radar' as const, telemetryMode: mode, readOnly: true, informationalOnly: true, notice: INFORMATIONAL_NOTICE, retrievedAt });
+  // Derive the mode from the poller's current source so it reflects a runtime reconfigure
+  // (an Engineer switching mock↔live), falling back to the registration-time mode.
+  const currentMode = (): CloudVisionSource => opts.poller?.status().source ?? opts.mode ?? 'disabled';
+  const envelope = (retrievedAt: string) => ({ source: 'radar' as const, telemetryMode: currentMode(), readOnly: true, informationalOnly: true, notice: INFORMATIONAL_NOTICE, retrievedAt });
   const schema = (summary: string, description: string) => ({ tags: ['network-telemetry'], summary, description, security: [{ bearerAuth: [] }] });
   const now = () => new Date().toISOString();
   const latest = () => opts.poller?.getLatest() ?? null;
@@ -81,7 +83,7 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
     { preHandler: requirePermission('topology.summary.read'), schema: schema('CloudVision connector status + snapshot summary', 'Read-only connector status (running, last poll, failures, snapshot age) and the latest snapshot summary/freshness/completeness.') },
     async () => {
       const snap = latest();
-      const status = opts.poller?.status() ?? { enabled: false, running: false, source: mode, intervalMs: 0, lastPollAt: null, lastSuccessAt: null, lastDurationMs: null, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: null, historyLength: 0, deviceCount: 0, interfaceCount: 0, unknownInterfaceCount: 0 };
+      const status = opts.poller?.status() ?? { enabled: false, running: false, source: currentMode(), intervalMs: 0, lastPollAt: null, lastSuccessAt: null, lastDurationMs: null, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: null, historyLength: 0, deviceCount: 0, interfaceCount: 0, unknownInterfaceCount: 0 };
       return {
         provenance: envelope(now()),
         status,

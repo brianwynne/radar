@@ -20,6 +20,8 @@ import { cacheTelemetryRoutes } from './routes/telemetry-cache.js';
 import { dnsObservationRoutes } from './routes/dns-observation.js';
 import { validationRoutes } from './routes/validation.js';
 import { cloudVisionRoutes } from './routes/cloudvision.js';
+import { cloudVisionConnectionRoutes } from './routes/cloudvision-connection.js';
+import type { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
 import type { DatabaseHealthCheck } from './database/health.js';
@@ -59,6 +61,7 @@ export interface BuildDeps extends AuthDeps {
   validationRepository?: ValidationResultRepository;
   cloudVisionPoller?: CloudVisionPoller;
   cloudVisionMode?: CloudVisionSource;
+  cloudVisionManager?: CloudVisionConnectorManager;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -180,6 +183,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(dnsObservationRoutes, { prefix: '/api/v1', service: deps.dnsObservationService, repository: deps.dnsObservationRepository, staleAfterSeconds: deps.dnsObservationStaleAfterSeconds });
   await app.register(validationRoutes, { prefix: '/api/v1', service: deps.validationService, repository: deps.validationRepository });
   await app.register(cloudVisionRoutes, { prefix: '/api/v1', poller: deps.cloudVisionPoller, mode: deps.cloudVisionMode });
+  await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());

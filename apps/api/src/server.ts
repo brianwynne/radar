@@ -17,8 +17,9 @@ import { createDnsObservationService } from './dns-observation/index.js';
 import { createDnsObservationStore } from './database/dns-observation-store.js';
 import { createValidationService } from './validation/index.js';
 import { createValidationStore } from './database/validation-store.js';
-import { createCloudVisionClient } from './cloudvision/index.js';
-import { CloudVisionPoller } from './cloudvision/poller.js';
+import { CloudVisionConnectorManager } from './cloudvision/manager.js';
+import { createConnectorSettingsStore } from './database/connector-settings-store.js';
+import { SecretBox } from './security/secret-box.js';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -53,16 +54,19 @@ async function main(): Promise<void> {
   const validationRepository = createValidationStore(pool);
   const validationService = createValidationService({ client: ns1Client, mode: config.ns1.mode, config: config.validation, repository: validationRepository });
 
-  // CloudVision network telemetry: read-only client + poller. Disabled by default; the
-  // poller holds the latest snapshot + bounded history in memory (no persistence).
-  const cloudVisionSource = !config.cloudVision.enabled ? 'disabled' : config.cloudVision.mode === 'mock' ? 'mock' : 'cloudvision';
-  const cloudVisionClient = createCloudVisionClient(config.cloudVision, { logger: undefined });
-  const cloudVisionPoller = new CloudVisionPoller({
-    client: cloudVisionClient,
-    source: cloudVisionSource,
-    intervalMs: config.cloudVision.pollIntervalSeconds * 1000,
-    enabled: config.cloudVision.enabled,
+  // CloudVision network telemetry: read-only connector managed by the connector manager.
+  // Non-secret settings come from Postgres (Engineer-managed) when present, else the env base
+  // config; the service-account token is stored encrypted, its master key sourced only from
+  // /run/secrets/radar_master_key. The manager owns the poller and reconfigures it at runtime.
+  const cloudVisionManager = new CloudVisionConnectorManager({
+    baseConfig: config.cloudVision,
+    repository: createConnectorSettingsStore(pool),
+    secretBox: SecretBox.fromMasterKey(),
+    audit: database.audit,
+    isDevelopment: config.NODE_ENV === 'development',
   });
+  await cloudVisionManager.init();
+  const cloudVisionPoller = cloudVisionManager.getPoller();
 
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
@@ -80,7 +84,8 @@ async function main(): Promise<void> {
     validationService,
     validationRepository,
     cloudVisionPoller,
-    cloudVisionMode: cloudVisionSource,
+    cloudVisionMode: cloudVisionPoller.status().source,
+    cloudVisionManager,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -91,7 +96,7 @@ async function main(): Promise<void> {
     app.log.info({ signal }, 'radar-api shutting down');
     await changeDetection?.stop();
     dnsObservationService.stop();
-    cloudVisionPoller.stop();
+    cloudVisionManager.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -110,10 +115,8 @@ async function main(): Promise<void> {
       dnsObservationService.start();
       app.log.info({ intervalSeconds: config.dnsObservation.periodic.minIntervalSeconds }, 'periodic DNS observation started');
     }
-    if (config.cloudVision.enabled) {
-      cloudVisionPoller.start();
-      app.log.info({ mode: cloudVisionSource, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision telemetry polling started');
-    }
+    cloudVisionManager.start(); // self-guards: only polls when the effective config is enabled
+    app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');
     await pool.end().catch(() => undefined);

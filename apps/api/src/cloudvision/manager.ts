@@ -19,7 +19,7 @@ const CONNECTOR = 'cloudvision';
 const MASK_SENTINELS = new Set(['••••••••', '********', '(configured)', '(unchanged)']);
 
 export interface AuditSink {
-  record(event: { actorSubject?: string; actorRoles?: string[]; action: string; resourceType?: string; resourceKey?: string; outcome: string; correlationId?: string; details?: Record<string, unknown> }): Promise<void>;
+  record(event: { actorSubject?: string; actorRoles?: string[]; action: string; resourceType?: string; resourceKey?: string; outcome: string; correlationId?: string; details?: Record<string, unknown> }): Promise<unknown>;
 }
 
 export interface ConnectorSettingsView {
