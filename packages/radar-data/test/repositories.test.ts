@@ -18,7 +18,6 @@ import {
   PostgresDnsObservationRepository,
   PostgresValidationResultRepository,
   PostgresConnectorSettingsRepository,
-  PostgresInterfaceLabelRepository,
   type NewSteeringState,
   type NewDnsObservation,
   type NewValidationResult,
@@ -61,7 +60,6 @@ describe('migrations (pg-mem)', () => {
       { version: '0003_dns_observations', filename: '0003_dns_observations.sql', applied: true, checksumMatches: true },
       { version: '0004_ns1_validations', filename: '0004_ns1_validations.sql', applied: true, checksumMatches: true },
       { version: '0005_connector_settings', filename: '0005_connector_settings.sql', applied: true, checksumMatches: true },
-      { version: '0006_interface_labels', filename: '0006_interface_labels.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -341,23 +339,5 @@ describe('PostgresConnectorSettingsRepository (pg-mem)', () => {
     const got = await repo.get('cloudvision');
     expect(got?.mode).toBe('mock');
     expect(got?.tokenCiphertext).toBeNull();
-  });
-});
-
-describe('PostgresInterfaceLabelRepository (pg-mem)', () => {
-  it('upserts, lists and removes interface friendly names', async () => {
-    const { db } = await freshDb();
-    const repo = new PostgresInterfaceLabelRepository(db);
-    expect(await repo.list()).toEqual([]);
-    const rec = await repo.upsert('DEV1', 'Ethernet2/1', 'INEX Peering', 'eng');
-    expect(rec).toMatchObject({ deviceId: 'DEV1', interfaceName: 'Ethernet2/1', friendlyName: 'INEX Peering', updatedBy: 'eng' });
-    // Overwrite in place.
-    await repo.upsert('DEV1', 'Ethernet2/1', 'INEX LAG', 'eng2');
-    const list = await repo.list();
-    expect(list).toHaveLength(1);
-    expect(list[0]).toMatchObject({ friendlyName: 'INEX LAG', updatedBy: 'eng2' });
-    // Remove.
-    await repo.remove('DEV1', 'Ethernet2/1');
-    expect(await repo.list()).toEqual([]);
   });
 });

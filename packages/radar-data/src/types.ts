@@ -352,22 +352,3 @@ export interface ConnectorSettingsRepository {
   get(connector: string): Promise<ConnectorSettingsRecord | null>;
   upsert(update: ConnectorSettingsUpdate): Promise<ConnectorSettingsRecord>;
 }
-
-// --- Interface friendly-name labels (operator annotations) --------------------------------
-
-export interface InterfaceLabelRecord {
-  deviceId: string;
-  interfaceName: string;
-  friendlyName: string;
-  updatedBy: string | null;
-  updatedAt: Date;
-}
-
-export interface InterfaceLabelRepository {
-  /** All labels (small table; the route builds a lookup map). */
-  list(): Promise<InterfaceLabelRecord[]>;
-  /** Set (or overwrite) a friendly name. */
-  upsert(deviceId: string, interfaceName: string, friendlyName: string, updatedBy: string | null): Promise<InterfaceLabelRecord>;
-  /** Remove a label. */
-  remove(deviceId: string, interfaceName: string): Promise<void>;
-}

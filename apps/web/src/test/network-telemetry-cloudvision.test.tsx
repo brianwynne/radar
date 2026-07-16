@@ -1,8 +1,8 @@
 // Network Telemetry (CloudVision) page: renders summary, provider cards, interface + BGP
 // tables from the mock API, shows the mock/informational provenance, and filters interfaces.
-import { afterEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
-import { NOC, VE, ENGINEER, renderAt, stubApi } from './helpers';
+import { NOC, VE, renderAt, stubApi } from './helpers';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -59,29 +59,6 @@ describe('Network Telemetry page', () => {
     fireEvent.click(edge2);
     expect(await screen.findByText(/Showing/)).toBeInTheDocument();
     expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
-  });
-
-  it('an Engineer can edit an interface friendly name (persists via PUT)', async () => {
-    stubApi(ENGINEER);
-    renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
-    // The editable "Name" field is present for an Engineer.
-    const inputs = screen.getAllByPlaceholderText('add name');
-    expect(inputs.length).toBeGreaterThan(0);
-    fireEvent.change(inputs[0], { target: { value: 'INEX Peering LAG' } });
-    fireEvent.blur(inputs[0]);
-    // The PUT carried the friendly name.
-    const calls = (fetch as unknown as Mock).mock.calls;
-    const put = calls.find((c) => String(c[0]).endsWith('/network/interfaces/label') && (c[1] as RequestInit | undefined)?.method === 'PUT');
-    expect(put).toBeTruthy();
-    expect(JSON.parse(String((put![1] as RequestInit).body))).toMatchObject({ friendlyName: 'INEX Peering LAG' });
-  });
-
-  it('a NOC viewer sees friendly names read-only (no editable input)', async () => {
-    stubApi(NOC);
-    renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
-    expect(screen.queryByPlaceholderText('add name')).not.toBeInTheDocument();
   });
 
   it('groups Port-Channel members per device (no cross-device merge)', async () => {

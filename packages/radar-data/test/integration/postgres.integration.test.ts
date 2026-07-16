@@ -58,7 +58,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
   const q = (): Queryable => pool as unknown as Queryable;
   const reset = () =>
     pool.query(
-      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, dns_observations, ns1_validation_results, connector_settings, interface_labels, schema_migrations CASCADE',
+      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, dns_observations, ns1_validation_results, connector_settings, schema_migrations CASCADE',
     );
   const migrate = async () => {
     const c = await pool.connect();
@@ -82,7 +82,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
 
     it('bootstraps schema_migrations, applies migrations in lexical order with timing', async () => {
       const applied = await migrate();
-      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations', '0005_connector_settings', '0006_interface_labels']);
+      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations', '0005_connector_settings']);
       const cols = await pool.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'schema_migrations'`,
       );
@@ -166,9 +166,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
         }
       };
       const [a, b] = await Promise.all([runOnce(), runOnce()]);
-      expect([a.length, b.length].sort()).toEqual([0, 6]); // one applied all, the other found them applied
+      expect([a.length, b.length].sort()).toEqual([0, 5]); // one applied all, the other found them applied
       const count = await pool.query<{ n: number }>('SELECT count(*)::int n FROM schema_migrations');
-      expect(count.rows[0].n).toBe(6); // no duplicate
+      expect(count.rows[0].n).toBe(5); // no duplicate
     });
 
     it('releases the advisory lock after success and after failure', async () => {

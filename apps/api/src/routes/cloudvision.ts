@@ -8,16 +8,11 @@ import { z } from 'zod';
 import { requirePermission } from '../auth/guards.js';
 import type { CloudVisionPoller } from '../cloudvision/poller.js';
 import type { BgpPeer, CloudVisionSource, LinkGroupState, NetworkDevice, NetworkInterface } from '../cloudvision/types.js';
-import type { InterfaceLabelRepository } from '@radar/data';
 
 export interface CloudVisionRouteOptions {
   poller?: CloudVisionPoller;
   mode?: CloudVisionSource;
-  /** Operator-assigned interface friendly names (persisted). */
-  labels?: InterfaceLabelRepository;
 }
-
-const labelKey = (deviceId: string, name: string): string => `${deviceId}::${name}`;
 
 const INFORMATIONAL_NOTICE = 'Network telemetry is read-only and informational. RADAR issues no device, CloudVision or NS1 writes.';
 
@@ -47,9 +42,9 @@ function presentDevice(d: NetworkDevice, detail: boolean): Record<string, unknow
   return detail ? { ...core, warnings: d.warnings, provenance: d.provenance } : core;
 }
 
-function presentInterface(i: NetworkInterface, detail: boolean, friendlyName: string | null): Record<string, unknown> {
+function presentInterface(i: NetworkInterface, detail: boolean): Record<string, unknown> {
   const core = {
-    deviceId: i.deviceId, deviceHostname: i.deviceHostname, name: i.name, friendlyName, description: i.description,
+    deviceId: i.deviceId, deviceHostname: i.deviceHostname, name: i.name, description: i.description,
     provider: i.provider, location: i.location, linkType: i.linkType, memberOf: i.memberOf, adminState: i.adminState, operState: i.operState,
     speedBps: i.speedBps, inBps: i.inBps, outBps: i.outBps, primaryBps: i.primaryBps, bandwidthSource: i.bandwidthSource,
     utilisationPercent: i.utilisationPercent, headroomBps: i.headroomBps,
@@ -125,28 +120,7 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
       if (q.linkType) items = items.filter((i) => i.linkType === q.linkType);
       if (q.status) items = items.filter((i) => i.status === q.status);
       if (q.unknownOnly === 'true') items = items.filter((i) => i.linkType === 'UNKNOWN');
-      const labels = opts.labels ? new Map((await opts.labels.list()).map((l) => [labelKey(l.deviceId, l.interfaceName), l.friendlyName])) : new Map<string, string>();
-      return { provenance: envelope(now()), count: items.length, items: items.map((i) => presentInterface(i, detail, labels.get(labelKey(i.deviceId, i.name)) ?? null)) };
-    },
-  );
-
-  const labelBody = z.object({ deviceId: z.string().min(1).max(200), name: z.string().min(1).max(200), friendlyName: z.string().max(120) }).strict();
-
-  app.put(
-    '/network/interfaces/label',
-    { preHandler: requirePermission('mapping.manage'), schema: schema('Set an interface friendly name', 'Engineer-only. Persists an operator-assigned friendly name for (deviceId, interface name). A blank friendlyName removes it.') },
-    async (req, reply) => {
-      if (!opts.labels) return reply.code(503).send({ code: 'LABELS_UNAVAILABLE', message: 'Interface labels are not configured.', correlationId: req.id });
-      const parsed = labelBody.safeParse(req.body);
-      if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: badRequest(parsed.error.issues), correlationId: req.id });
-      const { deviceId, name, friendlyName } = parsed.data;
-      const trimmed = friendlyName.trim();
-      if (trimmed.length === 0) {
-        await opts.labels.remove(deviceId, name);
-        return { deviceId, name, friendlyName: null };
-      }
-      const rec = await opts.labels.upsert(deviceId, name, trimmed, req.principal!.subject);
-      return { deviceId: rec.deviceId, name: rec.interfaceName, friendlyName: rec.friendlyName };
+      return { provenance: envelope(now()), count: items.length, items: items.map((i) => presentInterface(i, detail)) };
     },
   );
 

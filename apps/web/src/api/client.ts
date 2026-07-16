@@ -205,9 +205,6 @@ export const api = {
     return request<NetworkBgpPeersResponse>(`/api/v1/network/bgp-peers${qs ? `?${qs}` : ''}`);
   },
   networkHistory: (limit?: number) => request<NetworkHistoryResponse>(`/api/v1/network/history${limit ? `?limit=${limit}` : ''}`),
-  // Set (or clear, with a blank name) an interface friendly name.
-  networkSetInterfaceLabel: (body: { deviceId: string; name: string; friendlyName: string }) =>
-    request<{ deviceId: string; name: string; friendlyName: string | null }>('/api/v1/network/interfaces/label', { method: 'PUT', body: JSON.stringify(body) }),
 
   // CloudVision connection settings (Engineer only). The token is write-only.
   networkConnection: () => request<ConnectorSettingsResponse>('/api/v1/network/connection'),

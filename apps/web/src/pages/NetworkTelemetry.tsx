@@ -1,11 +1,9 @@
-// Network Telemetry — read-only CloudVision operational view. Summary tiles, time-series
-// sparklines, provider cards, a filterable interface table, and a BGP table. Everything is
-// informational (RADAR issues no writes); configured facts (capacity, classification) are
+// Network Telemetry — read-only CloudVision operational view. Summary tiles, a Devices list, a
+// top-interfaces-by-utilisation table, a filterable interface table, and a BGP table. Everything
+// is informational (RADAR issues no writes); configured facts (capacity, classification) are
 // shown distinctly from observed telemetry, and a missing/stale value is shown as such —
 // never invented. Auto-refreshes; clearly indicates stale data.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { api } from '../api/client';
-import { useAuth } from '../auth/AuthContext';
 import { useCloudVision } from '../telemetry/use-cloudvision';
 import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
@@ -56,25 +54,7 @@ export function NetworkTelemetry() {
   const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' });
   const sortBy = (col: 'name' | 'current' | 'util') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'name' ? 'asc' : 'desc' }));
   const arrow = (col: 'name' | 'current' | 'util') => (sort.col === col ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '');
-  const { hasPermission } = useAuth();
-  const canLabel = hasPermission('mapping.manage');
-  // Local overrides for friendly names being edited (survive the auto-refresh).
-  const [labelEdits, setLabelEdits] = useState<Record<string, string>>({});
-  const [labelSaving, setLabelSaving] = useState<Record<string, boolean>>({});
   const ifKey = (deviceId: string, name: string) => `${deviceId}::${name}`;
-
-  const saveLabel = async (deviceId: string, name: string, value: string) => {
-    const key = ifKey(deviceId, name);
-    setLabelSaving((s) => ({ ...s, [key]: true }));
-    try {
-      await api.networkSetInterfaceLabel({ deviceId, name, friendlyName: value });
-      t.refresh();
-    } catch {
-      // leave the typed value in place; the persisted value will reconcile on next refresh
-    } finally {
-      setLabelSaving((s) => ({ ...s, [key]: false }));
-    }
-  };
 
   const selectedDevice = t.devices.find((d) => d.id === device) ?? null;
   const toggleDevice = (id: string) => setDevice((cur) => (cur === id ? '' : id));
@@ -270,17 +250,16 @@ export function NetworkTelemetry() {
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
-            <tr><th>Router</th><th>Interface</th><th>Name</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
+            <tr><th>Router</th><th>Interface</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
           </thead>
           <tbody>
-            {topInterfaces.length === 0 && <tr><td colSpan={7} className="center-note">No interface utilisation yet.</td></tr>}
+            {topInterfaces.length === 0 && <tr><td colSpan={6} className="center-note">No interface utilisation yet.</td></tr>}
             {topInterfaces.map((i) => {
               const key = ifKey(i.deviceId, i.name);
               return (
                 <tr key={key}>
                   <td>{i.deviceHostname}</td>
                   <td>{i.name}</td>
-                  <td>{i.friendlyName ?? '—'}</td>
                   <td>{i.provider ?? '—'}</td>
                   <td>{formatBps(i.speedBps)}</td>
                   <td>{formatBps(i.primaryBps)}</td>
@@ -341,7 +320,7 @@ export function NetworkTelemetry() {
             <tr>
               <th>Router</th>
               <th className="sortable" onClick={() => sortBy('name')}>Interface{arrow('name')}</th>
-              <th>Name</th><th>Description</th><th>Provider</th><th>Link type</th>
+              <th>Description</th><th>Provider</th><th>Link type</th>
               <th>Capacity</th>
               <th className="sortable" onClick={() => sortBy('current')}>Current{arrow('current')}</th>
               <th className="sortable" onClick={() => sortBy('util')}>Util{arrow('util')}</th>
@@ -349,13 +328,12 @@ export function NetworkTelemetry() {
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && <tr><td colSpan={14} className="center-note">No interfaces match the current filters.</td></tr>}
+            {rows.length === 0 && <tr><td colSpan={13} className="center-note">No interfaces match the current filters.</td></tr>}
             {rows.map(({ i, depth, children, expanded }) => {
               const m = healthMeta(i.status);
               const bw = bandwidthSourceMeta(i.bandwidthSource);
               const oper = operMeta(i.operState);
               const key = ifKey(i.deviceId, i.name);
-              const labelValue = labelEdits[key] ?? i.friendlyName ?? '';
               return (
                 <tr key={key} className={depth ? 'lag-member' : children ? 'lag-parent' : undefined}>
                   <td>{depth ? '' : i.deviceHostname}</td>
@@ -366,21 +344,6 @@ export function NetworkTelemetry() {
                     {depth > 0 && <span className="tree-branch">└─ </span>}
                     {i.name} <span className={`badge ${oper.badge} badge-sm`}>{oper.label}</span>
                     {children > 0 && <span className="muted"> · {children} member{children > 1 ? 's' : ''}</span>}
-                  </td>
-                  <td>
-                    {canLabel ? (
-                      <input
-                        className="label-input"
-                        value={labelValue}
-                        placeholder="add name"
-                        disabled={labelSaving[key]}
-                        onChange={(e) => setLabelEdits((s) => ({ ...s, [key]: e.target.value }))}
-                        onBlur={() => { if ((labelEdits[key] ?? i.friendlyName ?? '') !== (i.friendlyName ?? '')) void saveLabel(i.deviceId, i.name, labelValue); }}
-                        onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
-                      />
-                    ) : (
-                      <span>{i.friendlyName ?? '—'}</span>
-                    )}
                   </td>
                   <td className="muted">{i.description ?? '—'}</td>
                   <td>{i.provider ?? '—'}</td>

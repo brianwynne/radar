@@ -22,32 +22,10 @@ async function poller(scenario: ScenarioName = 'normal'): Promise<CloudVisionPol
   return p;
 }
 
-/** In-memory interface-label repository for the route tests. */
-function fakeLabels() {
-  const rows = new Map<string, { deviceId: string; interfaceName: string; friendlyName: string; updatedBy: string | null; updatedAt: Date }>();
-  return {
-    store: rows,
-    repo: {
-      async list() {
-        return [...rows.values()];
-      },
-      async upsert(deviceId: string, interfaceName: string, friendlyName: string, updatedBy: string | null) {
-        const rec = { deviceId, interfaceName, friendlyName, updatedBy, updatedAt: new Date() };
-        rows.set(`${deviceId}::${interfaceName}`, rec);
-        return rec;
-      },
-      async remove(deviceId: string, interfaceName: string) {
-        rows.delete(`${deviceId}::${interfaceName}`);
-      },
-    },
-  };
-}
-
-async function app(role: string, opts: { poller?: CloudVisionPoller; auth?: boolean; labels?: ReturnType<typeof fakeLabels>['repo'] } = {}): Promise<FastifyInstance> {
+async function app(role: string, opts: { poller?: CloudVisionPoller; auth?: boolean } = {}): Promise<FastifyInstance> {
   const a = await buildApp(loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', RADAR_DEV_AUTH: String(opts.auth ?? true), RADAR_DEV_ROLE: role }), {
     cloudVisionPoller: opts.poller ?? (await poller()),
     cloudVisionMode: 'mock',
-    interfaceLabels: opts.labels,
   });
   await a.ready();
   return a;
@@ -144,36 +122,5 @@ describe('CloudVision network-telemetry routes', () => {
     expect((await a.inject({ url: '/api/v1/network/status' })).json().status.enabled).toBe(false);
     expect((await a.inject({ url: '/api/v1/network/devices' })).json().count).toBe(0);
     await a.close();
-  });
-
-  describe('interface friendly names', () => {
-    it('Engineer sets a friendly name; it persists and enriches the interfaces response', async () => {
-      const labels = fakeLabels();
-      const a = await app('ENGINEER', { labels: labels.repo });
-      const put = await a.inject({ method: 'PUT', url: '/api/v1/network/interfaces/label', payload: { deviceId: 'JPE00000001', name: 'Ethernet1', friendlyName: 'Eir PNI Dublin LAG' } });
-      expect(put.statusCode).toBe(200);
-      expect(put.json()).toMatchObject({ friendlyName: 'Eir PNI Dublin LAG' });
-      // The interfaces response now carries the friendly name.
-      const eth1 = (await a.inject({ url: '/api/v1/network/interfaces?deviceId=JPE00000001' })).json().items.find((i: { name: string }) => i.name === 'Ethernet1');
-      expect(eth1.friendlyName).toBe('Eir PNI Dublin LAG');
-      await a.close();
-    });
-
-    it('a blank name clears the label', async () => {
-      const labels = fakeLabels();
-      const a = await app('ENGINEER', { labels: labels.repo });
-      await a.inject({ method: 'PUT', url: '/api/v1/network/interfaces/label', payload: { deviceId: 'D', name: 'Eth1', friendlyName: 'x' } });
-      const res = await a.inject({ method: 'PUT', url: '/api/v1/network/interfaces/label', payload: { deviceId: 'D', name: 'Eth1', friendlyName: '  ' } });
-      expect(res.json().friendlyName).toBeNull();
-      expect(labels.store.size).toBe(0);
-      await a.close();
-    });
-
-    it('a Viewing Engineer cannot set a friendly name (403)', async () => {
-      const a = await app('VIEWING_ENGINEER', { labels: fakeLabels().repo });
-      const res = await a.inject({ method: 'PUT', url: '/api/v1/network/interfaces/label', payload: { deviceId: 'D', name: 'Eth1', friendlyName: 'x' } });
-      expect(res.statusCode).toBe(403);
-      await a.close();
-    });
   });
 });

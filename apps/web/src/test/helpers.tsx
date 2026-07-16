@@ -207,7 +207,7 @@ export const NETWORK_DEVICES_BODY = {
   ],
 };
 const cvItf = (device: string, name: string, desc: string, provider: string, linkType: string, speed: number, out: number, oper: string, status: string, memberOf: string | null = null) => ({
-  deviceId: device, deviceHostname: `${device === 'JPE00000001' ? 'edge1' : 'edge2'}.dub.rte.ie`, name, friendlyName: null, description: desc, provider, location: 'Dublin', linkType, memberOf,
+  deviceId: device, deviceHostname: `${device === 'JPE00000001' ? 'edge1' : 'edge2'}.dub.rte.ie`, name, description: desc, provider, location: 'Dublin', linkType, memberOf,
   adminState: 'up', operState: oper, speedBps: speed, inBps: out / 5, outBps: out, primaryBps: oper === 'down' ? 0 : out, bandwidthSource: 'REPORTED',
   utilisationPercent: oper === 'down' ? 0 : (out / speed) * 100, headroomBps: speed - out, inErrors: 0, outErrors: 0, inDiscards: 0, outDiscards: 0,
   status, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock', classificationSource: 'description_regex', warnings: [],
@@ -223,7 +223,7 @@ export const NETWORK_INTERFACES_BODY = {
     cvItf('JPE00000002', 'Port-Channel7', 'Transit LAG', 'Transit', 'TRANSIT', 100e9, 30e9, 'up', 'healthy'),
     cvItf('JPE00000002', 'Ethernet9', 'Transit member', 'Transit', 'TRANSIT', 100e9, 30e9, 'up', 'healthy', 'Port-Channel7'),
     // An empty port — no optic ⇒ no capacity reported (speedBps null).
-    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', name: 'Ethernet50', friendlyName: null, description: null, provider: null, location: null, linkType: 'UNKNOWN', memberOf: null, adminState: 'unknown', operState: 'unknown', speedBps: null, inBps: null, outBps: null, primaryBps: null, bandwidthSource: 'UNAVAILABLE', utilisationPercent: null, headroomBps: null, inErrors: null, outErrors: null, inDiscards: null, outDiscards: null, status: 'unknown', freshness: cvFresh, observedAt: null, source: 'mock', classificationSource: 'unknown', warnings: [] },
+    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', name: 'Ethernet50', description: null, provider: null, location: null, linkType: 'UNKNOWN', memberOf: null, adminState: 'unknown', operState: 'unknown', speedBps: null, inBps: null, outBps: null, primaryBps: null, bandwidthSource: 'UNAVAILABLE', utilisationPercent: null, headroomBps: null, inErrors: null, outErrors: null, inDiscards: null, outDiscards: null, status: 'unknown', freshness: cvFresh, observedAt: null, source: 'mock', classificationSource: 'unknown', warnings: [] },
   ],
 };
 export const NETWORK_LINK_GROUPS_BODY = {
@@ -268,7 +268,6 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/telemetry/origin')) body = ORIGIN_BODY;
       else if (p.endsWith('/network/status')) body = NETWORK_STATUS_BODY;
       else if (p.endsWith('/network/devices')) body = NETWORK_DEVICES_BODY;
-      else if (p.endsWith('/network/interfaces/label')) { const b = JSON.parse(String(init?.body ?? '{}')); body = { deviceId: b.deviceId, name: b.name, friendlyName: b.friendlyName || null }; }
       else if (p.endsWith('/network/interfaces')) body = NETWORK_INTERFACES_BODY;
       else if (p.endsWith('/network/link-groups')) body = NETWORK_LINK_GROUPS_BODY;
       else if (p.endsWith('/network/bgp-peers')) body = NETWORK_BGP_BODY;

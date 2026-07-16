@@ -776,8 +776,6 @@ export interface NetworkInterface {
   deviceId: string;
   deviceHostname: string;
   name: string;
-  /** Operator-assigned friendly name (persisted); null if none set. */
-  friendlyName: string | null;
   description: string | null;
   provider: string | null;
   location: string | null;
