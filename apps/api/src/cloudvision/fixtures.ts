@@ -63,14 +63,14 @@ function peer(device: string, address: string, asn: number, state: string, at: D
 /** Base topology at throughput multiplier `m`. Two edge routers, peering + transit + core. */
 function baseInterfaces(at: Date, m = 1): RawInterface[] {
   return [
-    itf({ device: EDGE1, name: 'Ethernet1', description: 'Eir PNI Dublin', speedBps: 100 * G, outBps: 40 * G * m, inBps: 8 * G, inErrors: 0, outErrors: 0 }, at),
-    itf({ device: EDGE1, name: 'Ethernet2', description: 'INEX IXP Dublin', speedBps: 100 * G, outBps: 55 * G * m, inBps: 12 * G }, at),
-    itf({ device: EDGE1, name: 'Ethernet3', description: 'Liberty Virgin Media peering', speedBps: 40 * G, outBps: 18 * G * m, inBps: 4 * G }, at),
-    itf({ device: EDGE1, name: 'Ethernet4', description: 'Transit Cogent', speedBps: 100 * G, outBps: 10 * G * m, inBps: 3 * G }, at),
+    itf({ device: EDGE1, name: 'Ethernet1', description: '[Po7] Eir', speedBps: 100 * G, outBps: 40 * G * m, inBps: 8 * G, inErrors: 0, outErrors: 0 }, at),
+    itf({ device: EDGE1, name: 'Ethernet2', description: '[Po1] INEX LAN#1', speedBps: 100 * G, outBps: 55 * G * m, inBps: 12 * G }, at),
+    itf({ device: EDGE1, name: 'Ethernet3', description: '[Po3] Liberty Global - PX01660', speedBps: 40 * G, outBps: 18 * G * m, inBps: 4 * G }, at),
+    itf({ device: EDGE1, name: 'Ethernet4', description: '[Transit] Cogent - 3-002188930', speedBps: 100 * G, outBps: 10 * G * m, inBps: 3 * G }, at),
     itf({ device: EDGE1, name: 'Ethernet5', description: 'Core spine link', speedBps: 400 * G, outBps: 120 * G, inBps: 118 * G }, at),
-    itf({ device: EDGE2, name: 'Ethernet1', description: 'Eir PNI Dublin', speedBps: 100 * G, outBps: 38 * G * m, inBps: 7 * G }, at),
-    itf({ device: EDGE2, name: 'Ethernet2', description: 'INEX IXP Dublin', speedBps: 100 * G, outBps: 52 * G * m, inBps: 11 * G }, at),
-    itf({ device: EDGE2, name: 'Ethernet4', description: 'Transit GTT', speedBps: 100 * G, outBps: 9 * G * m, inBps: 2 * G }, at),
+    itf({ device: EDGE2, name: 'Ethernet1', description: '[Po7] Eir', speedBps: 100 * G, outBps: 38 * G * m, inBps: 7 * G }, at),
+    itf({ device: EDGE2, name: 'Ethernet2', description: '[Po1] INEX LAN#1', speedBps: 100 * G, outBps: 52 * G * m, inBps: 11 * G }, at),
+    itf({ device: EDGE2, name: 'Ethernet4', description: '[Transit] GTT - IC-100200', speedBps: 100 * G, outBps: 9 * G * m, inBps: 2 * G }, at),
   ];
 }
 
@@ -106,10 +106,10 @@ export function scenarioSnapshot(name: ScenarioName, now: number): RawSnapshot {
       interfaces = baseInterfaces(at, 1.6); // peering/transit ~1.6× — high but under capacity
       break;
     case 'eir-near-capacity':
-      interfaces = interfaces.map((i) => (i.description === 'Eir PNI Dublin' && i.deviceId === EDGE1 ? { ...i, reportedOutBps: 93 * G } : i));
+      interfaces = interfaces.map((i) => (i.description === '[Po7] Eir' && i.deviceId === EDGE1 ? { ...i, reportedOutBps: 93 * G } : i));
       break;
     case 'inex-failure':
-      interfaces = interfaces.map((i) => (i.description === 'INEX IXP Dublin' ? { ...i, operState: 'down', reportedInBps: 0, reportedOutBps: 0 } : i));
+      interfaces = interfaces.map((i) => (i.description === '[Po1] INEX LAN#1' ? { ...i, operState: 'down', reportedInBps: 0, reportedOutBps: 0 } : i));
       bgpPeers = bgpPeers.map((p) => (p.peerAsn === 43760 ? { ...p, state: 'Idle', uptimeSeconds: 0 } : p));
       break;
     case 'transit-failure':

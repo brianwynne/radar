@@ -39,6 +39,25 @@ const KIND_PRIORITY: Record<ClassificationMatch['kind'], number> = {
 
 const UNKNOWN: ClassificationResult = { linkType: 'UNKNOWN', provider: null, location: null, classificationSource: 'unknown' };
 
+/** Extract the provider NAME from an interface description of the form "[<tag>] <Provider>[ - <ref>]"
+ *  (e.g. "[Transit] Blacknight BKIE428007" → "Blacknight"; "[Po3] Liberty Global - PX02282" →
+ *  "Liberty Global"; "[Po2] INEX LAN#2 - IE298530" → "INEX"). Strips the leading [tag] and any
+ *  trailing circuit-reference tokens. Returns null for internal links (Core/switch) or when no
+ *  name is present. Used only to fill in a provider a matched rule didn't pin explicitly. */
+export function parseProviderFromDescription(description: string | null): string | null {
+  if (!description) return null;
+  const body = description.replace(/^\s*\[[^\]]*\]\s*/, '').trim(); // drop a leading [Po7]/[Transit] tag
+  if (/^(core|internal|ibgp|mlag|spine|leaf|backbone)\b/i.test(body) || /\bswitch\b/i.test(body)) return null;
+  const segment = body.split(/\s+[-–]\s+/)[0].trim(); // text before a " - " circuit ref
+  const words: string[] = [];
+  for (const w of segment.split(/\s+/)) {
+    if (/[0-9#]/.test(w)) break; // a token with a digit/# is a circuit ref/detail, not the name
+    words.push(w);
+  }
+  const provider = words.join(' ').replace(/[.,:;]+$/, '').trim();
+  return provider.length > 0 ? provider : null;
+}
+
 const sourceOf = (kind: ClassificationMatch['kind']): ClassificationSource =>
   kind === 'device_interface' ? 'device_interface' : kind === 'description_exact' ? 'description_exact' : 'description_regex';
 
@@ -69,7 +88,9 @@ export function classifyInterface(rules: ClassificationRule[], input: Classifica
     if (matches(rule, input)) {
       return {
         linkType: rule.linkType,
-        provider: rule.provider ?? null,
+        // A rule may pin the provider explicitly; otherwise derive the real name from the
+        // description (so "[Transit] Blacknight" → "Blacknight", not the "[Transit]" tag).
+        provider: rule.provider ?? parseProviderFromDescription(input.description),
         location: rule.location ?? null,
         classificationSource: sourceOf(rule.match.kind),
       };
