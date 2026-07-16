@@ -128,6 +128,14 @@ export interface BgpPeer {
   uptimeSeconds: number | null;
   prefixesReceived: number | null;
   prefixesAdvertised: number | null;
+  /** Physical interface the session runs over (correlates to the interface table). */
+  interfaceId: string | null;
+  localAddress: string | null;
+  /** Remote peer's BGP router-id. */
+  routerId: string | null;
+  adminShutdown: boolean | null;
+  /** Active address families (short labels, e.g. ["IPv4","IPv6"]). */
+  addressFamilies: string[];
   status: HealthStatus;
   freshness: Freshness;
   observedAt: string | null;

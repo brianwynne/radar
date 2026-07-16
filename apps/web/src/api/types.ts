@@ -815,6 +815,11 @@ export interface BgpPeer {
   uptimeSeconds: number | null;
   prefixesReceived: number | null;
   prefixesAdvertised: number | null;
+  interfaceId: string | null;
+  localAddress: string | null;
+  routerId: string | null;
+  adminShutdown: boolean | null;
+  addressFamilies: string[];
   status: NetworkHealth;
   freshness: CvFreshness;
   observedAt: string | null;

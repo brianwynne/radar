@@ -155,6 +155,17 @@ describe('Network Telemetry page', () => {
     expect(eir).not.toHaveClass('util-crit');
   });
 
+  it('correlates each BGP peer with the interface it runs on and shows the link load', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    // The Eir peer (185.6.36.1) runs on Ethernet1 — its row shows the interface and its load.
+    const peerRow = within(screen.getByText('185.6.36.1').closest('tr')!);
+    expect(peerRow.getByText('Ethernet1')).toBeInTheDocument(); // interfaceId
+    expect(peerRow.getByText(/Gb\/s · 40\.0%/)).toBeInTheDocument(); // correlated link load (current · util)
+    expect(peerRow.getByText('IPv4')).toBeInTheDocument(); // active address families
+  });
+
   it('summary tiles reflect the connector snapshot', async () => {
     stubApi(NOC);
     renderAt('/network');

@@ -56,8 +56,12 @@ function itf(spec: ItfSpec, at: Date): RawInterface {
   };
 }
 
-function peer(device: string, address: string, asn: number, state: string, at: Date, received = 850000, advertised = 40): RawBgpPeer {
-  return { deviceId: device, peerAddress: address, peerAsn: asn, state, uptimeSeconds: state === 'Established' ? 864000 : 0, prefixesReceived: received, prefixesAdvertised: advertised, observedAt: at };
+function peer(device: string, address: string, asn: number, state: string, at: Date, intf: string | null = null, received = 850000, advertised = 40): RawBgpPeer {
+  return {
+    deviceId: device, peerAddress: address, peerAsn: asn, state, uptimeSeconds: state === 'Established' ? 864000 : 0,
+    prefixesReceived: received, prefixesAdvertised: advertised, observedAt: at,
+    interfaceId: intf, localAddress: null, routerId: null, adminShutdown: false, addressFamilies: ['IPv4'],
+  };
 }
 
 /** Base topology at throughput multiplier `m`. Two edge routers, peering + transit + core. */
@@ -76,11 +80,11 @@ function baseInterfaces(at: Date, m = 1): RawInterface[] {
 
 function basePeers(at: Date): RawBgpPeer[] {
   return [
-    peer(EDGE1, '185.6.36.1', 5466, 'Established', at), // Eir
-    peer(EDGE1, '194.88.240.1', 43760, 'Established', at), // INEX route server
-    peer(EDGE1, '154.54.1.1', 174, 'Established', at), // Cogent transit
-    peer(EDGE2, '185.6.36.2', 5466, 'Established', at),
-    peer(EDGE2, '194.88.240.2', 43760, 'Established', at),
+    peer(EDGE1, '185.6.36.1', 5466, 'Established', at, 'Ethernet1'), // Eir
+    peer(EDGE1, '194.88.240.1', 43760, 'Established', at, 'Ethernet2'), // INEX route server
+    peer(EDGE1, '154.54.1.1', 174, 'Established', at, 'Ethernet4'), // Cogent transit
+    peer(EDGE2, '185.6.36.2', 5466, 'Established', at, 'Ethernet1'),
+    peer(EDGE2, '194.88.240.2', 43760, 'Established', at, 'Ethernet2'),
   ];
 }
 

@@ -117,6 +117,13 @@ export interface BgpPeerFields {
   provider: string | null;
   /** Link-type hint from a description tag like "[Transit]"/"[Peering]"/"[IX]". */
   linkTypeHint: 'TRANSIT' | 'PRIVATE_PEERING' | 'IX_PEERING' | null;
+  /** Epoch SECONDS of the last into/out-of-established transition (→ uptime when established). */
+  establishedTime: number | null;
+  /** Remote peer's BGP router-id. */
+  routerId: string | null;
+  adminShutdown: boolean | null;
+  /** Active address families (short labels, e.g. ["IPv4","IPv6"]). */
+  addressFamilies: string[];
 }
 
 /** Parse a `bgpPeerInfoStatusEntry/<peer>` leaf updates map. */
@@ -131,7 +138,28 @@ export function parseBgpPeer(updates: Record<string, unknown>): BgpPeerFields {
     intfId: str(updates.intfId),
     provider,
     linkTypeHint,
+    establishedTime: num(updates.bgpPeerIntoOrOutOfEstablishedTime),
+    routerId: str(updates.bgpPeerRouterId),
+    adminShutdown: bool(updates.bgpPeerAdminShutDown),
+    addressFamilies: parseAfiSafiActive(updates.bgpPeerAfiSafiActive),
   };
+}
+
+/** A boolean from analytics wrappers. */
+export function bool(v: unknown): boolean | null {
+  const u = unwrap(v);
+  return typeof u === 'boolean' ? u : null;
+}
+
+const AFI_LABELS: Record<string, string> = {
+  ipv4Unicast: 'IPv4', ipv6Unicast: 'IPv6', ipv4Multicast: 'IPv4-mcast', ipv6Multicast: 'IPv6-mcast',
+  l2VpnEvpn: 'EVPN', ipv4Flowspec: 'IPv4-fs', ipv6Flowspec: 'IPv6-fs', vpnIpv4: 'VPN-IPv4', vpnIpv6: 'VPN-IPv6',
+};
+/** Active address families from `bgpPeerAfiSafiActive = {ipv4Unicast:true, ipv6Unicast:false, …}`. */
+export function parseAfiSafiActive(v: unknown): string[] {
+  const u = unwrap(v);
+  if (!isObj(u)) return [];
+  return Object.entries(u).filter(([, val]) => val === true).map(([k]) => AFI_LABELS[k] ?? k);
 }
 
 /** Extract provider + link-type from a peer description like "[Transit] Cogent 3-002188930".

@@ -71,6 +71,13 @@ export interface RawBgpPeer {
   /** Provider derived from a verified source (e.g. the peer description tag); preferred over
    *  the ASN map. Never a fabricated association. */
   providerHint?: string | null;
+  /** Physical interface the session runs over (from the peer record's intfId). */
+  interfaceId?: string | null;
+  localAddress?: string | null;
+  /** Remote peer's BGP router-id. */
+  routerId?: string | null;
+  adminShutdown?: boolean | null;
+  addressFamilies?: string[];
   warnings?: string[];
 }
 
@@ -277,6 +284,11 @@ function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, cfg: AdapterConfi
     uptimeSeconds: raw.uptimeSeconds,
     prefixesReceived: raw.prefixesReceived,
     prefixesAdvertised: raw.prefixesAdvertised,
+    interfaceId: raw.interfaceId ?? null,
+    localAddress: raw.localAddress ?? null,
+    routerId: raw.routerId ?? null,
+    adminShutdown: raw.adminShutdown ?? null,
+    addressFamilies: raw.addressFamilies ?? [],
     status: bgpStatus(state, raw.observedAt !== null),
     freshness: freshnessOf(raw.observedAt, cfg.now, cfg.staleAfterSeconds),
     observedAt: raw.observedAt ? raw.observedAt.toISOString() : null,

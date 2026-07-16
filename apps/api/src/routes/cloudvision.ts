@@ -58,6 +58,7 @@ function presentBgp(p: BgpPeer, detail: boolean): Record<string, unknown> {
   const core = {
     deviceId: p.deviceId, deviceHostname: p.deviceHostname, peerAddress: p.peerAddress, peerAsn: p.peerAsn, provider: p.provider,
     state: p.state, established: p.established, uptimeSeconds: p.uptimeSeconds, prefixesReceived: p.prefixesReceived, prefixesAdvertised: p.prefixesAdvertised,
+    interfaceId: p.interfaceId, localAddress: p.localAddress, routerId: p.routerId, adminShutdown: p.adminShutdown, addressFamilies: p.addressFamilies,
     status: p.status, freshness: p.freshness, observedAt: p.observedAt, source: p.provenance.source,
   };
   return detail ? { ...core, warnings: p.warnings, provenance: p.provenance } : core;

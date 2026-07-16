@@ -387,17 +387,25 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
       const leaf = await this.analyticsGet(this.analyticsBase(deviceId, 'routing', 'bgp', 'status', 'vrf', 'default', 'bgpPeerInfoStatusEntry', address), correlationId);
       if (Object.keys(leaf.updates).length === 0) return null;
       const p = parseBgpPeer(leaf.updates);
+      // Uptime = now − last-into-established time, only while the session IS established.
+      const established = (p.state ?? '').toLowerCase() === 'established';
+      const uptimeSeconds = established && p.establishedTime !== null ? Math.max(0, Math.round(now / 1000 - p.establishedTime)) : null;
       const peer: RawBgpPeer = {
         deviceId,
         peerAddress: address,
         peerAsn: p.asn,
         state: p.state ?? '',
-        uptimeSeconds: null, // not on this leaf (a different afi/safi table); left null
-        prefixesReceived: null,
+        uptimeSeconds,
+        prefixesReceived: null, // prefix counts are not streamed to CloudVision here
         prefixesAdvertised: null,
         observedAt: leaf.observedAt ?? new Date(now),
         // Provider is taken ONLY from the verified peer description tag, never fabricated.
         providerHint: p.provider,
+        interfaceId: p.intfId,
+        localAddress: p.localAddr,
+        routerId: p.routerId,
+        adminShutdown: p.adminShutdown,
+        addressFamilies: p.addressFamilies,
       };
       return peer;
     });

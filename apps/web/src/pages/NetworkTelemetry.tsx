@@ -88,6 +88,9 @@ export function NetworkTelemetry() {
     return next;
   }, [t.interfaces]);
 
+  // Interface lookup (deviceId::name) to correlate each BGP peer with the physical link it runs on.
+  const itfByKey = useMemo(() => new Map(t.interfaces.map((i) => [`${i.deviceId}::${i.name}`, i])), [t.interfaces]);
+
   const interfaces = useMemo(
     () =>
       t.interfaces.filter((i) => {
@@ -403,22 +406,35 @@ export function NetworkTelemetry() {
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
-            <tr><th>Router</th><th>Provider</th><th>Peer</th><th>ASN</th><th>State</th><th>Uptime</th><th>Received</th><th>Advertised</th></tr>
+            <tr><th>Router</th><th>Provider</th><th>Peer</th><th>ASN</th><th>State</th><th>Interface</th><th>Link load</th><th>Uptime</th><th>Families</th></tr>
           </thead>
           <tbody>
-            {bgpPeers.length === 0 && <tr><td colSpan={8} className="center-note">No BGP peers.</td></tr>}
+            {bgpPeers.length === 0 && <tr><td colSpan={9} className="center-note">No BGP peers.</td></tr>}
             {bgpPeers.map((p) => {
               const m = bgpMeta(p.state);
+              const itf = p.interfaceId ? itfByKey.get(`${p.deviceId}::${p.interfaceId}`) : undefined;
+              const peerTitle = [p.localAddress && `local ${p.localAddress}`, p.routerId && `router-id ${p.routerId}`].filter(Boolean).join(' · ');
               return (
                 <tr key={`${p.deviceId}::${p.peerAddress}`}>
                   <td>{p.deviceHostname}</td>
                   <td>{p.provider ?? '—'}</td>
-                  <td>{p.peerAddress}</td>
+                  <td title={peerTitle || undefined}>{p.peerAddress}</td>
                   <td>{p.peerAsn ?? '—'}</td>
-                  <td><span className={`badge ${m.badge}`}>{m.label}</span></td>
+                  <td>
+                    <span className={`badge ${m.badge}`}>{m.label}</span>
+                    {p.adminShutdown && <span className="badge warn badge-sm" title="Administratively shut down"> shut</span>}
+                  </td>
+                  <td>{p.interfaceId ?? '—'}</td>
+                  {/* The physical link's live load (from the correlated interface), colour-coded by utilisation. */}
+                  {itf ? (
+                    <td className={utilClass(levelByKey.get(`${p.deviceId}::${itf.name}`) ?? 'ok')}>
+                      {formatBps(itf.primaryBps)} · {formatPercent(itf.utilisationPercent)}
+                    </td>
+                  ) : (
+                    <td>—</td>
+                  )}
                   <td>{formatUptime(p.uptimeSeconds)}</td>
-                  <td>{num(p.prefixesReceived)}</td>
-                  <td>{num(p.prefixesAdvertised)}</td>
+                  <td className="muted">{p.addressFamilies.length ? p.addressFamilies.join(', ') : '—'}</td>
                 </tr>
               );
             })}

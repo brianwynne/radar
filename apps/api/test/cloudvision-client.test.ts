@@ -57,7 +57,13 @@ const IF_RATES = { notifications: [{ timestamp: TS, updates: { inOctets: rate(1e
 const IF_AGG_1M = { notifications: [{ timestamp: TS, updates: { inOctets: stat(1e9), outOctets: stat(5e9) } }] };
 const IF_UTIL = { notifications: [{ updates: { 'inOctets-utilization': wrap({ float: 8 }), 'outOctets-utilization': wrap({ float: 40 }) } }] };
 const BGP_LIST = { notifications: [{ updates: { '185.6.36.1': wrap({ ptr: ['x'] }) } }] };
-const BGP_LEAF = { notifications: [{ timestamp: TS, updates: { bgpState: wrap({ Name: 'Established', Value: { int: 6 } }), bgpPeerAs: wrap({ value: { int: 5466 } }), bgpPeerLocalAddr: wrap('185.6.36.2'), bgpPeerDescription: wrap('[Transit] Cogent 3-002188930') } }] };
+const BGP_LEAF = { notifications: [{ timestamp: TS, updates: {
+  bgpState: wrap({ Name: 'Established', Value: { int: 6 } }), bgpPeerAs: wrap({ value: { int: 5466 } }),
+  bgpPeerLocalAddr: wrap('185.6.36.2'), bgpPeerDescription: wrap('[Transit] Cogent 3-002188930'),
+  intfId: wrap('Ethernet8/1/1'), bgpPeerRouterId: wrap('154.26.32.189'), bgpPeerAdminShutDown: wrap(false),
+  bgpPeerIntoOrOutOfEstablishedTime: wrap({ float: NOW / 1000 - 86400 }), // established 1 day ago
+  bgpPeerAfiSafiActive: wrap({ ipv4Unicast: true, ipv6Unicast: false }),
+} }] };
 const PC_LIST = { notifications: [{ updates: { 'Port-Channel7': wrap({ ptr: ['x'] }) } }] };
 const PC_MEMBERS = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['x'] }) } }] }; // Ethernet1 ∈ Port-Channel7
 // Device Sysdb interface-status: the flat map resolves each interface to a pointer; the record
@@ -134,9 +140,12 @@ describe('HttpCloudVisionReadClient', () => {
     expect(eth1.bandwidthSource).toBe('REPORTED');
     expect(eth1.memberOf).toBe('Port-Channel7'); // LAG membership from portchannel/expectedMembers
     expect(eth1.observedAt).toBe(new Date(Number(BigInt(TS) / 1_000_000n)).toISOString());
-    // BGP peer: state + ASN + provider parsed from the "[Transit] Cogent" description.
+    // BGP peer: state + ASN + provider parsed from the "[Transit] Cogent" description, plus the
+    // interface it runs over, a derived uptime, router-id and active address families.
     const peer = snap.bgpPeers.find((p) => p.peerAddress === '185.6.36.1')!;
-    expect(peer).toMatchObject({ state: 'ESTABLISHED', peerAsn: 5466, provider: 'Cogent', established: true });
+    expect(peer).toMatchObject({ state: 'ESTABLISHED', peerAsn: 5466, provider: 'Cogent', established: true, interfaceId: 'Ethernet8/1/1', routerId: '154.26.32.189', adminShutdown: false });
+    expect(peer.uptimeSeconds).toBe(86400); // NOW − establishedTime (1 day)
+    expect(peer.addressFamilies).toEqual(['IPv4']);
     // Every request carried the bearer token.
     expect(calls.every((c) => c.auth === `Bearer ${TOKEN}`)).toBe(true);
   });
