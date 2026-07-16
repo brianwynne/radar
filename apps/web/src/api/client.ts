@@ -39,6 +39,7 @@ import type {
   FastlyStatusResponse,
   FastlyServicesResponse,
   FastlyRealtimeResponse,
+  AkamaiRealtimeResponse,
   FastlyConnectionResponse,
   FastlyConnectionUpdate,
   FastlyConnectionTestResponse,
@@ -238,6 +239,7 @@ export const api = {
   fastlyStatus: () => request<FastlyStatusResponse>('/api/v1/cdn/fastly/status'),
   fastlyServices: () => request<FastlyServicesResponse>('/api/v1/cdn/fastly/services'),
   fastlyRealtime: () => request<FastlyRealtimeResponse>('/api/v1/cdn/fastly/realtime'),
+  akamaiRealtime: () => request<AkamaiRealtimeResponse>('/api/v1/cdn/akamai/realtime'),
 
   // Fastly connection settings (Engineer only). The token is write-only.
   fastlyConnection: () => request<FastlyConnectionResponse>('/api/v1/cdn/fastly/connection'),

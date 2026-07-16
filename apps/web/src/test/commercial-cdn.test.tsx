@@ -8,16 +8,17 @@ import { NOC, renderAt, stubApi } from './helpers';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Commercial CDN page', () => {
-  it('shows Fastly and Akamai columns side by side', async () => {
+  it('shows Fastly and Akamai columns side by side, both live', async () => {
     stubApi(NOC);
     renderAt('/cdn');
 
     expect(await screen.findByRole('heading', { name: /Commercial CDN/, level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Fastly', level: 2 })).toBeInTheDocument();
+
+    // Akamai column streams DataStream 2 telemetry: live badge + its CP-code service.
     const akamai = screen.getByRole('heading', { name: 'Akamai', level: 2 }).closest('.cdn-col') as HTMLElement;
-    // Akamai is honest about its pending connector (Reporting API grant), never fabricated data.
-    expect(within(akamai).getByText(/Reporting API/)).toBeInTheDocument();
-    expect(within(akamai).getByText('NOT CONNECTED')).toBeInTheDocument();
+    expect(await within(akamai).findByText('LIVE · DataStream 2')).toBeInTheDocument();
+    expect(within(akamai).getByRole('option', { name: /LIVE\.RTE\.IE \(1629049\)/ })).toBeInTheDocument();
   });
 
   it('the service filter drives a realtime response-code panel; a class drills into codes', async () => {

@@ -1035,6 +1035,21 @@ export interface FastlyStatusResponse { status: FastlyConnectorStatus | null; re
 export interface FastlyServicesResponse { provenance: FastlyProvenance; count: number; items: FastlyServiceStats[] }
 export interface FastlyRealtimeResponse { provenance: FastlyProvenance; source: FastlySource; windowSeconds: number; series: FastlyRealtimeSeries[]; warnings: string[] }
 
+// --- Akamai CDN observability (read-only; DataStream 2 edge logs aggregated by RADAR) -----------
+export type AkamaiSource = 'akamai' | 'disabled';
+export interface AkamaiProvenance {
+  source: AkamaiSource; synthetic: boolean; readOnly: boolean; informationalOnly: boolean; notice: string; retrievedAt: string;
+}
+export interface AkamaiSample {
+  second: number; at: string; requests: number; hits: number; miss: number; bandwidthBytes: number;
+  status2xx: number; status3xx: number; status4xx: number; status5xx: number; statusCodes: Record<string, number>;
+}
+export interface AkamaiSeries {
+  serviceId: string; serviceName: string; samples: AkamaiSample[];
+  latestRequestsPerSecond: number | null; latestBandwidthBps: number | null; lastSampleAt: string | null;
+}
+export interface AkamaiRealtimeResponse { provenance: AkamaiProvenance; source: AkamaiSource; windowSeconds: number; series: AkamaiSeries[]; warnings: string[] }
+
 // Engineer-managed Fastly connection settings (API base + service ids + write-only token).
 export interface FastlyConnection {
   connector: 'fastly'; enabled: boolean; mode: 'mock' | 'live'; apiBase: string; serviceIds: string[];

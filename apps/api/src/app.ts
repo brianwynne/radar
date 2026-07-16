@@ -24,6 +24,8 @@ import { cloudflareRoutes } from './routes/cloudflare.js';
 import { cloudflareConnectionRoutes } from './routes/cloudflare-connection.js';
 import { fastlyRoutes } from './routes/fastly.js';
 import { fastlyConnectionRoutes } from './routes/fastly-connection.js';
+import { akamaiRoutes } from './routes/akamai.js';
+import type { AkamaiConnector } from './akamai/index.js';
 import type { FastlyPoller } from './fastly/poller.js';
 import type { FastlyRealtimeStreamer } from './fastly/realtime-streamer.js';
 import type { FastlyConnectorManager } from './fastly/manager.js';
@@ -76,6 +78,7 @@ export interface BuildDeps extends AuthDeps {
   fastlyPoller?: FastlyPoller;
   fastlyRealtimeStreamer?: FastlyRealtimeStreamer;
   fastlyManager?: FastlyConnectorManager;
+  akamaiConnector?: AkamaiConnector;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -99,6 +102,9 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   // Reject oversized requests early (defence-in-depth alongside Fastify's bodyLimit,
   // which covers chunked bodies with no Content-Length).
   app.addHook('onRequest', async (req, reply) => {
+    // The DataStream 2 ingest endpoint is a data-plane sink for large log batches; it is governed by
+    // its own (higher) per-route bodyLimit, so it is exempt from the small global request-size guard.
+    if (req.url.startsWith('/api/v1/cdn/akamai/datastream/ingest')) return;
     const len = Number(req.headers['content-length'] ?? 0);
     if (Number.isFinite(len) && len > config.MAX_BODY_BYTES) {
       await reply.code(413).send({
@@ -200,6 +206,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(cloudflareRoutes, { prefix: '/api/v1', poller: deps.cloudflarePoller });
   await app.register(cloudflareConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudflareManager });
   await app.register(fastlyRoutes, { prefix: '/api/v1', poller: deps.fastlyPoller, realtimeStreamer: deps.fastlyRealtimeStreamer });
+  await app.register(akamaiRoutes, { prefix: '/api/v1', connector: deps.akamaiConnector });
   await app.register(fastlyConnectionRoutes, { prefix: '/api/v1', manager: deps.fastlyManager });
   await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
 

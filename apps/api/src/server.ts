@@ -20,6 +20,7 @@ import { createValidationStore } from './database/validation-store.js';
 import { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { CloudflareConnectorManager } from './cloudflare/manager.js';
 import { FastlyConnectorManager } from './fastly/manager.js';
+import { createAkamaiConnector } from './akamai/index.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -99,6 +100,10 @@ async function main(): Promise<void> {
   const fastlyPoller = fastlyManager.getPoller();
   const fastlyRealtimeStreamer = fastlyManager.getStreamer();
 
+  // Akamai CDN observability: read-only connector aggregating DataStream 2 edge logs pulled from S3
+  // (or pushed to the shared-secret ingest route) into per-CP-code per-second telemetry.
+  const akamaiConnector = createAkamaiConnector(config.akamai, { logger: undefined });
+
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
     database,
@@ -122,6 +127,7 @@ async function main(): Promise<void> {
     fastlyPoller,
     fastlyRealtimeStreamer,
     fastlyManager,
+    akamaiConnector,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -135,6 +141,7 @@ async function main(): Promise<void> {
     cloudVisionManager.stop();
     cloudflareManager.stop();
     fastlyManager.stop();
+    akamaiConnector.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -156,6 +163,7 @@ async function main(): Promise<void> {
     cloudVisionManager.start(); // self-guards: only polls when the effective config is enabled
     cloudflareManager.start();
     fastlyManager.start(); // self-guards: only polls when the effective config is enabled
+    akamaiConnector.start(); // self-guards: only polls S3 when enabled with credentials
     app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

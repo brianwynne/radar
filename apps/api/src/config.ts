@@ -9,6 +9,7 @@ import { loadCacheTelemetryConfig, type CacheTelemetryConfig } from './telemetry
 import { loadCloudVisionConfig, type CloudVisionConfig } from './cloudvision/config.js';
 import { loadCloudflareConfig, type CloudflareConfig } from './cloudflare/config.js';
 import { loadFastlyConfig, type FastlyConfig } from './fastly/config.js';
+import { loadAkamaiConfig, type AkamaiConfig } from './akamai/config.js';
 import { loadDnsObservationConfig, type DnsObservationConfig } from './dns-observation/config.js';
 import { loadValidationConfig, type ValidationConfig } from './validation/config.js';
 
@@ -102,6 +103,8 @@ export interface Config {
   cloudflare: CloudflareConfig;
   /** Fastly CDN observability (disabled by default; mock or read-only live). */
   fastly: FastlyConfig;
+  /** Akamai CDN observability via DataStream 2 (disabled by default; read-only). */
+  akamai: AkamaiConfig;
   /** Tier-2 active DNS observation (disabled by default). */
   dnsObservation: DnsObservationConfig;
   /** Read-only NS1 live-validation (live runs gated by NS1_VALIDATION_ENABLED). */
@@ -180,6 +183,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const cloudVision = loadCloudVisionConfig(env);
   const cloudflare = loadCloudflareConfig(env);
   const fastly = loadFastlyConfig(env);
+  const akamai = loadAkamaiConfig(env);
 
   // Tier-2 active DNS observation: disabled by default; periodic off by default.
   const dnsObservation = loadDnsObservationConfig(env);
@@ -206,6 +210,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cloudVision,
     cloudflare,
     fastly,
+    akamai,
     dnsObservation,
     validation,
   };

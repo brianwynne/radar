@@ -303,6 +303,19 @@ export const FASTLY_REALTIME_BODY = {
   warnings: [],
 };
 
+// Akamai realtime (DataStream 2 aggregated): one CP code streaming per-second telemetry.
+const akProv = { source: 'akamai', synthetic: false, readOnly: true, informationalOnly: true, notice: 'Akamai DataStream 2 telemetry — read-only and informational.', retrievedAt: '2026-07-16T21:00:02Z' };
+export const AKAMAI_REALTIME_BODY = {
+  provenance: akProv, source: 'akamai', windowSeconds: 300,
+  series: [
+    { serviceId: '1629049', serviceName: 'LIVE.RTE.IE', latestRequestsPerSecond: 315, latestBandwidthBps: 1_120_000_000, lastSampleAt: '2026-07-16T21:00:02Z', samples: [
+      { second: 1784235600, at: '2026-07-16T21:00:00Z', requests: 300, hits: 240, miss: 60, bandwidthBytes: 140_000_000, status2xx: 250, status3xx: 20, status4xx: 20, status5xx: 10, statusCodes: { '200': 230, '206': 20, '304': 20, '404': 20, '500': 10 } },
+      { second: 1784235602, at: '2026-07-16T21:00:02Z', requests: 315, hits: 255, miss: 60, bandwidthBytes: 140_000_000, status2xx: 265, status3xx: 20, status4xx: 20, status5xx: 10, statusCodes: { '200': 245, '206': 20, '304': 20, '404': 20, '500': 10 } },
+    ] },
+  ],
+  warnings: [],
+};
+
 const defaultConnection = { connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp.test', verifyTls: true, edgeDeviceIds: ['DEV1'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
 let connectionState: Record<string, unknown> = { ...defaultConnection };
 
@@ -339,6 +352,7 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/cdn/fastly/status')) body = FASTLY_STATUS_BODY;
       else if (p.endsWith('/cdn/fastly/services')) body = FASTLY_SERVICES_BODY;
       else if (p.endsWith('/cdn/fastly/realtime')) body = FASTLY_REALTIME_BODY;
+      else if (p.endsWith('/cdn/akamai/realtime')) body = AKAMAI_REALTIME_BODY;
       else if (p.endsWith('/cdn/fastly/connection/test')) body = { result: { ok: true, source: 'fastly', summary: { services: 3 } } };
       else if (p.endsWith('/cdn/fastly/connection')) {
         if (init?.method === 'PUT') {
