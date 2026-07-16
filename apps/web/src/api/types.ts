@@ -1050,6 +1050,22 @@ export interface AkamaiSeries {
 }
 export interface AkamaiRealtimeResponse { provenance: AkamaiProvenance; source: AkamaiSource; windowSeconds: number; series: AkamaiSeries[]; warnings: string[] }
 
+// Engineer-managed Akamai (DataStream 2 → S3) connection settings. The S3 secret key is write-only.
+export interface AkamaiConnectionSettings {
+  connector: 'akamai'; enabled: boolean; cpCodes: string[]; cpNames: Record<string, string>;
+  s3: { bucket: string; region: string; prefix: string; accessKeyId: string; pollIntervalSeconds: number };
+  windowSeconds: number; secretConfigured: boolean; secretSetAt: string | null; updatedBy: string | null; updatedAt: string | null;
+  source: 'database' | 'environment'; masterKeyAvailable: boolean; connected: boolean; degraded: string | null;
+}
+export interface AkamaiConnectionResponse { settings: AkamaiConnectionSettings }
+export interface AkamaiConnectionUpdate {
+  enabled?: boolean; cpCodes?: string[] | null; cpNames?: Record<string, string> | null;
+  bucket?: string | null; region?: string | null; prefix?: string | null; accessKeyId?: string | null;
+  pollIntervalSeconds?: number | null; windowSeconds?: number | null; secretKey?: string; clearSecret?: boolean;
+}
+export interface AkamaiConnectionTestResult { ok: boolean; source: string; error?: string; summary?: { objects: number } }
+export interface AkamaiConnectionTestResponse { result: AkamaiConnectionTestResult }
+
 // Engineer-managed Fastly connection settings (API base + service ids + write-only token).
 export interface FastlyConnection {
   connector: 'fastly'; enabled: boolean; mode: 'mock' | 'live'; apiBase: string; serviceIds: string[];

@@ -325,10 +325,14 @@ let cloudflareConnectionState: Record<string, unknown> = { ...defaultCloudflareC
 const defaultFastlyConnection = { connector: 'fastly', enabled: true, mode: 'live', apiBase: 'https://api.fastly.com', serviceIds: ['SU-vod'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
 let fastlyConnectionState: Record<string, unknown> = { ...defaultFastlyConnection };
 
+const defaultAkamaiConnection = { connector: 'akamai', enabled: false, cpCodes: [] as string[], cpNames: {} as Record<string, string>, s3: { bucket: '', region: 'us-east-1', prefix: '', accessKeyId: '', pollIntervalSeconds: 30 }, windowSeconds: 300, secretConfigured: false, secretSetAt: null, updatedBy: null, updatedAt: null, source: 'environment', masterKeyAvailable: true, connected: false, degraded: null };
+let akamaiConnectionState: Record<string, unknown> = { ...defaultAkamaiConnection };
+
 export function stubApi(principal: Principal): void {
   connectionState = { ...defaultConnection };
   cloudflareConnectionState = { ...defaultCloudflareConnection };
   fastlyConnectionState = { ...defaultFastlyConnection };
+  akamaiConnectionState = { ...defaultAkamaiConnection };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -367,6 +371,23 @@ export function stubApi(principal: Principal): void {
           };
         }
         body = { settings: fastlyConnectionState };
+      }
+      else if (p.endsWith('/cdn/akamai/connection/test')) body = { result: { ok: true, source: 'akamai', summary: { objects: 5 } } };
+      else if (p.endsWith('/cdn/akamai/connection')) {
+        if (init?.method === 'PUT') {
+          const b = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+          const s3 = akamaiConnectionState.s3 as Record<string, unknown>;
+          akamaiConnectionState = {
+            ...akamaiConnectionState,
+            enabled: b.enabled ?? akamaiConnectionState.enabled,
+            cpCodes: b.cpCodes ?? akamaiConnectionState.cpCodes,
+            cpNames: b.cpNames ?? akamaiConnectionState.cpNames,
+            s3: { ...s3, bucket: b.bucket !== undefined ? b.bucket : s3.bucket, region: b.region !== undefined ? b.region : s3.region, prefix: b.prefix !== undefined ? b.prefix : s3.prefix, accessKeyId: b.accessKeyId !== undefined ? b.accessKeyId : s3.accessKeyId, pollIntervalSeconds: b.pollIntervalSeconds ?? s3.pollIntervalSeconds },
+            secretConfigured: b.clearSecret ? false : b.secretKey ? true : akamaiConnectionState.secretConfigured,
+            source: 'database',
+          };
+        }
+        body = { settings: akamaiConnectionState };
       }
       else if (p.endsWith('/network/cloudflare/connection/test')) body = { result: { ok: true, source: 'cloudflare', summary: { loadBalancers: 2, pools: 3, origins: 6 } } };
       else if (p.endsWith('/network/cloudflare/connection')) {

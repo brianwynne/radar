@@ -34,31 +34,51 @@ export interface AkamaiConnectorDeps {
 }
 
 export class AkamaiConnector {
-  private readonly aggregator: AkamaiAggregator;
-  private readonly poller: AkamaiS3Poller;
-  private readonly enabled: boolean;
-  private readonly ingestSecret: string;
-  private readonly hasS3: boolean;
-  private readonly maxStaleMs: number;
+  private aggregator!: AkamaiAggregator;
+  private poller!: AkamaiS3Poller;
+  private s3!: S3ReadClient | null;
+  private prefix!: string;
+  private enabled!: boolean;
+  private ingestSecret!: string;
+  private hasS3!: boolean;
+  private maxStaleMs!: number;
+  private running = false;
   private readonly now: () => number;
+  private readonly deps: AkamaiConnectorDeps;
 
   constructor(config: AkamaiConfig, deps: AkamaiConnectorDeps = {}) {
+    this.deps = deps;
+    this.now = deps.now ?? (() => Date.now());
+    this.build(config);
+  }
+
+  /** (Re)build the aggregator + S3 client + poller from an effective config. Used by the connector
+   *  manager when an Engineer changes the connection; existing accumulated data is dropped. */
+  reconfigure(config: AkamaiConfig): void {
+    const wasRunning = this.running;
+    this.poller.stop();
+    this.build(config);
+    if (wasRunning) this.start();
+  }
+
+  private build(config: AkamaiConfig): void {
     this.enabled = config.enabled;
     this.ingestSecret = config.ingestSecret;
-    this.now = deps.now ?? (() => Date.now());
     this.aggregator = new AkamaiAggregator(
       { cpCodes: config.cpCodes, names: config.cpNames, windowSeconds: config.windowSeconds, source: config.enabled ? 'akamai' : 'disabled' },
-      { now: deps.now },
+      { now: this.deps.now },
     );
     const s3 = config.enabled && config.s3.bucket && config.s3.accessKeyId && config.s3.secretAccessKey
-      ? new S3ReadClient({ bucket: config.s3.bucket, region: config.s3.region, accessKeyId: config.s3.accessKeyId, secretKey: config.s3.secretAccessKey, now: deps.now, fetchImpl: deps.fetchImpl })
+      ? new S3ReadClient({ bucket: config.s3.bucket, region: config.s3.region, accessKeyId: config.s3.accessKeyId, secretKey: config.s3.secretAccessKey, now: this.deps.now, fetchImpl: this.deps.fetchImpl })
       : null;
+    this.s3 = s3;
+    this.prefix = config.s3.prefix;
     this.hasS3 = s3 !== null;
     // A live poll is "recent" for a few poll intervals or the retention window, whichever is longer.
     this.maxStaleMs = Math.max(config.windowSeconds, config.s3.pollIntervalSeconds * 3) * 1000;
     this.poller = new AkamaiS3Poller({
       s3, aggregator: this.aggregator, prefix: config.s3.prefix, intervalMs: config.s3.pollIntervalSeconds * 1000,
-      enabled: config.enabled && s3 !== null, now: deps.now, logger: deps.logger,
+      enabled: config.enabled && s3 !== null, now: this.deps.now, logger: this.deps.logger,
     });
   }
 
@@ -102,8 +122,20 @@ export class AkamaiConnector {
   /** Run one S3 poll now (used by tests and to warm the connection). */
   pollOnce(): Promise<{ ok: boolean; objects: number; records: number; error?: string }> { return this.poller.runOnce(); }
 
-  start(): void { this.poller.start(); }
-  stop(): void { this.poller.stop(); }
+  /** Read-only connection test: one bounded S3 list against the current credentials. Never ingests. */
+  async testConnection(): Promise<{ ok: boolean; error?: string; objects?: number }> {
+    if (!this.enabled) return { ok: false, error: 'Connector is disabled.' };
+    if (!this.s3) return { ok: false, error: 'S3 source is not configured (bucket + credentials required).' };
+    try {
+      const page = await this.s3.listObjects(this.prefix, { maxKeys: 1 });
+      return { ok: true, objects: page.objects.length };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : 'S3 list failed.' };
+    }
+  }
+
+  start(): void { this.running = true; this.poller.start(); }
+  stop(): void { this.running = false; this.poller.stop(); }
 }
 
 export function createAkamaiConnector(config: AkamaiConfig, deps: AkamaiConnectorDeps = {}): AkamaiConnector {

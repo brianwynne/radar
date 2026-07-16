@@ -25,7 +25,9 @@ import { cloudflareConnectionRoutes } from './routes/cloudflare-connection.js';
 import { fastlyRoutes } from './routes/fastly.js';
 import { fastlyConnectionRoutes } from './routes/fastly-connection.js';
 import { akamaiRoutes } from './routes/akamai.js';
+import { akamaiConnectionRoutes } from './routes/akamai-connection.js';
 import type { AkamaiConnector } from './akamai/index.js';
+import type { AkamaiConnectorManager } from './akamai/manager.js';
 import type { FastlyPoller } from './fastly/poller.js';
 import type { FastlyRealtimeStreamer } from './fastly/realtime-streamer.js';
 import type { FastlyConnectorManager } from './fastly/manager.js';
@@ -79,6 +81,7 @@ export interface BuildDeps extends AuthDeps {
   fastlyRealtimeStreamer?: FastlyRealtimeStreamer;
   fastlyManager?: FastlyConnectorManager;
   akamaiConnector?: AkamaiConnector;
+  akamaiManager?: AkamaiConnectorManager;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -207,6 +210,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(cloudflareConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudflareManager });
   await app.register(fastlyRoutes, { prefix: '/api/v1', poller: deps.fastlyPoller, realtimeStreamer: deps.fastlyRealtimeStreamer });
   await app.register(akamaiRoutes, { prefix: '/api/v1', connector: deps.akamaiConnector });
+  await app.register(akamaiConnectionRoutes, { prefix: '/api/v1', manager: deps.akamaiManager });
   await app.register(fastlyConnectionRoutes, { prefix: '/api/v1', manager: deps.fastlyManager });
   await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
 

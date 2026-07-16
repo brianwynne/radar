@@ -20,7 +20,7 @@ import { createValidationStore } from './database/validation-store.js';
 import { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { CloudflareConnectorManager } from './cloudflare/manager.js';
 import { FastlyConnectorManager } from './fastly/manager.js';
-import { createAkamaiConnector } from './akamai/index.js';
+import { AkamaiConnectorManager } from './akamai/manager.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -101,8 +101,17 @@ async function main(): Promise<void> {
   const fastlyRealtimeStreamer = fastlyManager.getStreamer();
 
   // Akamai CDN observability: read-only connector aggregating DataStream 2 edge logs pulled from S3
-  // (or pushed to the shared-secret ingest route) into per-CP-code per-second telemetry.
-  const akamaiConnector = createAkamaiConnector(config.akamai, { logger: undefined });
+  // (or pushed to the shared-secret ingest route) into per-CP-code per-second telemetry. Managed by
+  // the connector manager: non-secret S3 settings + CP codes persist in Postgres (Engineer-managed),
+  // the S3 secret key is stored encrypted with the master key from /run/secrets/radar_master_key.
+  const akamaiManager = new AkamaiConnectorManager({
+    baseConfig: config.akamai,
+    repository: createConnectorSettingsStore(pool),
+    secretBox: SecretBox.fromMasterKey(),
+    audit: database.audit,
+  });
+  await akamaiManager.init();
+  const akamaiConnector = akamaiManager.getConnector();
 
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
@@ -128,6 +137,7 @@ async function main(): Promise<void> {
     fastlyRealtimeStreamer,
     fastlyManager,
     akamaiConnector,
+    akamaiManager,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -141,7 +151,7 @@ async function main(): Promise<void> {
     cloudVisionManager.stop();
     cloudflareManager.stop();
     fastlyManager.stop();
-    akamaiConnector.stop();
+    akamaiManager.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -163,7 +173,7 @@ async function main(): Promise<void> {
     cloudVisionManager.start(); // self-guards: only polls when the effective config is enabled
     cloudflareManager.start();
     fastlyManager.start(); // self-guards: only polls when the effective config is enabled
-    akamaiConnector.start(); // self-guards: only polls S3 when enabled with credentials
+    akamaiManager.start(); // self-guards: only polls S3 when enabled with credentials
     app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

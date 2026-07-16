@@ -40,6 +40,9 @@ import type {
   FastlyServicesResponse,
   FastlyRealtimeResponse,
   AkamaiRealtimeResponse,
+  AkamaiConnectionResponse,
+  AkamaiConnectionUpdate,
+  AkamaiConnectionTestResponse,
   FastlyConnectionResponse,
   FastlyConnectionUpdate,
   FastlyConnectionTestResponse,
@@ -240,6 +243,11 @@ export const api = {
   fastlyServices: () => request<FastlyServicesResponse>('/api/v1/cdn/fastly/services'),
   fastlyRealtime: () => request<FastlyRealtimeResponse>('/api/v1/cdn/fastly/realtime'),
   akamaiRealtime: () => request<AkamaiRealtimeResponse>('/api/v1/cdn/akamai/realtime'),
+
+  // Akamai connection settings (Engineer only). The S3 secret key is write-only.
+  akamaiConnection: () => request<AkamaiConnectionResponse>('/api/v1/cdn/akamai/connection'),
+  akamaiConnectionUpdate: (body: AkamaiConnectionUpdate) => request<AkamaiConnectionResponse>('/api/v1/cdn/akamai/connection', { method: 'PUT', body: JSON.stringify(body) }),
+  akamaiConnectionTest: () => request<AkamaiConnectionTestResponse>('/api/v1/cdn/akamai/connection/test', { method: 'POST', body: JSON.stringify({}) }),
 
   // Fastly connection settings (Engineer only). The token is write-only.
   fastlyConnection: () => request<FastlyConnectionResponse>('/api/v1/cdn/fastly/connection'),

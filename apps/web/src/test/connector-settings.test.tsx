@@ -34,6 +34,7 @@ describe('Integrations Token Management', () => {
     await screen.findByRole('heading', { name: /CloudVision \(network telemetry\)/i });
     await screen.findByRole('heading', { name: /Cloudflare \(Réalta cache load balancing\)/i });
     await screen.findByRole('heading', { name: /Fastly \(commercial CDN\)/i });
+    await screen.findByRole('heading', { name: /Akamai \(DataStream 2/i });
   });
 
   it('renders a write-only token field per section (blank even when configured)', async () => {
@@ -100,5 +101,22 @@ describe('Integrations Token Management', () => {
 
     fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
     expect(await screen.findByText(/Connection OK.*services/i)).toBeInTheDocument();
+  });
+
+  it('saves the Akamai S3 config (write-only secret) and tests the S3 connection', async () => {
+    stubApi(ENGINEER);
+    renderAt('/network/connection');
+    const heading = await screen.findByRole('heading', { name: /Akamai \(DataStream 2/i });
+    const card = within(heading.closest('.connector-section') as HTMLElement);
+
+    fireEvent.change(await card.findByPlaceholderText('rte-akamai-ds2'), { target: { value: 'rte-ds2' } });
+    fireEvent.change(card.getByPlaceholderText('AKIA…'), { target: { value: 'AKIAXXX' } });
+    fireEvent.change(card.getByPlaceholderText(/not configured/i), { target: { value: 's3-secret' } });
+    fireEvent.click(card.getByRole('button', { name: 'Save' }));
+    await screen.findByText(/Saved/i);
+    expect(putBody('/cdn/akamai/connection')).toMatchObject({ bucket: 'rte-ds2', accessKeyId: 'AKIAXXX', secretKey: 's3-secret' });
+
+    fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText(/S3 connection OK.*5 object/i)).toBeInTheDocument();
   });
 });

@@ -8,6 +8,7 @@ import type {
   ConnectorSettingsView, ConnectorSettingsUpdateRequest, ConnectorTestResult,
   CloudflareConnectionSettings, CloudflareConnectionUpdateRequest, CloudflareConnectionTestResult,
   FastlyConnection, FastlyConnectionUpdate, FastlyConnectionTestResult,
+  AkamaiConnectionSettings, AkamaiConnectionUpdate, AkamaiConnectionTestResult,
 } from '../api/types';
 
 export function ConnectorSettings() {
@@ -20,6 +21,7 @@ export function ConnectorSettings() {
       <CloudVisionConnectorForm />
       <CloudflareConnectorForm />
       <FastlyConnectorForm />
+      <AkamaiConnectorForm />
     </section>
   );
 }
@@ -410,6 +412,158 @@ function FastlyConnectorForm() {
               <div className="kv"><span>Token set at</span><span>{view.tokenSetAt ?? '—'}</span></div>
               <div className="kv"><span>Last updated by</span><span>{view.updatedBy ?? '—'}</span></div>
               <div className="kv"><span>Master key available</span><span>{view.masterKeyAvailable ? 'yes' : 'no'}</span></div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- Akamai (commercial CDN via DataStream 2 → S3) ------------------------------------------
+
+const namesToText = (r: Record<string, string>): string => Object.entries(r).map(([k, v]) => `${k}=${v}`).join(', ');
+function textToNames(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const pair of text.split(',').map((s) => s.trim()).filter(Boolean)) {
+    const i = pair.indexOf('=');
+    if (i > 0) out[pair.slice(0, i).trim()] = pair.slice(i + 1).trim();
+  }
+  return out;
+}
+
+function AkamaiConnectorForm() {
+  const [view, setView] = useState<AkamaiConnectionSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [testResult, setTestResult] = useState<AkamaiConnectionTestResult | null>(null);
+
+  // Editable form state (the S3 secret is write-only — never populated from the server).
+  const [enabled, setEnabled] = useState(false);
+  const [cpCodes, setCpCodes] = useState('');
+  const [cpNames, setCpNames] = useState('');
+  const [bucket, setBucket] = useState('');
+  const [region, setRegion] = useState('');
+  const [prefix, setPrefix] = useState('');
+  const [accessKeyId, setAccessKeyId] = useState('');
+  const [pollInterval, setPollInterval] = useState('30');
+  const [secretKey, setSecretKey] = useState('');
+  const [clearSecret, setClearSecret] = useState(false);
+
+  const hydrate = useCallback((s: AkamaiConnectionSettings) => {
+    setView(s);
+    setEnabled(s.enabled);
+    setCpCodes(s.cpCodes.join(', '));
+    setCpNames(namesToText(s.cpNames));
+    setBucket(s.s3.bucket);
+    setRegion(s.s3.region);
+    setPrefix(s.s3.prefix);
+    setAccessKeyId(s.s3.accessKeyId);
+    setPollInterval(String(s.s3.pollIntervalSeconds));
+    setSecretKey('');
+    setClearSecret(false);
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      hydrate((await api.akamaiConnection()).settings);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Failed to load Akamai settings.');
+    } finally {
+      setLoading(false);
+    }
+  }, [hydrate]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const save = async () => {
+    setSaved(false);
+    setError(null);
+    const body: AkamaiConnectionUpdate = {
+      enabled,
+      cpCodes: cpCodes.split(',').map((s) => s.trim()).filter(Boolean),
+      cpNames: textToNames(cpNames),
+      bucket: bucket.trim() || null,
+      region: region.trim() || null,
+      prefix: prefix.trim() || null,
+      accessKeyId: accessKeyId.trim() || null,
+      pollIntervalSeconds: Number(pollInterval) || null,
+    };
+    if (clearSecret) body.clearSecret = true;
+    else if (secretKey.trim().length > 0) body.secretKey = secretKey.trim();
+    try {
+      hydrate((await api.akamaiConnectionUpdate(body)).settings);
+      setSaved(true);
+      setTestResult(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Failed to save.');
+    }
+  };
+
+  const runTest = async () => {
+    setTestResult(null);
+    setError(null);
+    try {
+      setTestResult((await api.akamaiConnectionTest()).result);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Test failed.');
+    }
+  };
+
+  return (
+    <div className="connector-section">
+      <div className="section-head">
+        <h2>Akamai (DataStream 2 → S3)</h2>
+        {view && <span className={`badge ${view.connected ? 'ok' : 'neutral'}`}>{view.connected ? 'connected' : 'not connected'}</span>}
+      </div>
+      <p className="muted">RADAR pulls Akamai DataStream 2 edge-log objects from an S3 bucket and aggregates them into per-CP-code telemetry. The stream itself is created in Akamai Control Center (destination = this bucket); RADAR needs read-only S3 credentials.</p>
+      {loading ? <div className="center-note">Loading…</div> : (
+        <>
+          {view && !view.masterKeyAvailable && (
+            <div className="notice warn">No master key is available (<code>/run/secrets/radar_master_key</code>). You can edit non-secret settings, but the S3 secret key cannot be stored until the master key is provisioned — an environment secret (<code>AKAMAI_S3_SECRET_KEY</code>) still drives the connector.</div>
+          )}
+          {view?.degraded && <div className="notice warn">{view.degraded}</div>}
+          {error && <div className="notice danger">{error}</div>}
+          {saved && <div className="notice ok">Saved. The connector was reconfigured.</div>}
+
+          <div className="card">
+            <div className="field-row"><label className="switch"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Enabled</label></div>
+            <label className="field"><span>CP codes <span className="muted">(comma-separated; blank = all seen)</span></span><input value={cpCodes} onChange={(e) => setCpCodes(e.target.value)} placeholder="1629049, 1629053" /></label>
+            <label className="field"><span>CP code names <span className="muted">(code=Name, comma-separated)</span></span><input value={cpNames} onChange={(e) => setCpNames(e.target.value)} placeholder="1629049=LIVE.RTE.IE" /></label>
+            <label className="field"><span>S3 bucket</span><input value={bucket} onChange={(e) => setBucket(e.target.value)} placeholder="rte-akamai-ds2" /></label>
+            <label className="field"><span>S3 region</span><input value={region} onChange={(e) => setRegion(e.target.value)} placeholder="eu-west-1" /></label>
+            <label className="field"><span>S3 prefix <span className="muted">(optional)</span></span><input value={prefix} onChange={(e) => setPrefix(e.target.value)} placeholder="datastream/" /></label>
+            <label className="field"><span>S3 access key ID</span><input value={accessKeyId} onChange={(e) => setAccessKeyId(e.target.value)} placeholder="AKIA…" /></label>
+            <label className="field"><span>S3 secret access key <span className="muted">(write-only)</span> {view?.secretConfigured && <span className="badge ok badge-sm">configured</span>}</span>
+              <input type="password" autoComplete="off" value={secretKey} disabled={clearSecret} onChange={(e) => setSecretKey(e.target.value)}
+                placeholder={view?.secretConfigured ? '•••••••• configured — leave blank to keep' : 'not configured'} />
+            </label>
+            <label className="field"><span>Poll interval (seconds)</span><input type="number" min={5} max={3600} value={pollInterval} onChange={(e) => setPollInterval(e.target.value)} /></label>
+            {view?.secretConfigured && (
+              <div className="field-row"><label className="switch"><input type="checkbox" checked={clearSecret} onChange={(e) => setClearSecret(e.target.checked)} /> Clear the stored secret</label></div>
+            )}
+            <div className="actions">
+              <button className="btn primary" onClick={() => void save()}>Save</button>
+              <button className="btn" onClick={() => void runTest()}>Test connection</button>
+            </div>
+          </div>
+
+          {testResult && (
+            <div className={`notice ${testResult.ok ? 'ok' : 'danger'}`}>
+              {testResult.ok
+                ? `S3 connection OK — listed ${testResult.summary?.objects ?? 0} object(s).`
+                : `S3 connection failed${testResult.error ? `: ${testResult.error}` : ''}.`}
+            </div>
+          )}
+
+          {view && (
+            <div className="card">
+              <div className="kv"><span>S3 secret configured</span><span>{view.secretConfigured ? 'yes' : 'no'}</span></div>
+              <div className="kv"><span>Secret set at</span><span>{view.secretSetAt ?? '—'}</span></div>
+              <div className="kv"><span>Last updated by</span><span>{view.updatedBy ?? '—'}</span></div>
+              <div className="kv"><span>Connected</span><span>{view.connected ? 'yes' : 'no'}</span></div>
             </div>
           )}
         </>
