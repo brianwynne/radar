@@ -81,15 +81,16 @@ export function NetworkTelemetry() {
 
   const providers = useMemo(() => [...new Set(t.interfaces.map((i) => i.provider).filter((p): p is string => !!p))].sort(), [t.interfaces]);
 
-  // Busiest links: the top 10 interfaces by utilisation. Excludes LAG members (their Port-Channel
-  // already represents their load) so the slots are distinct links.
+  // Busiest links: the top 10 interfaces by utilisation, scoped to the selected router (follows
+  // the Router filter). Excludes LAG members (their Port-Channel already represents their load)
+  // so the slots are distinct links.
   const topInterfaces = useMemo(
     () =>
       t.interfaces
-        .filter((i) => i.memberOf === null && i.utilisationPercent !== null)
+        .filter((i) => (!device || i.deviceId === device) && i.memberOf === null && i.utilisationPercent !== null)
         .sort((a, b) => (b.utilisationPercent ?? 0) - (a.utilisationPercent ?? 0))
         .slice(0, 10),
-    [t.interfaces],
+    [t.interfaces, device],
   );
 
   // Hysteretic utilisation colour level per interface. Advanced once per poll (keyed on the
@@ -264,8 +265,8 @@ export function NetworkTelemetry() {
         </table>
       </div>
 
-      {/* Busiest links — top 10 interfaces by utilisation (live) */}
-      <h2>Top interfaces by utilisation</h2>
+      {/* Busiest links — top 10 interfaces by utilisation (live), scoped to the Router filter */}
+      <h2>Top interfaces by utilisation {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>

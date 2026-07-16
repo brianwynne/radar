@@ -126,6 +126,18 @@ describe('Network Telemetry page', () => {
     expect(within(dataRows[0]).getByText('88.0%')).toBeInTheDocument();
   });
 
+  it('scopes the top-interfaces list to the Router filter', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    const topTable = () => screen.getByRole('heading', { name: /Top interfaces by utilisation/ }).nextElementSibling!.querySelector('table')!;
+    // Globally, edge1's Ethernet2 (88%) is the busiest.
+    expect(within(topTable()).getByText('Ethernet2')).toBeInTheDocument();
+    // Select edge2 → the list follows, and edge1's Ethernet2 drops out.
+    fireEvent.change(screen.getByLabelText('Router'), { target: { value: 'JPE00000002' } });
+    expect(within(topTable()).queryByText('Ethernet2')).not.toBeInTheDocument();
+  });
+
   it('colour-codes utilisation: amber ≥60% of capacity, red ≥80%, clear below', async () => {
     stubApi(NOC);
     renderAt('/network');
