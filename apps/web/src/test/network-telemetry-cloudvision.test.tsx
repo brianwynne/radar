@@ -7,7 +7,7 @@ import { NOC, VE, ENGINEER, renderAt, stubApi } from './helpers';
 afterEach(() => vi.unstubAllGlobals());
 
 describe('Network Telemetry page', () => {
-  it('shows summary, provider cards, interfaces and BGP peers to a NOC viewer', async () => {
+  it('shows summary, top interfaces, interfaces and BGP peers to a NOC viewer', async () => {
     stubApi(NOC);
     renderAt('/network');
 
@@ -17,9 +17,8 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('MOCK · SYNTHETIC')).toBeInTheDocument();
     expect(screen.getByText(/read-only and informational/i)).toBeInTheDocument();
 
-    // Provider cards render (the "Healthy links" kv is unique to a provider card).
-    expect(screen.getByRole('heading', { name: 'Providers' })).toBeInTheDocument();
-    expect(screen.getAllByText('Healthy links').length).toBeGreaterThan(0);
+    // Top-interfaces-by-utilisation section renders (replaced the provider cards).
+    expect(screen.getByRole('heading', { name: 'Top interfaces by utilisation' })).toBeInTheDocument();
 
     // Interface + BGP content.
     expect(screen.getAllByText('down').length).toBeGreaterThan(0); // transit oper/status
@@ -115,11 +114,23 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText(/next read in \d+s|reading…/)).toBeInTheDocument();
   });
 
+  it('lists the top interfaces by utilisation, busiest first', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin'); // wait for interface data to load
+    const heading = screen.getByRole('heading', { name: 'Top interfaces by utilisation' });
+    const table = heading.nextElementSibling!.querySelector('table')!;
+    const dataRows = within(table).getAllByRole('row').slice(1); // drop the header row
+    // Busiest link first: INEX Ethernet2 at 88% (LAG members are excluded from this list).
+    expect(within(dataRows[0]).getByText('Ethernet2')).toBeInTheDocument();
+    expect(within(dataRows[0]).getByText('88.0%')).toBeInTheDocument();
+  });
+
   it('colour-codes utilisation: amber ≥60% of capacity, red ≥80%, clear below', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin');
-    // Scope to each interface's ROW (the same percentages also appear in the provider cards).
+    // Scope to each interface's ROW (the same percentages also appear in the top-interfaces table).
     const row = (desc: string) => within(screen.getByText(desc).closest('tr')!);
     // INEX Ethernet2 is at 88% → red (crit).
     expect(row('INEX IXP Dublin').getByText('88.0%')).toHaveClass('util-crit');

@@ -81,6 +81,17 @@ export function NetworkTelemetry() {
 
   const providers = useMemo(() => [...new Set(t.interfaces.map((i) => i.provider).filter((p): p is string => !!p))].sort(), [t.interfaces]);
 
+  // Busiest links: the top 5 interfaces by utilisation. Excludes LAG members (their Port-Channel
+  // already represents their load) so the five slots are distinct links.
+  const topInterfaces = useMemo(
+    () =>
+      t.interfaces
+        .filter((i) => i.memberOf === null && i.utilisationPercent !== null)
+        .sort((a, b) => (b.utilisationPercent ?? 0) - (a.utilisationPercent ?? 0))
+        .slice(0, 5),
+    [t.interfaces],
+  );
+
   // Hysteretic utilisation colour level per interface. Advanced once per poll (keyed on the
   // interface array identity) and remembered across polls in a ref, so a link hovering at a
   // threshold keeps a stable colour instead of flickering. Computed over ALL interfaces (not the
@@ -220,26 +231,31 @@ export function NetworkTelemetry() {
         <div className="card"><div className="muted">Devices / interfaces</div><div className="stat">{num(t.summary?.deviceCount)} / {num(t.summary?.interfaceCount)}</div></div>
       </div>
 
-      {/* Provider cards */}
-      <h2>Providers</h2>
-      <div className="grid cols-3">
-        {t.linkGroups.length === 0 && <div className="center-note">No provider groups.</div>}
-        {t.linkGroups.map((g) => {
-          const m = healthMeta(g.status);
-          return (
-            <div className="card" key={g.key}>
-              <div className="card-head">
-                <strong>{g.label}</strong>
-                <span className={`badge ${m.badge}`}>{m.label}</span>
-              </div>
-              <div className="kv"><span>Current</span><span>{formatBps(g.currentBps)}</span></div>
-              <div className="kv"><span>Capacity</span><span>{formatBps(g.capacityBps)}</span></div>
-              <div className="kv"><span>Utilisation</span><span>{formatPercent(g.utilisationPercent)}</span></div>
-              <div className="kv"><span>Headroom</span><span>{formatBps(g.headroomBps)}</span></div>
-              <div className="kv"><span>Healthy links</span><span>{g.healthyLinks}/{g.totalLinks}</span></div>
-            </div>
-          );
-        })}
+      {/* Busiest links — top 5 interfaces by utilisation (live) */}
+      <h2>Top interfaces by utilisation</h2>
+      <div className="matrix-wrap">
+        <table className="matrix">
+          <thead>
+            <tr><th>Router</th><th>Interface</th><th>Name</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
+          </thead>
+          <tbody>
+            {topInterfaces.length === 0 && <tr><td colSpan={7} className="center-note">No interface utilisation yet.</td></tr>}
+            {topInterfaces.map((i) => {
+              const key = ifKey(i.deviceId, i.name);
+              return (
+                <tr key={key}>
+                  <td>{i.deviceHostname}</td>
+                  <td>{i.name}</td>
+                  <td>{i.friendlyName ?? '—'}</td>
+                  <td>{i.provider ?? '—'}</td>
+                  <td>{formatBps(i.speedBps)}</td>
+                  <td>{formatBps(i.primaryBps)}</td>
+                  <td className={utilClass(levelByKey.get(key) ?? 'ok')}>{formatPercent(i.utilisationPercent)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
 
       {/* Devices — selectable; click a device to drill into its interfaces + BGP peers */}
