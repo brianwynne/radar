@@ -250,6 +250,30 @@ export const NETWORK_HISTORY_BODY = {
   ],
 };
 
+const cfProv = { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, notice: 'MOCK / SYNTHETIC Cloudflare Load Balancing.', retrievedAt: '2026-07-16T12:00:00Z' };
+const cfCheck = { type: 'https', method: 'GET', path: '/player/monitoring/alive', expectedCodes: '200', expectedBody: 'OK', intervalSeconds: 60, timeoutSeconds: 5, retries: 2 };
+export const CLOUDFLARE_POOLS_BODY = {
+  provenance: cfProv, count: 2,
+  items: [
+    { id: 'p-ctw', name: 'live-realta-citywest', description: null, enabled: true, healthy: true, monitorId: 'm1', healthCheck: cfCheck, minimumOrigins: 1, healthyOrigins: 1, totalOrigins: 2, origins: [
+      { name: 'cdn-mem-ctw-1', address: '185.54.105.0', weight: 1, enabled: true, healthy: true, failureReason: null },
+      { name: 'cdn-mem-ctw-2', address: '185.54.105.4', weight: 1, enabled: true, healthy: false, failureReason: 'monitor: connection refused' }] },
+    { id: 'p-vod', name: 'vod-edge-caches', description: null, enabled: true, healthy: true, monitorId: 'm2', healthCheck: cfCheck, minimumOrigins: 1, healthyOrigins: 1, totalOrigins: 1, origins: [
+      { name: 'vod-1', address: '185.54.107.1', weight: 1, enabled: true, healthy: true, failureReason: null }] },
+  ],
+};
+export const CLOUDFLARE_LBS_BODY = {
+  provenance: cfProv, count: 1,
+  items: [{ id: 'lb-live', name: 'liveedge.rte.ie', zoneName: 'rte.ie', enabled: true, proxied: false, steeringPolicy: 'random', locationStrategy: 'pop',
+    defaultPools: [{ poolId: 'p-ctw', poolName: 'live-realta-citywest', weight: 0.5 }, { poolId: 'p-vod', poolName: 'vod-edge-caches', weight: 0.5 }], fallbackPool: { poolId: 'p-ctw', poolName: 'live-realta-citywest', weight: null }, regionPools: {}, popPools: {}, sessionAffinity: 'none',
+    observed: { windowHours: 1, totalRequests: 10480, byPool: [{ key: 'live-realta-citywest', requests: 5281, sharePercent: 50.4 }, { key: 'vod-edge-caches', requests: 5199, sharePercent: 49.6 }], byRegion: [{ key: 'WEU', requests: 10480, sharePercent: 100 }], byColo: [{ key: 'DUB', requests: 10480, sharePercent: 100 }] } }],
+};
+export const CLOUDFLARE_STATUS_BODY = {
+  status: { enabled: true, running: true, source: 'mock', intervalMs: 60000, lastPollAt: '2026-07-16T12:00:00Z', lastSuccessAt: '2026-07-16T12:00:00Z', lastDurationMs: 5, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: 3, loadBalancerCount: 1, poolCount: 2 },
+  summary: { loadBalancerCount: 1, poolCount: 2, originCount: 3, unhealthyPools: 0, unhealthyOrigins: 1 },
+  provenance: cfProv, warnings: [],
+};
+
 const defaultConnection = { connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp.test', verifyTls: true, edgeDeviceIds: ['DEV1'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
 let connectionState: Record<string, unknown> = { ...defaultConnection };
 
@@ -272,6 +296,9 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/network/link-groups')) body = NETWORK_LINK_GROUPS_BODY;
       else if (p.endsWith('/network/bgp-peers')) body = NETWORK_BGP_BODY;
       else if (p.endsWith('/network/history')) body = NETWORK_HISTORY_BODY;
+      else if (p.endsWith('/network/cloudflare/status')) body = CLOUDFLARE_STATUS_BODY;
+      else if (p.endsWith('/network/cloudflare/load-balancers')) body = CLOUDFLARE_LBS_BODY;
+      else if (p.endsWith('/network/cloudflare/pools')) body = CLOUDFLARE_POOLS_BODY;
       else if (p.endsWith('/network/connection/test')) body = { result: { ok: true, source: 'cloudvision', summary: { devices: 2, interfaces: 8, bgpPeers: 5, freshness: 'FRESH' } } };
       else if (p.endsWith('/network/connection')) {
         if (init?.method === 'PUT') {

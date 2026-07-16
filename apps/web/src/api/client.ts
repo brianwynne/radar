@@ -29,6 +29,10 @@ import type {
   ConnectorSettingsResponse,
   ConnectorSettingsUpdateRequest,
   ConnectorTestResponse,
+  CloudflareStatusResponse,
+  CloudflareListResponse,
+  CloudflareLoadBalancer,
+  CloudflarePool,
   Ns1Status,
   OriginResponse,
   Principal,
@@ -210,4 +214,9 @@ export const api = {
   networkConnection: () => request<ConnectorSettingsResponse>('/api/v1/network/connection'),
   networkConnectionUpdate: (body: ConnectorSettingsUpdateRequest) => request<ConnectorSettingsResponse>('/api/v1/network/connection', { method: 'PUT', body: JSON.stringify(body) }),
   networkConnectionTest: () => request<ConnectorTestResponse>('/api/v1/network/connection/test', { method: 'POST', body: JSON.stringify({}) }),
+
+  // Réalta cache load balancing (Cloudflare) — read-only origin-pool selection downstream of NS1.
+  cloudflareStatus: () => request<CloudflareStatusResponse>('/api/v1/network/cloudflare/status'),
+  cloudflareLoadBalancers: () => request<CloudflareListResponse<CloudflareLoadBalancer>>('/api/v1/network/cloudflare/load-balancers'),
+  cloudflarePools: () => request<CloudflareListResponse<CloudflarePool>>('/api/v1/network/cloudflare/pools'),
 };

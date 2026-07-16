@@ -8,6 +8,7 @@ function pool(id: string, name: string, origins: [string, string, boolean][], he
   const os = origins.map(([oname, address, ok]) => ({ name: oname, address, weight: 1, enabled: true, healthy: ok, failureReason: ok ? null : 'monitor: connection refused' }));
   return {
     id, name, description: null, enabled: true, healthy, monitorId: 'mon-' + id, minimumOrigins: 1,
+    healthCheck: { type: 'https', method: 'GET', path: '/player/monitoring/alive', expectedCodes: '200', expectedBody: 'OK', intervalSeconds: 60, timeoutSeconds: 5, retries: 2 },
     origins: os, healthyOrigins: os.filter((o) => o.enabled && o.healthy === true).length, totalOrigins: os.length,
   };
 }
@@ -27,18 +28,24 @@ const POOLS: CloudflarePool[] = [
 ];
 
 const poolName = new Map(POOLS.map((p) => [p.id, p.name]));
-const steer = (id: string) => ({ poolId: id, poolName: poolName.get(id) ?? null });
+const steer = (id: string, weight: number | null = null) => ({ poolId: id, poolName: poolName.get(id) ?? null, weight });
 
 const LOAD_BALANCERS: CloudflareLoadBalancer[] = [
   {
     id: 'lb-liveedge', name: 'liveedge.rte.ie', zoneName: 'rte.ie', enabled: true, proxied: false,
-    steeringPolicy: 'random', defaultPools: [steer('citywest'), steer('parkwest')], fallbackPool: steer('parkwest'),
-    regionPools: {}, popPools: {}, sessionAffinity: 'none',
+    steeringPolicy: 'random', defaultPools: [steer('citywest', 0.5), steer('parkwest', 0.5)], fallbackPool: steer('parkwest'),
+    regionPools: {}, popPools: {}, sessionAffinity: 'none', locationStrategy: 'pop',
+    observed: {
+      windowHours: 1, totalRequests: 10480,
+      byPool: [{ key: 'live-realta-citywest', requests: 5281, sharePercent: 50.4 }, { key: 'live-realta-parkwest', requests: 5199, sharePercent: 49.6 }],
+      byRegion: [{ key: 'WEU', requests: 10480, sharePercent: 100 }],
+      byColo: [{ key: 'DUB', requests: 10480, sharePercent: 100 }],
+    },
   },
   {
     id: 'lb-vod', name: 'vod.rte.ie', zoneName: 'rte.ie', enabled: true, proxied: true,
     steeringPolicy: 'off', defaultPools: [steer('vod')], fallbackPool: steer('vod'),
-    regionPools: {}, popPools: {}, sessionAffinity: 'none',
+    regionPools: {}, popPools: {}, sessionAffinity: 'none', locationStrategy: 'pop', observed: null,
   },
 ];
 

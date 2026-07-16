@@ -26,6 +26,18 @@ export interface CloudflareOrigin {
   failureReason: string | null;
 }
 
+/** The health-check (monitor) that decides a pool's health. */
+export interface CloudflareHealthCheck {
+  type: string; // http | https | tcp | …
+  method: string | null;
+  path: string | null;
+  expectedCodes: string | null;
+  expectedBody: string | null;
+  intervalSeconds: number | null;
+  timeoutSeconds: number | null;
+  retries: number | null;
+}
+
 /** An origin pool (a set of caches Cloudflare can steer to). */
 export interface CloudflarePool {
   id: string;
@@ -35,16 +47,36 @@ export interface CloudflarePool {
   /** Overall pool health from Cloudflare; null when not reported. */
   healthy: boolean | null;
   monitorId: string | null;
+  /** The resolved health-check spec (why the pool is up/down); null when unknown. */
+  healthCheck: CloudflareHealthCheck | null;
   minimumOrigins: number | null;
   origins: CloudflareOrigin[];
   healthyOrigins: number;
   totalOrigins: number;
 }
 
-/** A pool reference within a load balancer, resolved to its name where known. */
+/** A pool reference within a load balancer, resolved to its name and configured weight. */
 export interface CloudflareSteeredPool {
   poolId: string;
   poolName: string | null;
+  /** Configured steering weight (weighted-random policy); null when not weighted. */
+  weight: number | null;
+}
+
+/** Observed share of a pool/origin/region/PoP from Cloudflare LB analytics. */
+export interface CloudflareObservedBucket {
+  key: string; // pool name / origin name / region / colo
+  requests: number;
+  sharePercent: number;
+}
+
+/** Observed traffic for a load balancer (from Cloudflare LB analytics, a recent window). */
+export interface CloudflareObserved {
+  windowHours: number;
+  totalRequests: number;
+  byPool: CloudflareObservedBucket[];
+  byRegion: CloudflareObservedBucket[];
+  byColo: CloudflareObservedBucket[];
 }
 
 /** A load balancer: a hostname whose traffic Cloudflare steers across pools by policy. */
@@ -64,6 +96,10 @@ export interface CloudflareLoadBalancer {
   /** Cloudflare PoP code → ordered pools (resolved). */
   popPools: Record<string, CloudflareSteeredPool[]>;
   sessionAffinity: string | null;
+  /** How Cloudflare picks the steering location (e.g. "pop" = the edge PoP the request hit). */
+  locationStrategy: string | null;
+  /** Observed traffic (LB analytics); null when analytics is unavailable or empty. */
+  observed: CloudflareObserved | null;
 }
 
 export interface CloudflareSummary {

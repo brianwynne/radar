@@ -15,14 +15,24 @@ const POOLS = [
   { id: 'p-pw', name: 'live-realta-parkwest', enabled: true, healthy: true, monitor: 'm1', minimum_origins: 1,
     origins: [{ name: 'pw-1', address: '185.54.106.0', weight: 1, enabled: true, healthy: true }] },
 ];
+const MONITORS = [{ id: 'm1', type: 'https', method: 'GET', path: '/health', expected_codes: '200', expected_body: 'OK', interval: 60, timeout: 5, retries: 2 }];
 const ZONES = [{ id: 'z-rte', name: 'rte.ie' }, { id: 'z-arpa', name: '104.54.185.in-addr.arpa' }];
 const LBS = [
   { id: 'lb-live', name: 'liveedge.rte.ie', zone_name: 'rte.ie', enabled: true, proxied: false, steering_policy: 'random',
-    default_pools: ['p-ctw', 'p-pw'], fallback_pool: 'p-pw', region_pools: { WEU: ['p-ctw'] }, pop_pools: {}, session_affinity: 'none' },
+    default_pools: ['p-ctw', 'p-pw'], fallback_pool: 'p-pw', region_pools: { WEU: ['p-ctw'] }, pop_pools: {},
+    session_affinity: 'none', location_strategy: { mode: 'pop' }, random_steering: { pool_weights: { 'p-ctw': 0.7, 'p-pw': 0.3 } } },
 ];
+// GraphQL LB-analytics observed traffic (a different envelope: { data } not { success }).
+const GRAPHQL = { data: { viewer: { zones: [{ loadBalancingRequestsAdaptiveGroups: [
+  { count: 100, dimensions: { lbName: 'liveedge.rte.ie', selectedPoolName: 'live-realta-citywest', region: 'WEU', coloCode: 'DUB' } },
+  { count: 50, dimensions: { lbName: 'liveedge.rte.ie', selectedPoolName: 'live-realta-parkwest', region: 'WEU', coloCode: 'DUB' } },
+] }] } } };
+const raw = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
 
 /** Route a request path to the right Cloudflare fixture. */
 function handler(path: string): Response {
+  if (path.endsWith('/graphql')) return raw(GRAPHQL);
+  if (path.includes('/load_balancers/monitors')) return ok(MONITORS);
   if (path.includes('/load_balancers/pools')) return ok(POOLS);
   if (path.includes('/zones/z-rte/load_balancers')) return ok(LBS);
   if (path.startsWith('/zones?') || path.startsWith('/zones&') || /\/zones\?/.test(path)) return ok(ZONES);
@@ -71,6 +81,25 @@ describe('HttpCloudflareReadClient', () => {
     expect(snap.summary).toMatchObject({ loadBalancerCount: 1, poolCount: 2, originCount: 3, unhealthyOrigins: 1 });
     // Every request carried the bearer token.
     expect(calls.every((c) => c.auth === `Bearer ${TOKEN}`)).toBe(true);
+  });
+
+  it('enriches with the health-check spec, steering weights and observed traffic', async () => {
+    const { fn } = routingFetch((p) => handler(p));
+    const snap = await client(fn).getSnapshot('cid');
+    // Pool carries its resolved health-check (from the monitor).
+    const ctw = snap.pools.find((p) => p.name === 'live-realta-citywest')!;
+    expect(ctw.healthCheck).toMatchObject({ type: 'https', path: '/health', expectedCodes: '200', intervalSeconds: 60, retries: 2 });
+    // Steering weights + location strategy.
+    const lb = snap.loadBalancers.find((l) => l.name === 'liveedge.rte.ie')!;
+    expect(lb.locationStrategy).toBe('pop');
+    expect(lb.defaultPools.map((p) => p.weight)).toEqual([0.7, 0.3]);
+    // Observed traffic (from GraphQL analytics): shares per pool.
+    expect(lb.observed?.totalRequests).toBe(150);
+    expect(lb.observed?.byPool).toEqual([
+      { key: 'live-realta-citywest', requests: 100, sharePercent: 66.7 },
+      { key: 'live-realta-parkwest', requests: 50, sharePercent: 33.3 },
+    ]);
+    expect(lb.observed?.byColo[0]).toMatchObject({ key: 'DUB', requests: 150 });
   });
 
   it('auto-discovers non-reverse-DNS zones when none are configured (skips .arpa)', async () => {

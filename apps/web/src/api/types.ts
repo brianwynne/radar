@@ -946,3 +946,39 @@ export interface ConnectorTestResult {
   summary?: { devices: number; interfaces: number; bgpPeers: number; freshness: string };
 }
 export interface ConnectorTestResponse { result: ConnectorTestResult }
+
+// --- Cloudflare Load Balancing (read-only; origin-pool selection downstream of NS1) ---------
+export type CloudflareSource = 'cloudflare' | 'mock' | 'disabled';
+export interface CloudflareProvenance {
+  source: CloudflareSource; synthetic: boolean; readOnly: boolean; informationalOnly: boolean; notice: string; retrievedAt: string;
+}
+export interface CloudflareOrigin {
+  name: string; address: string; weight: number; enabled: boolean; healthy: boolean | null; failureReason: string | null;
+}
+export interface CloudflareHealthCheck {
+  type: string; method: string | null; path: string | null; expectedCodes: string | null; expectedBody: string | null;
+  intervalSeconds: number | null; timeoutSeconds: number | null; retries: number | null;
+}
+export interface CloudflarePool {
+  id: string; name: string; description: string | null; enabled: boolean; healthy: boolean | null; monitorId: string | null;
+  healthCheck: CloudflareHealthCheck | null; minimumOrigins: number | null; origins: CloudflareOrigin[]; healthyOrigins: number; totalOrigins: number;
+}
+export interface CloudflareSteeredPool { poolId: string; poolName: string | null; weight: number | null }
+export interface CloudflareObservedBucket { key: string; requests: number; sharePercent: number }
+export interface CloudflareObserved { windowHours: number; totalRequests: number; byPool: CloudflareObservedBucket[]; byRegion: CloudflareObservedBucket[]; byColo: CloudflareObservedBucket[] }
+export interface CloudflareLoadBalancer {
+  id: string; name: string; zoneName: string | null; enabled: boolean; proxied: boolean; steeringPolicy: string;
+  defaultPools: CloudflareSteeredPool[]; fallbackPool: CloudflareSteeredPool | null;
+  regionPools: Record<string, CloudflareSteeredPool[]>; popPools: Record<string, CloudflareSteeredPool[]>; sessionAffinity: string | null;
+  locationStrategy: string | null; observed: CloudflareObserved | null;
+}
+export interface CloudflareSummary {
+  loadBalancerCount: number; poolCount: number; originCount: number; unhealthyPools: number; unhealthyOrigins: number;
+}
+export interface CloudflareConnectorStatus {
+  enabled: boolean; running: boolean; source: CloudflareSource | null; intervalMs: number;
+  lastPollAt: string | null; lastSuccessAt: string | null; lastDurationMs: number | null; consecutiveFailures: number;
+  lastError: string | null; snapshotAgeSeconds: number | null; loadBalancerCount: number; poolCount: number;
+}
+export interface CloudflareStatusResponse { status: CloudflareConnectorStatus | null; summary: CloudflareSummary | null; provenance: CloudflareProvenance; warnings: string[] }
+export interface CloudflareListResponse<T> { provenance: CloudflareProvenance; count: number; items: T[] }

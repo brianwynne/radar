@@ -9,8 +9,8 @@
 //   GET /zones/{zone}/load_balancers                        — load balancers + steering policy
 import { CloudflareError } from './errors.js';
 import type {
-  CloudflareClient, CloudflareLoadBalancer, CloudflareOrigin, CloudflarePool, CloudflareSnapshot,
-  CloudflareSteeredPool, CloudflareSummary,
+  CloudflareClient, CloudflareHealthCheck, CloudflareLoadBalancer, CloudflareObserved, CloudflareObservedBucket,
+  CloudflareOrigin, CloudflarePool, CloudflareSnapshot, CloudflareSteeredPool, CloudflareSummary,
 } from './types.js';
 
 export interface HttpCloudflareClientOptions {
@@ -67,17 +67,19 @@ export class HttpCloudflareReadClient implements CloudflareClient {
 
   async getSnapshot(correlationId?: string): Promise<CloudflareSnapshot> {
     const warnings: string[] = [];
-    // 1. Pools (account-level) — the origin sets Cloudflare can steer to.
+    // 1. Health-check monitors (best-effort) + pools (account-level).
+    const monitors = await this.fetchMonitors(correlationId);
     const rawPools = await this.getPaged(`/accounts/${enc(this.opts.accountId)}/load_balancers/pools`, correlationId);
-    const pools = rawPools.map((p) => buildPool(p));
+    const pools = rawPools.map((p) => buildPool(p, monitors));
     const poolNameById = new Map(pools.map((p) => [p.id, p.name]));
 
     // 2. Zones that carry load balancers (configured, or auto-discovered).
     const zones = await this.resolveLbZones(correlationId);
-    // 3. Load balancers per zone (steering policy + pool references, resolved to names).
+    // 3. Per zone: load balancers (steering policy + weights) + observed traffic (LB analytics).
     const perZone = await mapLimit(zones, FETCH_CONCURRENCY, async (z) => {
       const raw = await this.getPaged(`/zones/${enc(z.id)}/load_balancers`, correlationId);
-      return raw.map((lb) => buildLoadBalancer(lb, z.name, poolNameById));
+      const observed = await this.fetchObserved(z.id, correlationId);
+      return raw.map((lb) => buildLoadBalancer(lb, z.name, poolNameById, observed));
     });
     const loadBalancers = perZone.flatMap((r) => r ?? []).sort((a, b) => a.name.localeCompare(b.name));
     if (perZone.some((r) => r === null)) warnings.push('Some zones could not be read for load balancers.');
@@ -125,6 +127,80 @@ export class HttpCloudflareReadClient implements CloudflareClient {
       page += 1;
     }
     return out;
+  }
+
+  /** monitorId → health-check spec (best-effort; empty on failure). */
+  private async fetchMonitors(correlationId?: string): Promise<Map<string, CloudflareHealthCheck>> {
+    const out = new Map<string, CloudflareHealthCheck>();
+    try {
+      const raw = await this.getPaged(`/accounts/${enc(this.opts.accountId)}/load_balancers/monitors`, correlationId);
+      for (const m of raw) {
+        const id = str(m.id);
+        if (!id) continue;
+        out.set(id, {
+          type: String(m.type ?? ''), method: str(m.method), path: str(m.path),
+          expectedCodes: str(m.expected_codes), expectedBody: str(m.expected_body),
+          intervalSeconds: numN(m.interval), timeoutSeconds: numN(m.timeout), retries: numN(m.retries),
+        });
+      }
+    } catch (err) {
+      this.opts.logger?.warn({ code: err instanceof CloudflareError ? err.code : 'error' }, 'cloudflare: monitors fetch failed');
+    }
+    return out;
+  }
+
+  /** Observed traffic per load balancer (name → observed) from LB analytics over a recent window.
+   *  Best-effort: analytics being unavailable never fails the snapshot (LBs just have observed=null). */
+  private async fetchObserved(zoneId: string, correlationId?: string): Promise<Map<string, CloudflareObserved>> {
+    const out = new Map<string, CloudflareObserved>();
+    const windowHours = 1;
+    const end = new Date(this.now()).toISOString();
+    const start = new Date(this.now() - windowHours * 3_600_000).toISOString();
+    const query =
+      'query($z:String!,$s:Time!,$e:Time!){viewer{zones(filter:{zoneTag:$z}){loadBalancingRequestsAdaptiveGroups' +
+      '(limit:500,filter:{datetime_geq:$s,datetime_leq:$e},orderBy:[count_DESC])' +
+      '{count dimensions{lbName selectedPoolName region coloCode}}}}}';
+    let groups: Array<{ count?: unknown; dimensions?: Record<string, unknown> }> = [];
+    try {
+      const data = await this.graphql(query, { z: zoneId, s: start, e: end }, correlationId);
+      const zones = isObj(data) && isObj(data.viewer) && Array.isArray(data.viewer.zones) ? data.viewer.zones : [];
+      const first = zones[0];
+      if (isObj(first) && Array.isArray(first.loadBalancingRequestsAdaptiveGroups)) groups = first.loadBalancingRequestsAdaptiveGroups as typeof groups;
+    } catch {
+      return out; // analytics is best-effort
+    }
+    const agg = new Map<string, { total: number; pool: Map<string, number>; region: Map<string, number>; colo: Map<string, number> }>();
+    for (const g of groups) {
+      const dm = g.dimensions ?? {};
+      const lb = String(dm.lbName ?? '');
+      if (!lb) continue;
+      const count = typeof g.count === 'number' ? g.count : 0;
+      let a = agg.get(lb);
+      if (!a) { a = { total: 0, pool: new Map(), region: new Map(), colo: new Map() }; agg.set(lb, a); }
+      a.total += count;
+      addTo(a.pool, String(dm.selectedPoolName || '—'), count);
+      addTo(a.region, String(dm.region || '—'), count);
+      addTo(a.colo, String(dm.coloCode || '—'), count);
+    }
+    for (const [lb, a] of agg) {
+      out.set(lb, { windowHours, totalRequests: a.total, byPool: buckets(a.pool, a.total), byRegion: buckets(a.region, a.total), byColo: buckets(a.colo, a.total) });
+    }
+    return out;
+  }
+
+  /** Read-only GraphQL analytics query (POST is the transport; the query is fixed, no mutation,
+   *  no user input). Returns the `data` object, or throws on transport/GraphQL error. */
+  private async graphql(query: string, variables: Record<string, unknown>, correlationId?: string): Promise<unknown> {
+    const res = await this.fetchImpl(`${this.opts.apiBase}/graphql`, {
+      method: 'POST',
+      headers: { ...this.headers(correlationId), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, variables }),
+      signal: AbortSignal.timeout(this.opts.timeoutMs),
+    });
+    if (!res.ok) throw CloudflareError.fromStatus(res.status, correlationId);
+    const body = await res.json();
+    if (isObj(body) && Array.isArray(body.errors) && body.errors.length > 0) throw new CloudflareError('CLOUDFLARE_REQUEST_FAILED', 'Cloudflare GraphQL returned errors.', { correlationId });
+    return isObj(body) ? body.data : undefined;
   }
 
   private headers(correlationId?: string): Record<string, string> {
@@ -189,8 +265,12 @@ export class HttpCloudflareReadClient implements CloudflareClient {
 const enc = encodeURIComponent;
 const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 0 ? v : null);
 const boolN = (v: unknown): boolean | null => (typeof v === 'boolean' ? v : null);
+const numN = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const addTo = (m: Map<string, number>, k: string, n: number): void => { m.set(k, (m.get(k) ?? 0) + n); };
+const buckets = (m: Map<string, number>, total: number, top = 8): CloudflareObservedBucket[] =>
+  [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, top).map(([key, requests]) => ({ key, requests, sharePercent: total > 0 ? Math.round((requests / total) * 1000) / 10 : 0 }));
 
-function buildPool(p: Record<string, unknown>): CloudflarePool {
+function buildPool(p: Record<string, unknown>, monitors: Map<string, CloudflareHealthCheck>): CloudflarePool {
   const origins: CloudflareOrigin[] = (Array.isArray(p.origins) ? p.origins : []).filter(isObj).map((o) => ({
     name: String(o.name ?? ''),
     address: String(o.address ?? ''),
@@ -206,6 +286,7 @@ function buildPool(p: Record<string, unknown>): CloudflarePool {
     enabled: p.enabled !== false,
     healthy: boolN(p.healthy),
     monitorId: str(p.monitor),
+    healthCheck: str(p.monitor) ? monitors.get(str(p.monitor)!) ?? null : null,
     minimumOrigins: typeof p.minimum_origins === 'number' ? p.minimum_origins : null,
     origins,
     healthyOrigins: origins.filter((o) => o.enabled && o.healthy === true).length,
@@ -213,17 +294,19 @@ function buildPool(p: Record<string, unknown>): CloudflarePool {
   };
 }
 
-function buildLoadBalancer(lb: Record<string, unknown>, zoneName: string | null, poolNames: Map<string, string>): CloudflareLoadBalancer {
-  const resolve = (id: unknown): CloudflareSteeredPool => ({ poolId: String(id), poolName: poolNames.get(String(id)) ?? null });
+function buildLoadBalancer(lb: Record<string, unknown>, zoneName: string | null, poolNames: Map<string, string>, observed: Map<string, CloudflareObserved>): CloudflareLoadBalancer {
+  const weights = isObj(lb.random_steering) && isObj(lb.random_steering.pool_weights) ? lb.random_steering.pool_weights : {};
+  const resolve = (id: unknown): CloudflareSteeredPool => ({ poolId: String(id), poolName: poolNames.get(String(id)) ?? null, weight: numN((weights as Record<string, unknown>)[String(id)]) });
   const resolveList = (v: unknown): CloudflareSteeredPool[] => (Array.isArray(v) ? v.map(resolve) : []);
   const resolveMap = (v: unknown): Record<string, CloudflareSteeredPool[]> => {
     const out: Record<string, CloudflareSteeredPool[]> = {};
     if (isObj(v)) for (const [k, val] of Object.entries(v)) out[k] = resolveList(val);
     return out;
   };
+  const name = String(lb.name ?? '');
   return {
     id: String(lb.id ?? ''),
-    name: String(lb.name ?? ''),
+    name,
     zoneName: zoneName ?? str(lb.zone_name),
     enabled: lb.enabled !== false,
     proxied: lb.proxied === true,
@@ -233,6 +316,8 @@ function buildLoadBalancer(lb: Record<string, unknown>, zoneName: string | null,
     regionPools: resolveMap(lb.region_pools),
     popPools: resolveMap(lb.pop_pools),
     sessionAffinity: str(lb.session_affinity),
+    locationStrategy: isObj(lb.location_strategy) ? str(lb.location_strategy.mode) : null,
+    observed: observed.get(name) ?? null,
   };
 }
 
