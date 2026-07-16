@@ -50,7 +50,7 @@ describe('Network Telemetry page', () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin'); // an edge1 interface
-    fireEvent.change(screen.getByLabelText('Router'), { target: { value: 'JPE00000002' } });
+    fireEvent.change(screen.getAllByLabelText('Router')[0], { target: { value: 'JPE00000002' } }); // interface Router filter
     expect(within(mainTable()).queryByText('Eir PNI Dublin')).not.toBeInTheDocument(); // edge1 filtered out
     expect(within(mainTable()).getByText('Transit LAG')).toBeInTheDocument(); // edge2 interface remains
   });
@@ -135,7 +135,7 @@ describe('Network Telemetry page', () => {
     // Globally, edge1's Ethernet2 is among the busiest.
     expect(within(topTable()).getByText('Ethernet2')).toBeInTheDocument();
     // Select edge2 → the list follows, and edge1's Ethernet2 drops out.
-    fireEvent.change(screen.getByLabelText('Router'), { target: { value: 'JPE00000002' } });
+    fireEvent.change(screen.getAllByLabelText('Router')[0], { target: { value: 'JPE00000002' } }); // interface Router filter
     expect(within(topTable()).queryByText('Ethernet2')).not.toBeInTheDocument();
   });
 
@@ -164,6 +164,24 @@ describe('Network Telemetry page', () => {
     expect(peerRow.getByText('Ethernet1')).toBeInTheDocument(); // interfaceId
     expect(peerRow.getByText(/Gb\/s · 40\.0%/)).toBeInTheDocument(); // correlated link load (current · util)
     expect(peerRow.getByText('IPv4')).toBeInTheDocument(); // active address families
+  });
+
+  it('filters BGP peers by provider and ASN', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    const bgpTable = () => screen.getByRole('columnheader', { name: 'Families' }).closest('table')! as HTMLElement;
+    // Both peers visible initially (Eir 185.6.36.1, AS174 154.54.1.1).
+    expect(within(bgpTable()).getByText('185.6.36.1')).toBeInTheDocument();
+    // Filter by ASN 174 → only the AS174 peer remains.
+    fireEvent.change(screen.getByLabelText('ASN'), { target: { value: '174' } });
+    expect(within(bgpTable()).queryByText('185.6.36.1')).not.toBeInTheDocument(); // Eir is AS5466
+    expect(within(bgpTable()).getByText('154.54.1.1')).toBeInTheDocument();
+    // Clear ASN, filter by provider Eir → only the Eir peer remains.
+    fireEvent.change(screen.getByLabelText('ASN'), { target: { value: '' } });
+    fireEvent.change(screen.getAllByLabelText('Provider')[1], { target: { value: 'Eir' } }); // BGP Provider filter
+    expect(within(bgpTable()).getByText('185.6.36.1')).toBeInTheDocument();
+    expect(within(bgpTable()).queryByText('154.54.1.1')).not.toBeInTheDocument();
   });
 
   it('summary tiles reflect the connector snapshot', async () => {

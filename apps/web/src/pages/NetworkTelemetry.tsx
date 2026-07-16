@@ -51,6 +51,8 @@ export function NetworkTelemetry() {
   const [search, setSearch] = useState('');
   const [device, setDevice] = useState(''); // selected device id (drill-down)
   const [hideIdle, setHideIdle] = useState(false); // hide ports carrying no traffic (0 b/s either direction)
+  const [bgpProvider, setBgpProvider] = useState(''); // BGP-table filters
+  const [bgpAsn, setBgpAsn] = useState('');
   const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' });
   const sortBy = (col: 'name' | 'current' | 'util') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'name' ? 'asc' : 'desc' }));
   const arrow = (col: 'name' | 'current' | 'util') => (sort.col === col ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '');
@@ -186,7 +188,17 @@ export function NetworkTelemetry() {
     return out;
   }, [interfaces, sort, collapsed]);
 
-  const bgpPeers = useMemo(() => t.bgpPeers.filter((p) => !device || p.deviceId === device), [t.bgpPeers, device]);
+  const bgpProviders = useMemo(() => [...new Set(t.bgpPeers.map((p) => p.provider).filter((x): x is string => !!x))].sort(), [t.bgpPeers]);
+  const bgpPeers = useMemo(
+    () =>
+      t.bgpPeers.filter((p) => {
+        if (device && p.deviceId !== device) return false; // Router (shared with the rest of the page)
+        if (bgpProvider && p.provider !== bgpProvider) return false;
+        if (bgpAsn.trim() && !String(p.peerAsn ?? '').includes(bgpAsn.trim())) return false;
+        return true;
+      }),
+    [t.bgpPeers, device, bgpProvider, bgpAsn],
+  );
 
   const stale = t.status !== null && (t.status.lastError !== null || (t.completeness?.level === 'empty' && t.status.enabled) || t.warnings.some((w) => /stale|unavailable/i.test(w)));
 
@@ -403,6 +415,21 @@ export function NetworkTelemetry() {
 
       {/* BGP table */}
       <h2>BGP peers {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
+      <div className="filters">
+        <label className="field"><span>Router</span>
+          <select value={device} onChange={(e) => setDevice(e.target.value)}>
+            <option value="">All</option>
+            {t.devices.map((d) => <option key={d.id} value={d.id}>{d.hostname}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>Provider</span>
+          <select value={bgpProvider} onChange={(e) => setBgpProvider(e.target.value)}>
+            <option value="">All</option>
+            {bgpProviders.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+        <label className="field"><span>ASN</span><input value={bgpAsn} onChange={(e) => setBgpAsn(e.target.value)} placeholder="e.g. 174" inputMode="numeric" /></label>
+      </div>
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
