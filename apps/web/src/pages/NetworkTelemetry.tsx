@@ -7,7 +7,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useCloudVision } from '../telemetry/use-cloudvision';
-import { Sparkline } from '../telemetry/Sparkline';
 import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
 import type { LinkType, NetworkHealth } from '../api/types';
@@ -165,8 +164,6 @@ export function NetworkTelemetry() {
 
   const bgpPeers = useMemo(() => t.bgpPeers.filter((p) => !device || p.deviceId === device), [t.bgpPeers, device]);
 
-  const history = t.history;
-  const series = (key: 'totalEdgeThroughputBps' | 'totalPeeringThroughputBps' | 'totalTransitThroughputBps' | 'operationalHeadroomBps') => history.map((h) => h[key]);
   const stale = t.status !== null && (t.status.lastError !== null || (t.completeness?.level === 'empty' && t.status.enabled) || t.warnings.some((w) => /stale|unavailable/i.test(w)));
 
   // Per-second ticker for the "next refresh in Ns" countdown.
@@ -221,15 +218,6 @@ export function NetworkTelemetry() {
         <div className="card"><div className="muted">Unhealthy links</div><div className="stat">{num(t.summary?.unhealthyLinks)}</div></div>
         <div className="card"><div className="muted">Unhealthy BGP peers</div><div className="stat">{num(t.summary?.unhealthyBgpPeers)}</div></div>
         <div className="card"><div className="muted">Devices / interfaces</div><div className="stat">{num(t.summary?.deviceCount)} / {num(t.summary?.interfaceCount)}</div></div>
-      </div>
-
-      {/* Time-series */}
-      <h2>Trend</h2>
-      <div className="grid cols-4">
-        <div className="card"><div className="muted">Total edge</div><Sparkline data={series('totalEdgeThroughputBps')} ariaLabel="total edge throughput trend" /><div className="stat-sm">{formatBps(t.summary?.totalEdgeThroughputBps)}</div></div>
-        <div className="card"><div className="muted">Peering</div><Sparkline data={series('totalPeeringThroughputBps')} ariaLabel="peering throughput trend" /><div className="stat-sm">{formatBps(t.summary?.totalPeeringThroughputBps)}</div></div>
-        <div className="card"><div className="muted">Transit</div><Sparkline data={series('totalTransitThroughputBps')} ariaLabel="transit throughput trend" /><div className="stat-sm">{formatBps(t.summary?.totalTransitThroughputBps)}</div></div>
-        <div className="card"><div className="muted">Headroom</div><Sparkline data={series('operationalHeadroomBps')} ariaLabel="operational headroom trend" /><div className="stat-sm">{formatBps(t.summary?.operationalHeadroomBps)}</div></div>
       </div>
 
       {/* Provider cards */}
