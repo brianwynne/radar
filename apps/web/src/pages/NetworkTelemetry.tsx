@@ -50,7 +50,7 @@ export function NetworkTelemetry() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [device, setDevice] = useState(''); // selected device id (drill-down)
-  const [hideIdle, setHideIdle] = useState(false); // hide ports carrying no traffic (0 b/s either direction)
+  const [hideIdle, setHideIdle] = useState(true); // default ON: hide ports carrying no traffic (0 b/s either direction)
   const [bgpProvider, setBgpProvider] = useState(''); // BGP-table filters
   const [bgpAsn, setBgpAsn] = useState('');
   const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' });

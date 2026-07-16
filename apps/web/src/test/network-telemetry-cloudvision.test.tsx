@@ -39,6 +39,7 @@ describe('Network Telemetry page', () => {
     stubApi(VE);
     renderAt('/network');
     expect(await screen.findByText('Eir PNI Dublin')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText(/Hide idle ports/)); // show idle/down interfaces (Transit Cogent is down)
 
     // Filter to TRANSIT only → Eir peering row disappears, transit remains.
     fireEvent.change(screen.getByLabelText('Link type'), { target: { value: 'TRANSIT' } });
@@ -80,15 +81,15 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Transit member')).toBeInTheDocument();
   });
 
-  it('hides idle ports (0 b/s in and out) when toggled', async () => {
+  it('hides idle ports (0 b/s in and out) by default; toggling off reveals them', async () => {
     stubApi(NOC);
     renderAt('/network');
-    // The idle port (no traffic) is visible by default.
-    expect(await screen.findByText('Ethernet50')).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText(/Hide idle ports/));
+    await screen.findByText('Eir PNI Dublin'); // active port loads
+    // The idle port (no traffic) is hidden by default.
     expect(screen.queryByText('Ethernet50')).not.toBeInTheDocument();
-    // A port carrying traffic stays.
-    expect(screen.getByText('Eir PNI Dublin')).toBeInTheDocument();
+    // Toggle the filter off → idle port appears.
+    fireEvent.click(screen.getByLabelText(/Hide idle ports/));
+    expect(screen.getByText('Ethernet50')).toBeInTheDocument();
   });
 
   it('shows a live-read countdown pill', async () => {
