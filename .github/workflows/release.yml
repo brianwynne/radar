@@ -1,0 +1,81 @@
+name: release
+
+# Builds a self-contained, per-architecture install bundle for each published release and
+# attaches it as a release asset. Download the bundle for your architecture, extract it, and
+# run `sudo ./deploy/install.sh` for a fully unattended install (see deploy/README.md).
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build and attach assets to (e.g. v1.2.0)"
+        required: true
+
+permissions:
+  contents: write # upload release assets
+
+jobs:
+  bundle:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Resolve tag
+        id: ver
+        run: echo "tag=${{ github.event.release.tag_name || github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ver.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install workspace
+        run: npm ci
+
+      - name: Build (engine, data, api, web) + verify
+        run: |
+          npm run build --workspaces --if-present
+          npm run typecheck --workspaces --if-present
+          npm run test:unit --workspaces --if-present
+
+      - name: Prune to production dependencies
+        run: npm ci --omit=dev --no-audit --no-fund
+
+      - name: Assemble install bundle
+        id: bundle
+        run: |
+          set -euo pipefail
+          NAME="radar-${{ steps.ver.outputs.tag }}-linux-${{ matrix.arch }}"
+          STAGE="$RUNNER_TEMP/$NAME"
+          mkdir -p "$STAGE"
+          # Runtime files only (built dist + production node_modules + web static + deploy).
+          cp -a package.json package-lock.json node_modules "$STAGE/"
+          for p in packages/radar-data packages/radar-engine apps/api; do
+            mkdir -p "$STAGE/$p"; cp -a "$p/package.json" "$p/dist" "$STAGE/$p/"
+          done
+          cp -a packages/radar-data/migrations "$STAGE/packages/radar-data/"
+          mkdir -p "$STAGE/apps/web"; cp -a apps/web/dist "$STAGE/apps/web/"
+          cp -a deploy "$STAGE/"
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/$NAME.tar.gz" "$NAME"
+          ( cd "$RUNNER_TEMP" && sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256" )
+          echo "artifact=$RUNNER_TEMP/$NAME.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.ver.outputs.tag }}" \
+            "${{ steps.bundle.outputs.artifact }}" \
+            "${{ steps.bundle.outputs.artifact }}.sha256" \
+            --clobber --repo "${{ github.repository }}"

@@ -1,0 +1,51 @@
+[Unit]
+Description=RADAR API (read-only NS1 steering + network telemetry)
+Documentation=https://github.com/brianwynne/radar
+After=network-online.target postgresql.service radar-migrate.service
+Wants=network-online.target
+Requires=radar-migrate.service
+
+[Service]
+Type=simple
+# --- Least privilege: dedicated non-login system account, no new privileges ---
+User=radar
+Group=radar
+WorkingDirectory=/opt/radar/apps/api
+EnvironmentFile=/etc/radar/radar.env
+ExecStart=/usr/bin/node /opt/radar/apps/api/dist/server.js
+Restart=on-failure
+RestartSec=3
+# Secrets are provided at /run/secrets/* by systemd-tmpfiles (radar-readable tmpfs copies of
+# the root-only sources in /etc/radar/secrets). The service never reads /etc/radar/secrets.
+
+# --- Sandboxing / hardening (the service needs no writable filesystem; state is in Postgres) ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# Drop ALL capabilities — the API binds a high port (>1024) and needs none.
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+UMask=0077
+# No ReadWritePaths: the whole filesystem is read-only to the service (bar its private /tmp).
+
+[Install]
+WantedBy=multi-user.target

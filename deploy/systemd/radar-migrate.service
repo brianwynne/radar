@@ -1,0 +1,45 @@
+[Unit]
+Description=RADAR database migration (one-shot; runs before the API)
+Documentation=https://github.com/brianwynne/radar
+After=network-online.target postgresql.service
+Wants=network-online.target
+Requires=postgresql.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+User=radar
+Group=radar
+WorkingDirectory=/opt/radar/apps/api
+EnvironmentFile=/etc/radar/radar.env
+# Advisory-locked, idempotent migration runner (safe to run on every boot/upgrade).
+ExecStart=/usr/bin/node /opt/radar/apps/api/dist/database/migrate.js
+
+# --- Same least-privilege sandbox as the API ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectClock=true
+ProtectHostname=true
+ProtectKernelLogs=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectProc=invisible
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources @obsolete
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target
