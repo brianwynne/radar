@@ -61,14 +61,14 @@ export function NetworkTelemetry() {
 
   const providers = useMemo(() => [...new Set(t.interfaces.map((i) => i.provider).filter((p): p is string => !!p))].sort(), [t.interfaces]);
 
-  // Busiest links: the top 10 interfaces by utilisation, scoped to the selected router (follows
-  // the Router filter). Excludes LAG members (their Port-Channel already represents their load)
-  // so the slots are distinct links.
+  // Busiest links: the top 10 interfaces by current bandwidth, scoped to the selected router
+  // (follows the Router filter). Excludes LAG members (their Port-Channel already represents
+  // their load) so the slots are distinct links.
   const topInterfaces = useMemo(
     () =>
       t.interfaces
-        .filter((i) => (!device || i.deviceId === device) && i.memberOf === null && i.utilisationPercent !== null)
-        .sort((a, b) => (b.utilisationPercent ?? 0) - (a.utilisationPercent ?? 0))
+        .filter((i) => (!device || i.deviceId === device) && i.memberOf === null && i.primaryBps !== null)
+        .sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0))
         .slice(0, 10),
     [t.interfaces, device],
   );
@@ -245,21 +245,22 @@ export function NetworkTelemetry() {
         </table>
       </div>
 
-      {/* Busiest links — top 10 interfaces by utilisation (live), scoped to the Router filter */}
-      <h2>Top interfaces by utilisation {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
+      {/* Busiest links — top 10 interfaces by current bandwidth (live), scoped to the Router filter */}
+      <h2>Top interfaces by bandwidth {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
-            <tr><th>Router</th><th>Interface</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
+            <tr><th>Router</th><th>Interface</th><th>Description</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
           </thead>
           <tbody>
-            {topInterfaces.length === 0 && <tr><td colSpan={6} className="center-note">No interface utilisation yet.</td></tr>}
+            {topInterfaces.length === 0 && <tr><td colSpan={7} className="center-note">No interface utilisation yet.</td></tr>}
             {topInterfaces.map((i) => {
               const key = ifKey(i.deviceId, i.name);
               return (
                 <tr key={key}>
                   <td>{i.deviceHostname}</td>
                   <td>{i.name}</td>
+                  <td className="muted">{i.description ?? '—'}</td>
                   <td>{i.provider ?? '—'}</td>
                   <td>{formatBps(i.speedBps)}</td>
                   <td>{formatBps(i.primaryBps)}</td>
