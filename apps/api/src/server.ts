@@ -18,6 +18,7 @@ import { createDnsObservationStore } from './database/dns-observation-store.js';
 import { createValidationService } from './validation/index.js';
 import { createValidationStore } from './database/validation-store.js';
 import { CloudVisionConnectorManager } from './cloudvision/manager.js';
+import { createCloudflareClient, CloudflarePoller } from './cloudflare/index.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -68,6 +69,16 @@ async function main(): Promise<void> {
   await cloudVisionManager.init();
   const cloudVisionPoller = cloudVisionManager.getPoller();
 
+  // Cloudflare Load Balancing: read-only connector (origin-pool selection downstream of NS1).
+  // Token sourced only from /run/secrets/cloudflare_api_token (or env); never persisted here.
+  const cloudflarePoller = new CloudflarePoller({
+    client: createCloudflareClient(config.cloudflare),
+    enabled: config.cloudflare.enabled,
+    intervalMs: config.cloudflare.pollIntervalSeconds * 1000,
+    maxSampleAgeSeconds: config.cloudflare.maxSampleAgeSeconds,
+  });
+  cloudflarePoller.start();
+
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
     database,
@@ -86,6 +97,7 @@ async function main(): Promise<void> {
     cloudVisionPoller,
     cloudVisionMode: cloudVisionPoller.status().source,
     cloudVisionManager,
+    cloudflarePoller,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
