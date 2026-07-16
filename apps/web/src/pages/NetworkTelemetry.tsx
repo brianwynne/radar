@@ -53,7 +53,7 @@ export function NetworkTelemetry() {
   const [status, setStatus] = useState('');
   const [search, setSearch] = useState('');
   const [device, setDevice] = useState(''); // selected device id (drill-down)
-  const [hideNoCapacity, setHideNoCapacity] = useState(false); // hide ports with no reported capacity (no optic)
+  const [hideIdle, setHideIdle] = useState(false); // hide ports carrying no traffic (0 b/s either direction)
   const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' });
   const sortBy = (col: 'name' | 'current' | 'util') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'name' ? 'asc' : 'desc' }));
   const arrow = (col: 'name' | 'current' | 'util') => (sort.col === col ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '');
@@ -104,14 +104,14 @@ export function NetworkTelemetry() {
         if (provider && i.provider !== provider) return false;
         if (linkType && i.linkType !== linkType) return false;
         if (status && i.status !== status) return false;
-        if (hideNoCapacity && i.speedBps === null) return false; // no capacity ⇒ likely no optic
+        if (hideIdle && Math.max(i.inBps ?? 0, i.outBps ?? 0) === 0) return false; // no traffic ⇒ unused port
         if (search) {
           const q = search.toLowerCase();
           if (!`${i.name} ${i.description ?? ''} ${i.deviceHostname}`.toLowerCase().includes(q)) return false;
         }
         return true;
       }),
-    [t.interfaces, device, provider, linkType, status, search, hideNoCapacity],
+    [t.interfaces, device, provider, linkType, status, search, hideIdle],
   );
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -296,6 +296,12 @@ export function NetworkTelemetry() {
         <div className="notice info">Device inventory is live, but per-interface telemetry is not yet connected for this device set — interface throughput/state will populate once the interface feed is wired.</div>
       )}
       <div className="filters">
+        <label className="field"><span>Router</span>
+          <select value={device} onChange={(e) => setDevice(e.target.value)}>
+            <option value="">All</option>
+            {t.devices.map((d) => <option key={d.id} value={d.id}>{d.hostname}</option>)}
+          </select>
+        </label>
         <label className="field"><span>Provider</span>
           <select value={provider} onChange={(e) => setProvider(e.target.value)}>
             <option value="">All</option>
@@ -320,8 +326,8 @@ export function NetworkTelemetry() {
             {sort.col === 'name' ? 'By bandwidth ↓' : 'By name'}
           </button>
         </label>
-        <label className="switch" title="Hide interfaces with no reported capacity — usually empty ports with no optic installed">
-          <input type="checkbox" checked={hideNoCapacity} onChange={(e) => setHideNoCapacity(e.target.checked)} /> Hide ports without capacity
+        <label className="switch" title="Hide interfaces carrying no traffic (0 b/s in and out) — unused ports">
+          <input type="checkbox" checked={hideIdle} onChange={(e) => setHideIdle(e.target.checked)} /> Hide idle ports (0 b/s)
         </label>
       </div>
       <div className="matrix-wrap">

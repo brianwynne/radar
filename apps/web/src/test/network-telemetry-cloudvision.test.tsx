@@ -39,6 +39,15 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Transit Cogent')).toBeInTheDocument();
   });
 
+  it('filters interfaces by router via the Router dropdown', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin'); // an edge1 interface
+    fireEvent.change(screen.getByLabelText('Router'), { target: { value: 'JPE00000002' } });
+    expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument(); // edge1 filtered out
+    expect(screen.getByText('Transit LAG')).toBeInTheDocument(); // edge2 interface remains
+  });
+
   it('lists devices and drills into one to filter interfaces + BGP', async () => {
     stubApi(NOC);
     renderAt('/network');
@@ -87,14 +96,14 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Transit member')).toBeInTheDocument();
   });
 
-  it('hides ports without capacity (empty optic) when toggled', async () => {
+  it('hides idle ports (0 b/s in and out) when toggled', async () => {
     stubApi(NOC);
     renderAt('/network');
-    // The empty port (no capacity) is visible by default.
+    // The idle port (no traffic) is visible by default.
     expect(await screen.findByText('Ethernet50')).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText(/Hide ports without capacity/));
+    fireEvent.click(screen.getByLabelText(/Hide idle ports/));
     expect(screen.queryByText('Ethernet50')).not.toBeInTheDocument();
-    // A port with capacity stays.
+    // A port carrying traffic stays.
     expect(screen.getByText('Eir PNI Dublin')).toBeInTheDocument();
   });
 
