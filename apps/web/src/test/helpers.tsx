@@ -277,8 +277,12 @@ export const CLOUDFLARE_STATUS_BODY = {
 const defaultConnection = { connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp.test', verifyTls: true, edgeDeviceIds: ['DEV1'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
 let connectionState: Record<string, unknown> = { ...defaultConnection };
 
+const defaultCloudflareConnection = { connector: 'cloudflare', enabled: true, mode: 'live', accountId: '0dae703e9ae3c6b11a561818549a4192', zones: ['rte.ie'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
+let cloudflareConnectionState: Record<string, unknown> = { ...defaultCloudflareConnection };
+
 export function stubApi(principal: Principal): void {
   connectionState = { ...defaultConnection };
+  cloudflareConnectionState = { ...defaultCloudflareConnection };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -299,6 +303,21 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/network/cloudflare/status')) body = CLOUDFLARE_STATUS_BODY;
       else if (p.endsWith('/network/cloudflare/load-balancers')) body = CLOUDFLARE_LBS_BODY;
       else if (p.endsWith('/network/cloudflare/pools')) body = CLOUDFLARE_POOLS_BODY;
+      else if (p.endsWith('/network/cloudflare/connection/test')) body = { result: { ok: true, source: 'cloudflare', summary: { loadBalancers: 2, pools: 3, origins: 6 } } };
+      else if (p.endsWith('/network/cloudflare/connection')) {
+        if (init?.method === 'PUT') {
+          const b = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+          cloudflareConnectionState = {
+            ...cloudflareConnectionState,
+            enabled: b.enabled ?? cloudflareConnectionState.enabled,
+            mode: b.mode ?? cloudflareConnectionState.mode,
+            accountId: b.accountId !== undefined ? b.accountId : cloudflareConnectionState.accountId,
+            zones: b.zones ?? cloudflareConnectionState.zones,
+            tokenConfigured: b.clearToken ? false : b.token ? true : cloudflareConnectionState.tokenConfigured,
+          };
+        }
+        body = { settings: cloudflareConnectionState };
+      }
       else if (p.endsWith('/network/connection/test')) body = { result: { ok: true, source: 'cloudvision', summary: { devices: 2, interfaces: 8, bgpPeers: 5, freshness: 'FRESH' } } };
       else if (p.endsWith('/network/connection')) {
         if (init?.method === 'PUT') {

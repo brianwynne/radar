@@ -21,7 +21,9 @@ import { dnsObservationRoutes } from './routes/dns-observation.js';
 import { validationRoutes } from './routes/validation.js';
 import { cloudVisionRoutes } from './routes/cloudvision.js';
 import { cloudflareRoutes } from './routes/cloudflare.js';
+import { cloudflareConnectionRoutes } from './routes/cloudflare-connection.js';
 import type { CloudflarePoller } from './cloudflare/poller.js';
+import type { CloudflareConnectorManager } from './cloudflare/manager.js';
 import { cloudVisionConnectionRoutes } from './routes/cloudvision-connection.js';
 import type { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
@@ -64,6 +66,7 @@ export interface BuildDeps extends AuthDeps {
   cloudVisionPoller?: CloudVisionPoller;
   cloudVisionMode?: CloudVisionSource;
   cloudflarePoller?: CloudflarePoller;
+  cloudflareManager?: CloudflareConnectorManager;
   cloudVisionManager?: CloudVisionConnectorManager;
 }
 
@@ -187,6 +190,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(validationRoutes, { prefix: '/api/v1', service: deps.validationService, repository: deps.validationRepository });
   await app.register(cloudVisionRoutes, { prefix: '/api/v1', poller: deps.cloudVisionPoller, mode: deps.cloudVisionMode });
   await app.register(cloudflareRoutes, { prefix: '/api/v1', poller: deps.cloudflarePoller });
+  await app.register(cloudflareConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudflareManager });
   await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.

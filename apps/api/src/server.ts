@@ -18,7 +18,7 @@ import { createDnsObservationStore } from './database/dns-observation-store.js';
 import { createValidationService } from './validation/index.js';
 import { createValidationStore } from './database/validation-store.js';
 import { CloudVisionConnectorManager } from './cloudvision/manager.js';
-import { createCloudflareClient, CloudflarePoller } from './cloudflare/index.js';
+import { CloudflareConnectorManager } from './cloudflare/manager.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -69,15 +69,19 @@ async function main(): Promise<void> {
   await cloudVisionManager.init();
   const cloudVisionPoller = cloudVisionManager.getPoller();
 
-  // Cloudflare Load Balancing: read-only connector (origin-pool selection downstream of NS1).
-  // Token sourced only from /run/secrets/cloudflare_api_token (or env); never persisted here.
-  const cloudflarePoller = new CloudflarePoller({
-    client: createCloudflareClient(config.cloudflare),
-    enabled: config.cloudflare.enabled,
-    intervalMs: config.cloudflare.pollIntervalSeconds * 1000,
-    maxSampleAgeSeconds: config.cloudflare.maxSampleAgeSeconds,
+  // Cloudflare Load Balancing: read-only connector managed by the connector manager. Non-secret
+  // settings (account id, zones, mode) come from Postgres when an Engineer has set them, else the
+  // env base config; the API token is stored encrypted, its master key sourced only from
+  // /run/secrets/radar_master_key. The manager owns the poller and reconfigures it at runtime.
+  const cloudflareManager = new CloudflareConnectorManager({
+    baseConfig: config.cloudflare,
+    repository: createConnectorSettingsStore(pool),
+    secretBox: SecretBox.fromMasterKey(),
+    audit: database.audit,
+    isDevelopment: config.NODE_ENV === 'development',
   });
-  cloudflarePoller.start();
+  await cloudflareManager.init();
+  const cloudflarePoller = cloudflareManager.getPoller();
 
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
@@ -98,6 +102,7 @@ async function main(): Promise<void> {
     cloudVisionMode: cloudVisionPoller.status().source,
     cloudVisionManager,
     cloudflarePoller,
+    cloudflareManager,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -109,6 +114,7 @@ async function main(): Promise<void> {
     await changeDetection?.stop();
     dnsObservationService.stop();
     cloudVisionManager.stop();
+    cloudflareManager.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -128,6 +134,7 @@ async function main(): Promise<void> {
       app.log.info({ intervalSeconds: config.dnsObservation.periodic.minIntervalSeconds }, 'periodic DNS observation started');
     }
     cloudVisionManager.start(); // self-guards: only polls when the effective config is enabled
+    cloudflareManager.start();
     app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

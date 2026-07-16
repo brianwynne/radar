@@ -33,6 +33,9 @@ import type {
   CloudflareListResponse,
   CloudflareLoadBalancer,
   CloudflarePool,
+  CloudflareConnectionResponse,
+  CloudflareConnectionUpdateRequest,
+  CloudflareConnectionTestResponse,
   Ns1Status,
   OriginResponse,
   Principal,
@@ -219,4 +222,9 @@ export const api = {
   cloudflareStatus: () => request<CloudflareStatusResponse>('/api/v1/network/cloudflare/status'),
   cloudflareLoadBalancers: () => request<CloudflareListResponse<CloudflareLoadBalancer>>('/api/v1/network/cloudflare/load-balancers'),
   cloudflarePools: () => request<CloudflareListResponse<CloudflarePool>>('/api/v1/network/cloudflare/pools'),
+
+  // Cloudflare connection settings (Engineer only). The token is write-only.
+  cloudflareConnection: () => request<CloudflareConnectionResponse>('/api/v1/network/cloudflare/connection'),
+  cloudflareConnectionUpdate: (body: CloudflareConnectionUpdateRequest) => request<CloudflareConnectionResponse>('/api/v1/network/cloudflare/connection', { method: 'PUT', body: JSON.stringify(body) }),
+  cloudflareConnectionTest: () => request<CloudflareConnectionTestResponse>('/api/v1/network/cloudflare/connection/test', { method: 'POST', body: JSON.stringify({}) }),
 };

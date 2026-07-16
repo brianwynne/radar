@@ -27,9 +27,9 @@ export interface CloudflarePollerDeps {
 }
 
 export class CloudflarePoller {
-  private readonly client: CloudflareClient;
-  private readonly enabled: boolean;
-  private readonly intervalMs: number;
+  private client: CloudflareClient;
+  private enabled: boolean;
+  private intervalMs: number;
   private readonly now: () => number;
   private timer: ReturnType<typeof setInterval> | null = null;
   private latest: CloudflareSnapshot | null = null;
@@ -82,6 +82,23 @@ export class CloudflarePoller {
       clearInterval(this.timer);
       this.timer = null;
     }
+  }
+
+  /** Swap the client (and enabled/interval) at runtime — used by the connector manager when an
+   *  Engineer changes the connection. Clears the last snapshot + counters and (re)starts polling
+   *  when enabled; a disabled connector stays stopped. */
+  reconfigure(deps: { client: CloudflareClient; enabled: boolean; intervalMs: number }): void {
+    this.stop();
+    this.client = deps.client;
+    this.enabled = deps.enabled;
+    this.intervalMs = deps.intervalMs;
+    this.latest = null;
+    this.lastPollAt = null;
+    this.lastSuccessAt = null;
+    this.lastDurationMs = null;
+    this.consecutiveFailures = 0;
+    this.lastError = null;
+    if (deps.enabled) this.start();
   }
 
   status(): CloudflareConnectorStatus {

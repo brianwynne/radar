@@ -982,3 +982,14 @@ export interface CloudflareConnectorStatus {
 }
 export interface CloudflareStatusResponse { status: CloudflareConnectorStatus | null; summary: CloudflareSummary | null; provenance: CloudflareProvenance; warnings: string[] }
 export interface CloudflareListResponse<T> { provenance: CloudflareProvenance; count: number; items: T[] }
+
+// Engineer-managed Cloudflare connection settings (account id + zones + write-only token).
+export interface CloudflareConnectionSettings {
+  connector: 'cloudflare'; enabled: boolean; mode: 'mock' | 'live'; accountId: string | null; zones: string[];
+  tokenConfigured: boolean; tokenSetAt: string | null; updatedBy: string | null; updatedAt: string | null;
+  source: 'database' | 'environment'; masterKeyAvailable: boolean; degraded: string | null;
+}
+export interface CloudflareConnectionResponse { settings: CloudflareConnectionSettings }
+export interface CloudflareConnectionUpdateRequest { enabled?: boolean; mode?: 'mock' | 'live'; accountId?: string | null; zones?: string[] | null; token?: string; clearToken?: boolean }
+export interface CloudflareConnectionTestResult { ok: boolean; source: string; error?: string; summary?: { loadBalancers: number; pools: number; origins: number } }
+export interface CloudflareConnectionTestResponse { result: CloudflareConnectionTestResult }
