@@ -284,8 +284,22 @@ export const FASTLY_SERVICES_BODY = {
 };
 export const FASTLY_STATUS_BODY = {
   status: { enabled: true, running: true, source: 'mock', intervalMs: 60000, lastPollAt: '2026-07-16T12:00:00Z', lastSuccessAt: '2026-07-16T12:00:00Z', lastDurationMs: 5, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: 3, serviceCount: 2 },
+  realtime: { enabled: true, running: true, source: 'fastly', windowSeconds: 120, services: [{ serviceId: 'SU-live', serviceName: 'RTÉ Live', running: true, sampleCount: 3, lastSampleAt: '2026-07-16T12:00:02Z', lastPollAt: '2026-07-16T12:00:02Z', consecutiveFailures: 0, lastError: null }] },
   summary: { serviceCount: 2, totalRequestsPerSecond: 12500, totalBandwidthBps: 53333333332, avgHitRatioPercent: 87.3 },
   provenance: fyProv, warnings: [],
+};
+// Real-time live-tail: one active service (per-second samples) + one idle service (empty → nulls).
+export const FASTLY_REALTIME_BODY = {
+  provenance: fyProv, source: 'fastly', windowSeconds: 120,
+  series: [
+    { serviceId: 'SU-live', serviceName: 'RTÉ Live', latestRequestsPerSecond: 588, latestBandwidthBps: 4967576688, lastSampleAt: '2026-07-16T12:00:02Z', samples: [
+      { second: 1784227200, at: '2026-07-16T12:00:00Z', requests: 710, hits: 554, miss: 137, errors: 19, bandwidthBytes: 720006896, status2xx: 685, status3xx: 0, status4xx: 25, status5xx: 0 },
+      { second: 1784227201, at: '2026-07-16T12:00:01Z', requests: 745, hits: 623, miss: 113, errors: 9, bandwidthBytes: 757781453, status2xx: 736, status3xx: 0, status4xx: 9, status5xx: 0 },
+      { second: 1784227202, at: '2026-07-16T12:00:02Z', requests: 588, hits: 464, miss: 113, errors: 11, bandwidthBytes: 620947086, status2xx: 573, status3xx: 0, status4xx: 15, status5xx: 0 },
+    ] },
+    { serviceId: 'SU-vod', serviceName: 'RTÉ Player VOD', latestRequestsPerSecond: null, latestBandwidthBps: null, lastSampleAt: null, samples: [] },
+  ],
+  warnings: [],
 };
 
 const defaultConnection = { connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp.test', verifyTls: true, edgeDeviceIds: ['DEV1'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
@@ -323,6 +337,7 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/network/cloudflare/pools')) body = CLOUDFLARE_POOLS_BODY;
       else if (p.endsWith('/cdn/fastly/status')) body = FASTLY_STATUS_BODY;
       else if (p.endsWith('/cdn/fastly/services')) body = FASTLY_SERVICES_BODY;
+      else if (p.endsWith('/cdn/fastly/realtime')) body = FASTLY_REALTIME_BODY;
       else if (p.endsWith('/cdn/fastly/connection/test')) body = { result: { ok: true, source: 'fastly', summary: { services: 3 } } };
       else if (p.endsWith('/cdn/fastly/connection')) {
         if (init?.method === 'PUT') {

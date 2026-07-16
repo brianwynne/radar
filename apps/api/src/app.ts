@@ -25,6 +25,7 @@ import { cloudflareConnectionRoutes } from './routes/cloudflare-connection.js';
 import { fastlyRoutes } from './routes/fastly.js';
 import { fastlyConnectionRoutes } from './routes/fastly-connection.js';
 import type { FastlyPoller } from './fastly/poller.js';
+import type { FastlyRealtimeStreamer } from './fastly/realtime-streamer.js';
 import type { FastlyConnectorManager } from './fastly/manager.js';
 import type { CloudflarePoller } from './cloudflare/poller.js';
 import type { CloudflareConnectorManager } from './cloudflare/manager.js';
@@ -73,6 +74,7 @@ export interface BuildDeps extends AuthDeps {
   cloudflareManager?: CloudflareConnectorManager;
   cloudVisionManager?: CloudVisionConnectorManager;
   fastlyPoller?: FastlyPoller;
+  fastlyRealtimeStreamer?: FastlyRealtimeStreamer;
   fastlyManager?: FastlyConnectorManager;
 }
 
@@ -197,7 +199,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(cloudVisionRoutes, { prefix: '/api/v1', poller: deps.cloudVisionPoller, mode: deps.cloudVisionMode });
   await app.register(cloudflareRoutes, { prefix: '/api/v1', poller: deps.cloudflarePoller });
   await app.register(cloudflareConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudflareManager });
-  await app.register(fastlyRoutes, { prefix: '/api/v1', poller: deps.fastlyPoller });
+  await app.register(fastlyRoutes, { prefix: '/api/v1', poller: deps.fastlyPoller, realtimeStreamer: deps.fastlyRealtimeStreamer });
   await app.register(fastlyConnectionRoutes, { prefix: '/api/v1', manager: deps.fastlyManager });
   await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
 

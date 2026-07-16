@@ -12,13 +12,14 @@ const SERVICES = [
   { id: 'svc-vod', name: 'RTÉ Player VOD', versions: [{ number: 42, active: true }, { number: 41, active: false }] },
   { id: 'svc-live', name: 'RTÉ Live', versions: [{ number: 7, active: true }] },
 ];
-// Per-minute buckets: two minutes each, so aggregation must sum across buckets.
+// Per-minute buckets (oldest first). The connector surfaces the LATEST finalised minute, so the
+// second VOD bucket (start_time 1060) is the one that should be reported, not a window sum.
 const STATS_VOD = { status: 'success', meta: { by: 'minute' }, data: [
-  { requests: 600, hits: 540, miss: 60, bandwidth: 6_000_000, origin_fetches: 55, status_2xx: 580, status_3xx: 10, status_4xx: 8, status_5xx: 2 },
-  { requests: 400, hits: 360, miss: 40, bandwidth: 4_000_000, origin_fetches: 35, status_2xx: 388, status_3xx: 6, status_4xx: 4, status_5xx: 2 },
+  { start_time: 1000, requests: 600, hits: 540, miss: 60, bandwidth: 6_000_000, origin_fetches: 55, status_2xx: 580, status_3xx: 10, status_4xx: 8, status_5xx: 2 },
+  { start_time: 1060, requests: 400, hits: 360, miss: 40, bandwidth: 4_000_000, origin_fetches: 35, status_2xx: 388, status_3xx: 6, status_4xx: 4, status_5xx: 2 },
 ] };
 const STATS_LIVE = { status: 'success', meta: { by: 'minute' }, data: [
-  { requests: 200, hits: 120, miss: 80, bandwidth: 2_000_000, origin_fetches: 70, status_2xx: 180, status_3xx: 4, status_4xx: 6, status_5xx: 10 },
+  { start_time: 1060, requests: 200, hits: 120, miss: 80, bandwidth: 2_000_000, origin_fetches: 70, status_2xx: 180, status_3xx: 4, status_4xx: 6, status_5xx: 10 },
 ] };
 
 function handler(path: string): Response {
@@ -59,14 +60,15 @@ describe('HttpFastlyReadClient', () => {
     expect(snap.services.map((s) => s.serviceName)).toEqual(['RTÉ Player VOD', 'RTÉ Live']); // sorted by rps desc
 
     const vod = snap.services.find((s) => s.serviceId === 'svc-vod')!;
-    expect(vod.requests).toBe(1000); // 600 + 400 summed across buckets
-    expect(vod.hits).toBe(900);
-    expect(vod.miss).toBe(100);
-    expect(vod.hitRatioPercent).toBe(90); // 900 / 1000 cacheable
-    expect(vod.requestsPerSecond).toBeCloseTo(1000 / 600, 1); // window = 10 min
-    expect(vod.status5xx).toBe(4);
-    expect(vod.errorRatePercent).toBe(0.4); // 4 / 1000
-    expect(vod.originOffloadPercent).toBe(91); // 1 - 90/1000
+    expect(vod.requests).toBe(400); // the LATEST finalised minute (start_time 1060), not a window sum
+    expect(vod.hits).toBe(360);
+    expect(vod.miss).toBe(40);
+    expect(vod.hitRatioPercent).toBe(90); // 360 / 400 cacheable
+    expect(vod.windowSeconds).toBe(60); // one finalised minute
+    expect(vod.requestsPerSecond).toBeCloseTo(400 / 60, 1); // that minute's rate
+    expect(vod.status5xx).toBe(2);
+    expect(vod.errorRatePercent).toBe(0.5); // 2 / 400
+    expect(vod.originOffloadPercent).toBe(91.3); // 1 - 35/400
 
     // Summary: weighted hit ratio + service count.
     expect(snap.summary.serviceCount).toBe(2);
@@ -107,7 +109,7 @@ describe('HttpFastlyReadClient', () => {
     const { fn } = routingFetch((p, call) => (p.includes('/stats/service/svc-vod') && call === 1 ? new Response('', { status: 503 }) : handler(p)));
     const c = new HttpFastlyReadClient({ apiBase: 'https://fastly.example', token: TOKEN, serviceIds: [], windowMinutes: 10, timeoutMs: 2000, maxRetries: 2, fetchImpl: fn, sleep, random: () => 0.5, now: () => Date.parse('2026-07-16T12:00:00Z') });
     const snap = await c.getSnapshot();
-    expect(snap.services.find((s) => s.serviceId === 'svc-vod')!.requests).toBe(1000);
+    expect(snap.services.find((s) => s.serviceId === 'svc-vod')!.requests).toBe(400); // latest finalised minute
     expect(sleep).toHaveBeenCalledTimes(1);
   });
 });

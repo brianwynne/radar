@@ -3,6 +3,8 @@
 // Fastly writes. A missing/absent value is shown as such, never invented. Auto-refreshes.
 import { useEffect, useMemo, useState } from 'react';
 import { useFastly } from '../telemetry/use-fastly';
+import { useFastlyRealtime } from '../telemetry/use-fastly-realtime';
+import { Sparkline } from '../telemetry/Sparkline';
 import { formatBps, formatFreshness, formatPercent } from '../telemetry/format';
 
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : n.toLocaleString());
@@ -15,6 +17,7 @@ const errClass = (pct: number | null): string => (pct === null ? '' : pct > 5 ? 
 
 export function FastlyCdn() {
   const t = useFastly(30_000);
+  const rt = useFastlyRealtime(2000);
   const [search, setSearch] = useState('');
 
   const q = search.trim().toLowerCase();
@@ -66,12 +69,61 @@ export function FastlyCdn() {
         <div className="card"><div className="muted">Avg hit ratio</div><div className="stat">{formatPercent(t.summary?.avgHitRatioPercent)}</div></div>
       </div>
 
+      {/* Real-time live-tail — per-second stream from Fastly real-time analytics (live-only). */}
+      <h2>
+        Live tail{' '}
+        {rt.source === 'fastly'
+          ? <span className="badge live-countdown"><span className="live-dot" />per-second · {rt.windowSeconds}s window</span>
+          : <span className="muted">(live-only — the per-second stream needs a live Fastly connection)</span>}
+      </h2>
+      {rt.error && <div className="notice warn">{rt.error}</div>}
+      {rt.source === 'fastly' && (
+        <div className="grid cols-2">
+          {rt.series.length === 0 && <div className="card center-note">No services streaming.</div>}
+          {rt.series.map((s) => {
+            const reqs = s.samples.map((x) => x.requests);
+            const bps = s.samples.map((x) => x.bandwidthBytes * 8);
+            const lastSecond = s.samples[s.samples.length - 1];
+            const idle = s.samples.length === 0;
+            return (
+              <div key={s.serviceId} className="card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <div>
+                    <strong>{s.serviceName}</strong>
+                    <div className="muted" style={{ fontSize: '0.72rem' }}>{s.serviceId}</div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div className="stat" style={{ lineHeight: 1.1 }}>{formatBps(s.latestBandwidthBps)}</div>
+                    <div className="muted">{rps(s.latestRequestsPerSecond)}</div>
+                  </div>
+                </div>
+                {idle ? (
+                  <div className="center-note" style={{ padding: '0.75rem 0' }}>idle — no traffic in the last {rt.windowSeconds}s</div>
+                ) : (
+                  <>
+                    <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>Requests/s</div>
+                    <Sparkline data={reqs} width={320} height={40} ariaLabel={`${s.serviceName} requests per second`} color="var(--accent, currentColor)" />
+                    <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.3rem' }}>Bandwidth</div>
+                    <Sparkline data={bps} width={320} height={40} ariaLabel={`${s.serviceName} bandwidth`} />
+                    {lastSecond && (
+                      <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>
+                        last second — hits {num(lastSecond.hits)} · miss {num(lastSecond.miss)} · 4xx {num(lastSecond.status4xx)} · 5xx {num(lastSecond.status5xx)} · {s.samples.length}/{rt.windowSeconds} buffered
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="filters">
         <label className="field"><span>Search</span><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="service name / id" /></label>
       </div>
 
       {/* Per-service delivery telemetry */}
-      <h2>Services <span className="muted">(over the observation window)</span></h2>
+      <h2>Services <span className="muted">(latest finalised minute · Fastly stats lag ~3 min)</span></h2>
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>

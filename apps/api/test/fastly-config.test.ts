@@ -23,4 +23,20 @@ describe('loadFastlyConfig', () => {
     const c = loadFastlyConfig({ FASTLY_ENABLED: 'true', FASTLY_MODE: 'live', FASTLY_API_TOKEN: 't' });
     expect(c).toMatchObject({ enabled: true, mode: 'live', token: 't' });
   });
+
+  it('real-time defaults on for an env-live connector, off otherwise, and honours an explicit flag', () => {
+    // Disabled/mock connector: real-time off, sensible defaults present.
+    const off = loadFastlyConfig({});
+    expect(off.realtimeEnabled).toBe(false);
+    expect(off.realtimeApiBase).toBe('https://rt.fastly.com');
+    expect(off.realtimeWindowSeconds).toBe(120);
+    expect(off.realtimeRequestTimeoutSeconds).toBe(30);
+
+    // Env-live connector: real-time defaults on.
+    expect(loadFastlyConfig({ FASTLY_ENABLED: 'true', FASTLY_MODE: 'live', FASTLY_API_TOKEN: 't' }).realtimeEnabled).toBe(true);
+
+    // Explicit flag always wins.
+    expect(loadFastlyConfig({ FASTLY_ENABLED: 'true', FASTLY_MODE: 'live', FASTLY_API_TOKEN: 't', FASTLY_REALTIME_ENABLED: 'false' }).realtimeEnabled).toBe(false);
+    expect(loadFastlyConfig({ FASTLY_REALTIME_ENABLED: 'true' }).realtimeEnabled).toBe(true);
+  });
 });

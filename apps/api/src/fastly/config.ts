@@ -23,6 +23,14 @@ export interface FastlyConfig {
   /** Observations older than this are marked STALE. */
   maxSampleAgeSeconds: number;
   retryAttempts: number;
+  /** Base URL of the Fastly real-time analytics endpoint (rt.fastly.com). */
+  realtimeApiBase: string;
+  /** Whether the per-second real-time streamer runs. Defaults to (enabled && mode==='live'). */
+  realtimeEnabled: boolean;
+  /** Rolling window (seconds) the per-service real-time ring buffer retains. */
+  realtimeWindowSeconds: number;
+  /** Per-request timeout (seconds) for a real-time long-poll (must exceed the ~9s aggregate delay). */
+  realtimeRequestTimeoutSeconds: number;
 }
 
 const TOKEN_SECRET = '/run/secrets/fastly_api_token';
@@ -41,6 +49,11 @@ const schema = z.object({
   FASTLY_POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().max(3600).default(60),
   FASTLY_MAX_SAMPLE_AGE_SECONDS: z.coerce.number().int().positive().max(3600).default(180),
   FASTLY_RETRY_ATTEMPTS: z.coerce.number().int().min(0).max(10).default(3),
+  FASTLY_RT_API_BASE: z.string().default('https://rt.fastly.com'),
+  // Undefined here means "derive from enabled && mode==='live'" (resolved below).
+  FASTLY_REALTIME_ENABLED: z.preprocess((v) => (v === undefined ? undefined : /^(1|true|yes|on)$/i.test(String(v))), z.boolean().optional()),
+  FASTLY_REALTIME_WINDOW_SECONDS: z.coerce.number().int().positive().min(10).max(3600).default(120),
+  FASTLY_REALTIME_REQUEST_TIMEOUT_SECONDS: z.coerce.number().int().positive().min(5).max(120).default(30),
 });
 
 function readSecretFile(path: string): string | undefined {
@@ -70,6 +83,11 @@ export function loadFastlyConfig(env: NodeJS.ProcessEnv = process.env): FastlyCo
     pollIntervalSeconds: p.FASTLY_POLL_INTERVAL_SECONDS,
     maxSampleAgeSeconds: p.FASTLY_MAX_SAMPLE_AGE_SECONDS,
     retryAttempts: p.FASTLY_RETRY_ATTEMPTS,
+    realtimeApiBase: p.FASTLY_RT_API_BASE.replace(/\/+$/, ''),
+    // Real-time defaults on only for a live connector; an explicit flag always wins.
+    realtimeEnabled: p.FASTLY_REALTIME_ENABLED ?? (p.FASTLY_ENABLED && p.FASTLY_MODE === 'live'),
+    realtimeWindowSeconds: p.FASTLY_REALTIME_WINDOW_SECONDS,
+    realtimeRequestTimeoutSeconds: p.FASTLY_REALTIME_REQUEST_TIMEOUT_SECONDS,
   };
   if (!p.FASTLY_ENABLED || p.FASTLY_MODE !== 'live') return base;
 

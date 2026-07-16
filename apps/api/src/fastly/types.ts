@@ -67,3 +67,68 @@ export interface FastlySnapshot {
 export interface FastlyClient {
   getSnapshot(correlationId?: string): Promise<FastlySnapshot>;
 }
+
+// ---- Real-time (per-second) live-tail --------------------------------------------------------
+// Sourced from Fastly's real-time analytics host (rt.fastly.com), which streams one aggregated
+// bucket per second per service. READ-ONLY: RADAR only long-polls; it never writes. A missing
+// counter is surfaced as 0 for that second, never invented across seconds.
+
+/** One-second real-time delivery sample for a single service (Fastly `Data[].aggregated`). */
+export interface FastlyRealtimeSample {
+  /** Unix epoch seconds of the sampled second (Fastly `recorded`). */
+  second: number;
+  /** ISO timestamp of `second`. */
+  at: string;
+  requests: number;
+  hits: number;
+  miss: number;
+  errors: number;
+  /** Bytes delivered during this second (response body + headers). */
+  bandwidthBytes: number;
+  status2xx: number;
+  status3xx: number;
+  status4xx: number;
+  status5xx: number;
+}
+
+/** Rolling per-second series for one service over the retention window (oldest first, newest last). */
+export interface FastlyRealtimeSeries {
+  serviceId: string;
+  serviceName: string;
+  samples: FastlyRealtimeSample[];
+  /** Requests in the most recent second (instantaneous req/s); null when no samples yet. */
+  latestRequestsPerSecond: number | null;
+  /** Bandwidth of the most recent second in bits/s; null when no samples yet. */
+  latestBandwidthBps: number | null;
+  /** ISO timestamp of the newest sample; null when empty. */
+  lastSampleAt: string | null;
+}
+
+export interface FastlyRealtimeSnapshot {
+  source: FastlySource;
+  capturedAt: string;
+  /** Retention window (seconds) each series covers. */
+  windowSeconds: number;
+  series: FastlyRealtimeSeries[];
+  provenance: FastlyProvenance;
+  warnings: string[];
+}
+
+/** One long-poll batch from a service's real-time channel. */
+export interface FastlyRealtimeBatch {
+  /** Per-second samples since the requested cursor, oldest first. */
+  samples: FastlyRealtimeSample[];
+  /** Opaque cursor to pass to the next poll (`.../ts/{nextTimestamp}`). 0 → keep the current cursor. */
+  nextTimestamp: number;
+  /** Server-reported delay (seconds) before the freshest second is complete. */
+  aggregateDelaySeconds: number;
+}
+
+/** Read-only real-time client: one long-poll of a service's per-second channel. */
+export interface FastlyRealtimeClient {
+  pollChannel(
+    serviceId: string,
+    sinceTimestamp: number,
+    opts?: { correlationId?: string; signal?: AbortSignal },
+  ): Promise<FastlyRealtimeBatch>;
+}

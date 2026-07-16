@@ -4,12 +4,21 @@
 import type { FastlyConfig } from './config.js';
 import { HttpFastlyReadClient } from './http-client.js';
 import { DisabledFastlyClient, MockFastlyClient } from './mock-client.js';
-import type { FastlyClient } from './types.js';
+import { HttpFastlyRealtimeClient } from './realtime-client.js';
+import type { FastlyClient, FastlyRealtimeClient } from './types.js';
 
 export { loadFastlyConfig, type FastlyConfig, type FastlyMode } from './config.js';
 export { FastlyError, type FastlyErrorCode } from './errors.js';
 export { HttpFastlyReadClient } from './http-client.js';
 export { MockFastlyClient, DisabledFastlyClient } from './mock-client.js';
+export { HttpFastlyRealtimeClient } from './realtime-client.js';
+export {
+  FastlyRealtimeStreamer,
+  type FastlyRealtimeStatus,
+  type FastlyRealtimeServiceStatus,
+  type FastlyRealtimeStreamerConfig,
+  type FastlyRealtimeStreamerDeps,
+} from './realtime-streamer.js';
 export { FastlyPoller, type FastlyConnectorStatus, type FastlyPollerDeps } from './poller.js';
 export type * from './types.js';
 
@@ -32,6 +41,21 @@ export function createFastlyClient(config: FastlyConfig, deps: FastlyClientDeps 
     maxRetries: config.retryAttempts,
     fetchImpl: deps.fetchImpl,
     now: deps.now,
+    logger: deps.logger,
+  });
+}
+
+/** Build the real-time (per-second) client, or null when the connector cannot / should not stream:
+ *  disabled, mock mode, real-time turned off, or no token. Streaming is a live-only capability —
+ *  there is no synthetic per-second stream. */
+export function createFastlyRealtimeClient(config: FastlyConfig, deps: FastlyClientDeps = {}): FastlyRealtimeClient | null {
+  if (!config.enabled || config.mode !== 'live' || !config.realtimeEnabled) return null;
+  if (!config.token) return null;
+  return new HttpFastlyRealtimeClient({
+    realtimeApiBase: config.realtimeApiBase,
+    token: config.token,
+    requestTimeoutMs: config.realtimeRequestTimeoutSeconds * 1000,
+    fetchImpl: deps.fetchImpl,
     logger: deps.logger,
   });
 }

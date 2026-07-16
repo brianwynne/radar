@@ -38,6 +38,7 @@ import type {
   CloudflareConnectionTestResponse,
   FastlyStatusResponse,
   FastlyServicesResponse,
+  FastlyRealtimeResponse,
   FastlyConnectionResponse,
   FastlyConnectionUpdate,
   FastlyConnectionTestResponse,
@@ -236,6 +237,7 @@ export const api = {
   // Fastly CDN observability — read-only per-service delivery telemetry (a commercial CDN platform).
   fastlyStatus: () => request<FastlyStatusResponse>('/api/v1/cdn/fastly/status'),
   fastlyServices: () => request<FastlyServicesResponse>('/api/v1/cdn/fastly/services'),
+  fastlyRealtime: () => request<FastlyRealtimeResponse>('/api/v1/cdn/fastly/realtime'),
 
   // Fastly connection settings (Engineer only). The token is write-only.
   fastlyConnection: () => request<FastlyConnectionResponse>('/api/v1/cdn/fastly/connection'),

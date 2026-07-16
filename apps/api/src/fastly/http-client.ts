@@ -206,33 +206,36 @@ function activeVersion(s: Record<string, unknown>): number | null {
   return null;
 }
 
-/** Sum the per-minute stats buckets into one canonical FastlyServiceStats. */
-export function aggregate(svc: FastlyService, windowSeconds: number, buckets: Record<string, unknown>[]): FastlyServiceStats {
-  let requests = 0, hits = 0, miss = 0, bandwidth = 0, originFetches = 0;
-  let s2 = 0, s3 = 0, s4 = 0, s5 = 0;
-  for (const b of buckets) {
-    requests += num(b.requests);
-    hits += num(b.hits);
-    miss += num(b.miss);
-    bandwidth += num(b.bandwidth);
-    originFetches += num(b.origin_fetches);
-    s2 += num(b.status_2xx);
-    s3 += num(b.status_3xx);
-    s4 += num(b.status_4xx);
-    s5 += num(b.status_5xx);
-  }
+/** Reduce the per-minute stats buckets to one canonical FastlyServiceStats representing the MOST
+ *  RECENT FINALISED MINUTE.
+ *
+ *  Fastly's `by=minute` stats lag ~3 minutes — the current minute is never returned until finalised.
+ *  Averaging the whole requested window smears a 10-minute trailing mean over a signal that may have
+ *  just stepped (a service whose traffic just dropped keeps reading high for many minutes). Instead
+ *  we surface the freshest complete minute — the closest-to-now coherent reading Fastly offers — so
+ *  the figure tracks reality (and the real-time stream) as tightly as the ~3-min lag allows.
+ *  `windowSeconds` = 60. A service with no buckets reads as absent/zero, never fabricated. */
+export function aggregate(svc: FastlyService, _windowSeconds: number, buckets: Record<string, unknown>[]): FastlyServiceStats {
+  const SECONDS = 60;
+  const b = latestBucket(buckets) ?? {};
+  const requests = num(b.requests);
+  const hits = num(b.hits);
+  const miss = num(b.miss);
+  const bandwidth = num(b.bandwidth);
+  const originFetches = num(b.origin_fetches);
+  const s2 = num(b.status_2xx), s3 = num(b.status_3xx), s4 = num(b.status_4xx), s5 = num(b.status_5xx);
   const cacheable = hits + miss;
   return {
     serviceId: svc.id,
     serviceName: svc.name,
-    windowSeconds,
+    windowSeconds: SECONDS,
     requests,
-    requestsPerSecond: windowSeconds > 0 ? Math.round((requests / windowSeconds) * 10) / 10 : 0,
+    requestsPerSecond: Math.round((requests / SECONDS) * 10) / 10,
     hits,
     miss,
     hitRatioPercent: cacheable > 0 ? pct1((hits / cacheable) * 100) : null,
     bandwidthBytes: bandwidth,
-    bandwidthBps: windowSeconds > 0 ? Math.round((bandwidth * 8) / windowSeconds) : 0,
+    bandwidthBps: Math.round((bandwidth * 8) / SECONDS),
     originFetches,
     originOffloadPercent: requests > 0 ? pct1(Math.min(100, Math.max(0, (1 - originFetches / requests) * 100))) : null,
     status2xx: s2,
@@ -241,6 +244,15 @@ export function aggregate(svc: FastlyService, windowSeconds: number, buckets: Re
     status5xx: s5,
     errorRatePercent: requests > 0 ? pct1((s5 / requests) * 100) : null,
   };
+}
+
+/** The most recent finalised bucket, by `start_time` (falls back to array order — Fastly returns
+ *  buckets oldest-first — when the field is absent). */
+function latestBucket(buckets: Record<string, unknown>[]): Record<string, unknown> | undefined {
+  if (buckets.length === 0) return undefined;
+  const timed = buckets.filter((b) => typeof b.start_time === 'number');
+  if (timed.length > 0) return timed.reduce((a, b) => (num(b.start_time) >= num(a.start_time) ? b : a));
+  return buckets[buckets.length - 1];
 }
 
 export function summarise(services: FastlyServiceStats[]): FastlySummary {

@@ -97,6 +97,7 @@ async function main(): Promise<void> {
   });
   await fastlyManager.init();
   const fastlyPoller = fastlyManager.getPoller();
+  const fastlyRealtimeStreamer = fastlyManager.getStreamer();
 
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
@@ -119,6 +120,7 @@ async function main(): Promise<void> {
     cloudflarePoller,
     cloudflareManager,
     fastlyPoller,
+    fastlyRealtimeStreamer,
     fastlyManager,
   });
   app.log.info(

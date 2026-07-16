@@ -15,6 +15,7 @@ const NOW = Date.parse('2026-07-16T12:00:00Z');
 const baseConfig: FastlyConfig = {
   enabled: false, mode: 'mock', apiBase: 'https://api.fastly.com', serviceIds: [], windowMinutes: 10,
   timeoutSeconds: 15, pollIntervalSeconds: 60, maxSampleAgeSeconds: 180, retryAttempts: 1,
+  realtimeApiBase: 'https://rt.fastly.com', realtimeEnabled: false, realtimeWindowSeconds: 120, realtimeRequestTimeoutSeconds: 30,
 };
 
 class FakeRepo implements ConnectorSettingsRepository {

@@ -1013,8 +1013,25 @@ export interface FastlyConnectorStatus {
   lastPollAt: string | null; lastSuccessAt: string | null; lastDurationMs: number | null; consecutiveFailures: number;
   lastError: string | null; snapshotAgeSeconds: number | null; serviceCount: number;
 }
-export interface FastlyStatusResponse { status: FastlyConnectorStatus | null; summary: FastlySummary | null; provenance: FastlyProvenance; warnings: string[] }
+// Real-time (per-second) live-tail sourced from Fastly real-time analytics. Live-only.
+export interface FastlyRealtimeSample {
+  second: number; at: string; requests: number; hits: number; miss: number; errors: number;
+  bandwidthBytes: number; status2xx: number; status3xx: number; status4xx: number; status5xx: number;
+}
+export interface FastlyRealtimeSeries {
+  serviceId: string; serviceName: string; samples: FastlyRealtimeSample[];
+  latestRequestsPerSecond: number | null; latestBandwidthBps: number | null; lastSampleAt: string | null;
+}
+export interface FastlyRealtimeServiceStatus {
+  serviceId: string; serviceName: string; running: boolean; sampleCount: number;
+  lastSampleAt: string | null; lastPollAt: string | null; consecutiveFailures: number; lastError: string | null;
+}
+export interface FastlyRealtimeStatus {
+  enabled: boolean; running: boolean; source: FastlySource; windowSeconds: number; services: FastlyRealtimeServiceStatus[];
+}
+export interface FastlyStatusResponse { status: FastlyConnectorStatus | null; realtime: FastlyRealtimeStatus | null; summary: FastlySummary | null; provenance: FastlyProvenance; warnings: string[] }
 export interface FastlyServicesResponse { provenance: FastlyProvenance; count: number; items: FastlyServiceStats[] }
+export interface FastlyRealtimeResponse { provenance: FastlyProvenance; source: FastlySource; windowSeconds: number; series: FastlyRealtimeSeries[]; warnings: string[] }
 
 // Engineer-managed Fastly connection settings (API base + service ids + write-only token).
 export interface FastlyConnection {

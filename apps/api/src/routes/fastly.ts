@@ -4,10 +4,12 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { requirePermission } from '../auth/guards.js';
 import type { FastlyPoller } from '../fastly/poller.js';
+import type { FastlyRealtimeStreamer } from '../fastly/realtime-streamer.js';
 import type { FastlySnapshot } from '../fastly/types.js';
 
 export interface FastlyRoutesOptions {
   poller?: FastlyPoller;
+  realtimeStreamer?: FastlyRealtimeStreamer;
 }
 
 const DISABLED: FastlySnapshot['provenance'] = {
@@ -23,8 +25,8 @@ export const fastlyRoutes: FastifyPluginAsync<FastlyRoutesOptions> = async (app,
 
   app.get(
     '/cdn/fastly/status',
-    { preHandler: requirePermission('topology.summary.read'), schema: schema('Fastly connector status', 'Read-only connector health: mode, freshness, service count, last error, and delivery summary. No credentials.') },
-    async () => ({ status: opts.poller?.status() ?? null, summary: snapshot()?.summary ?? null, provenance: provenance(), warnings: snapshot()?.warnings ?? [] }),
+    { preHandler: requirePermission('topology.summary.read'), schema: schema('Fastly connector status', 'Read-only connector health: mode, freshness, service count, last error, delivery summary and real-time live-tail status. No credentials.') },
+    async () => ({ status: opts.poller?.status() ?? null, realtime: opts.realtimeStreamer?.status() ?? null, summary: snapshot()?.summary ?? null, provenance: provenance(), warnings: snapshot()?.warnings ?? [] }),
   );
 
   app.get(
@@ -33,6 +35,20 @@ export const fastlyRoutes: FastifyPluginAsync<FastlyRoutesOptions> = async (app,
     async () => {
       const items = snapshot()?.services ?? [];
       return { provenance: provenance(), count: items.length, items };
+    },
+  );
+
+  app.get(
+    '/cdn/fastly/realtime',
+    { preHandler: requirePermission('topology.summary.read'), schema: schema('Fastly real-time live-tail', 'Read-only per-second delivery samples (requests, bandwidth, cache hits, status mix) per service over a short rolling window, sourced from Fastly real-time analytics. Live-only; disabled in mock mode.') },
+    async () => {
+      const snap = opts.realtimeStreamer?.snapshot();
+      if (!snap) return { provenance: DISABLED, source: 'disabled', windowSeconds: 0, series: [], warnings: [] };
+      // Enrich per-second series with the human service name from the historical poller snapshot
+      // (the streamer only knows service ids); fall back to whatever name it carries.
+      const names = new Map((snapshot()?.services ?? []).map((s) => [s.serviceId, s.serviceName]));
+      const series = snap.series.map((s) => ({ ...s, serviceName: names.get(s.serviceId) ?? s.serviceName }));
+      return { provenance: snap.provenance, source: snap.source, windowSeconds: snap.windowSeconds, series, warnings: snap.warnings };
     },
   );
 };

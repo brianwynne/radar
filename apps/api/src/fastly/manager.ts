@@ -6,10 +6,11 @@
 // `edge_device_ids` holds the observed service ids (CSV). Fails closed when the master key is
 // missing/invalid: a token can be neither stored nor decrypted and the connector degrades to
 // "not connected" rather than leaking or guessing.
-import { createFastlyClient } from './index.js';
+import { createFastlyClient, createFastlyRealtimeClient } from './index.js';
 import { FastlyPoller } from './poller.js';
+import { FastlyRealtimeStreamer } from './realtime-streamer.js';
 import type { FastlyConfig, FastlyMode } from './config.js';
-import type { FastlyClient, FastlySource } from './types.js';
+import type { FastlyClient, FastlyRealtimeClient, FastlySource } from './types.js';
 import { ConnectorManagerError, type AuditSink } from '../cloudvision/manager.js';
 import type { SecretBox } from '../security/secret-box.js';
 import type { ConnectorSettingsRecord, ConnectorSettingsRepository } from '@radar/data';
@@ -81,6 +82,7 @@ export class FastlyConnectorManager {
 
   private persisted: ConnectorSettingsRecord | null = null;
   private poller: FastlyPoller;
+  private streamer: FastlyRealtimeStreamer;
 
   constructor(deps: FastlyManagerDeps) {
     this.base = deps.baseConfig;
@@ -93,6 +95,7 @@ export class FastlyConnectorManager {
     this.fetchImpl = deps.fetchImpl;
     const built = this.buildClient();
     this.poller = new FastlyPoller({ client: built.client, enabled: built.source !== 'disabled', intervalMs: this.base.pollIntervalSeconds * 1000, maxSampleAgeSeconds: this.base.maxSampleAgeSeconds, now: this.now, logger: this.logger });
+    this.streamer = new FastlyRealtimeStreamer(this.buildRealtime(), { now: this.now, logger: this.logger });
   }
 
   /** Load persisted settings (if a repository is configured) and reconfigure the poller. */
@@ -111,17 +114,26 @@ export class FastlyConnectorManager {
     return this.poller;
   }
 
+  getStreamer(): FastlyRealtimeStreamer {
+    return this.streamer;
+  }
+
   start(): void {
     this.poller.start();
+    this.streamer.start(); // self-guards: only streams when live with a token + service ids
   }
 
   stop(): void {
     this.poller.stop();
+    this.streamer.stop();
   }
 
   // ---- Effective config resolution (the ONLY place the token is decrypted) -------------------
 
-  private buildClient(): { client: FastlyClient; source: FastlySource; degraded: string | null } {
+  /** The ONE place the token is decrypted. Resolves the effective connection — enabled/mode/base/
+   *  ids plus the transient token and a `degraded` reason — and derives the source. Fails closed:
+   *  when the master key is missing/invalid the token stays undefined and the source is 'disabled'. */
+  private resolveEffective(): { enabled: boolean; mode: FastlyMode; apiBase: string; serviceIds: string[]; token?: string; source: FastlySource; degraded: string | null } {
     const r = this.resolveFields();
     let token: string | undefined;
     let degraded: string | null = null;
@@ -143,9 +155,25 @@ export class FastlyConnectorManager {
     }
 
     const source: FastlySource = !r.enabled ? 'disabled' : r.mode === 'mock' ? 'mock' : degraded ? 'disabled' : 'fastly';
-    const effective: FastlyConfig = { ...this.base, enabled: source !== 'disabled', mode: r.mode, apiBase: r.apiBase, token, serviceIds: r.serviceIds };
+    return { ...r, token, source, degraded };
+  }
+
+  private buildClient(): { client: FastlyClient; source: FastlySource; degraded: string | null } {
+    const e = this.resolveEffective();
+    const effective: FastlyConfig = { ...this.base, enabled: e.source !== 'disabled', mode: e.mode, apiBase: e.apiBase, token: e.token, serviceIds: e.serviceIds };
     const client = createFastlyClient(effective, { now: this.now, logger: this.logger, fetchImpl: this.fetchImpl });
-    return { client, source, degraded };
+    return { client, source: e.source, degraded: e.degraded };
+  }
+
+  /** Build the real-time streamer configuration from the effective connection. Streaming is live-
+   *  only and needs explicit service ids (each is a channel long-polled independently). */
+  private buildRealtime(): { client: FastlyRealtimeClient | null; services: { id: string; name: string }[]; enabled: boolean; windowSeconds: number; source: FastlySource } {
+    const e = this.resolveEffective();
+    const effective: FastlyConfig = { ...this.base, enabled: e.source !== 'disabled', mode: e.mode, apiBase: e.apiBase, token: e.token, serviceIds: e.serviceIds };
+    const client = e.serviceIds.length > 0 ? createFastlyRealtimeClient(effective, { logger: this.logger, fetchImpl: this.fetchImpl }) : null;
+    const source: FastlySource = client ? 'fastly' : 'disabled';
+    // Names default to the id; the route enriches them from the poller's service snapshot.
+    return { client, services: e.serviceIds.map((id) => ({ id, name: id })), enabled: client !== null, windowSeconds: this.base.realtimeWindowSeconds, source };
   }
 
   private resolveFields(): { enabled: boolean; mode: FastlyMode; apiBase: string; serviceIds: string[] } {
@@ -161,6 +189,7 @@ export class FastlyConnectorManager {
   private applyToPoller(): void {
     const built = this.buildClient();
     this.poller.reconfigure({ client: built.client, enabled: built.source !== 'disabled', intervalMs: this.base.pollIntervalSeconds * 1000 });
+    this.streamer.reconfigure(this.buildRealtime());
     if (built.degraded) this.logger?.warn({ reason: built.degraded }, 'fastly: connector degraded');
   }
 
