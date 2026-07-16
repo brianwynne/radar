@@ -252,3 +252,20 @@ table.matrix td.util-warn { background: var(--warn-bg); color: var(--warn); font
 table.matrix td.util-crit { background: var(--danger-bg); color: var(--danger); font-weight: 700; }
 table.matrix tr.lag-member > td.util-warn { background: var(--warn-bg); }
 table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
+
+/* Commercial CDN page: CDN platforms side by side, each a self-contained column. */
+.cdn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; align-items: start; }
+.cdn-col { padding: 1rem; }
+.cdn-col-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.6rem; }
+.cdn-selected { margin-top: 0.6rem; padding: 0.6rem; border: 1px solid var(--border); border-radius: 8px; }
+.status-panel { margin-top: 0.2rem; }
+.status-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem; }
+/* Class cells are buttons — drill into individual codes on click. */
+.status-cell { text-align: left; cursor: pointer; font: inherit; color: inherit; border: 1px solid var(--border); background: var(--card-bg, transparent); }
+.status-cell:hover { border-color: var(--accent, var(--border)); }
+.status-cell-open { outline: 2px solid var(--accent, var(--border)); outline-offset: -1px; }
+.code-detail { margin-top: 0.5rem; padding: 0.5rem; border: 1px dashed var(--border); border-radius: 8px; }
+.code-row { display: grid; grid-template-columns: 3rem 4rem 2.4rem 1fr; align-items: center; gap: 0.4rem; padding: 0.15rem 0; }
+.code-num { font-weight: 700; font-variant-numeric: tabular-nums; }
+.code-val { font-variant-numeric: tabular-nums; text-align: right; }
+.code-share { font-size: 0.72rem; text-align: right; }

@@ -6,7 +6,7 @@ import { FastlyRealtimeStreamer } from '../src/fastly/realtime-streamer.js';
 import type { FastlyRealtimeBatch, FastlyRealtimeClient, FastlyRealtimeSample } from '../src/fastly/types.js';
 
 function sample(second: number, requests: number, bandwidthBytes: number): FastlyRealtimeSample {
-  return { second, at: new Date(second * 1000).toISOString(), requests, hits: requests, miss: 0, errors: 0, bandwidthBytes, status2xx: requests, status3xx: 0, status4xx: 0, status5xx: 0 };
+  return { second, at: new Date(second * 1000).toISOString(), requests, hits: requests, miss: 0, errors: 0, bandwidthBytes, status2xx: requests, status3xx: 0, status4xx: 0, status5xx: 0, statusCodes: { '200': requests } };
 }
 const batch = (samples: FastlyRealtimeSample[], nextTimestamp: number): FastlyRealtimeBatch => ({ samples, nextTimestamp, aggregateDelaySeconds: 5 });
 

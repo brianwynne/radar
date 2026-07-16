@@ -15,8 +15,8 @@ const RESPONSE = {
   AggregateDelay: 5,
   Data: [
     // deliberately out of order — the client must sort ascending by `recorded`
-    { recorded: 1_465_921_327, aggregated: { requests: 20, hits: 15, miss: 5, errors: 1, body_size: 1_800, header_size: 200, status_2xx: 18, status_3xx: 0, status_4xx: 1, status_5xx: 1 }, datacenter: {} },
-    { recorded: 1_465_921_326, aggregated: { requests: 10, hits: 7, miss: 3, errors: 0, body_size: 900, header_size: 100, status_2xx: 9, status_3xx: 0, status_4xx: 1, status_5xx: 0 }, datacenter: {} },
+    { recorded: 1_465_921_327, aggregated: { requests: 20, hits: 15, miss: 5, errors: 1, body_size: 1_800, header_size: 200, status_2xx: 18, status_3xx: 0, status_4xx: 1, status_5xx: 1, status_200: 15, status_206: 3, status_404: 1, status_503: 1 }, datacenter: {} },
+    { recorded: 1_465_921_326, aggregated: { requests: 10, hits: 7, miss: 3, errors: 0, body_size: 900, header_size: 100, status_2xx: 9, status_3xx: 0, status_4xx: 1, status_5xx: 0, status_200: 9, status_404: 1 }, datacenter: {} },
   ],
 };
 
@@ -55,6 +55,9 @@ describe('HttpFastlyRealtimeClient', () => {
     expect(first.bandwidthBytes).toBe(1_000); // 900 body + 100 header
     expect(first.status4xx).toBe(1);
     expect(first.at).toBe(new Date(1_465_921_326 * 1000).toISOString());
+    // Individual status codes captured for drill-down; class aggregates (status_2xx) excluded.
+    expect(first.statusCodes).toEqual({ '200': 9, '404': 1 });
+    expect(batch.samples[1].statusCodes).toEqual({ '200': 15, '206': 3, '404': 1, '503': 1 });
   });
 
   it('starts from cursor 0 and keeps the cursor when the response omits a Timestamp', async () => {

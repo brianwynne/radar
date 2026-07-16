@@ -1017,6 +1017,8 @@ export interface FastlyConnectorStatus {
 export interface FastlyRealtimeSample {
   second: number; at: string; requests: number; hits: number; miss: number; errors: number;
   bandwidthBytes: number; status2xx: number; status3xx: number; status4xx: number; status5xx: number;
+  /** Per specific status code with traffic this second, e.g. { "200": 680, "404": 12 }. */
+  statusCodes: Record<string, number>;
 }
 export interface FastlyRealtimeSeries {
   serviceId: string; serviceName: string; samples: FastlyRealtimeSample[];

@@ -24,7 +24,7 @@ const LIVE_ID = 'SU9a8b7RTElive000000';
 async function streamer(): Promise<FastlyRealtimeStreamer> {
   const client: FastlyRealtimeClient = {
     async pollChannel() {
-      return { samples: [{ second: NOW_SEC, at: new Date(NOW).toISOString(), requests: 42, hits: 40, miss: 2, errors: 0, bandwidthBytes: 5_000, status2xx: 41, status3xx: 0, status4xx: 1, status5xx: 0 }], nextTimestamp: NOW_SEC, aggregateDelaySeconds: 5 };
+      return { samples: [{ second: NOW_SEC, at: new Date(NOW).toISOString(), requests: 42, hits: 40, miss: 2, errors: 0, bandwidthBytes: 5_000, status2xx: 41, status3xx: 0, status4xx: 1, status5xx: 0, statusCodes: { '200': 41, '404': 1 } }], nextTimestamp: NOW_SEC, aggregateDelaySeconds: 5 };
     },
   };
   const s = new FastlyRealtimeStreamer({ client, services: [{ id: LIVE_ID, name: LIVE_ID }], enabled: true, windowSeconds: 120, source: 'fastly' }, { now: () => NOW });

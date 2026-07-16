@@ -121,7 +121,20 @@ function toSample(entry: Record<string, unknown>): FastlyRealtimeSample | null {
     status3xx: num(a.status_3xx),
     status4xx: num(a.status_4xx),
     status5xx: num(a.status_5xx),
+    statusCodes: specificStatusCodes(a),
   };
+}
+
+/** Pull the individual `status_<code>` counters (e.g. status_200, status_404) into a { code: count }
+ *  map, keeping only real 3-digit codes with traffic. The class aggregates (status_2xx) are the
+ *  letter-suffixed keys and are deliberately excluded by the digit check. */
+function specificStatusCodes(a: Record<string, unknown>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(a)) {
+    const m = /^status_(\d{3})$/.exec(k);
+    if (m && typeof v === 'number' && v > 0) out[m[1]] = v;
+  }
+  return out;
 }
 
 /** Real-time reports bytes as body + header size; older/newer field spellings are tried in turn. */

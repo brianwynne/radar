@@ -89,6 +89,9 @@ export interface FastlyRealtimeSample {
   status3xx: number;
   status4xx: number;
   status5xx: number;
+  /** Per specific status code that had traffic this second, e.g. { "200": 680, "206": 40, "404": 12 }.
+   *  Enables drilling a class (2xx/3xx/4xx/5xx) down to individual codes; absent codes are simply omitted. */
+  statusCodes: Record<string, number>;
 }
 
 /** Rolling per-second series for one service over the retention window (oldest first, newest last). */

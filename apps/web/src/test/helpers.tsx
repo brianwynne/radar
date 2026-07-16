@@ -288,16 +288,17 @@ export const FASTLY_STATUS_BODY = {
   summary: { serviceCount: 2, totalRequestsPerSecond: 12500, totalBandwidthBps: 53333333332, avgHitRatioPercent: 87.3 },
   provenance: fyProv, warnings: [],
 };
-// Real-time live-tail: one active service (per-second samples) + one idle service (empty → nulls).
+// Real-time live-tail: the busiest service (SU-vod, default-selected) streams per-second samples;
+// the other (SU-live) is idle (empty → nulls, shown honestly, never fabricated).
 export const FASTLY_REALTIME_BODY = {
   provenance: fyProv, source: 'fastly', windowSeconds: 120,
   series: [
-    { serviceId: 'SU-live', serviceName: 'RTÉ Live', latestRequestsPerSecond: 588, latestBandwidthBps: 4967576688, lastSampleAt: '2026-07-16T12:00:02Z', samples: [
-      { second: 1784227200, at: '2026-07-16T12:00:00Z', requests: 710, hits: 554, miss: 137, errors: 19, bandwidthBytes: 720006896, status2xx: 685, status3xx: 0, status4xx: 25, status5xx: 0 },
-      { second: 1784227201, at: '2026-07-16T12:00:01Z', requests: 745, hits: 623, miss: 113, errors: 9, bandwidthBytes: 757781453, status2xx: 736, status3xx: 0, status4xx: 9, status5xx: 0 },
-      { second: 1784227202, at: '2026-07-16T12:00:02Z', requests: 588, hits: 464, miss: 113, errors: 11, bandwidthBytes: 620947086, status2xx: 573, status3xx: 0, status4xx: 15, status5xx: 0 },
+    { serviceId: 'SU-vod', serviceName: 'RTÉ Player VOD', latestRequestsPerSecond: 588, latestBandwidthBps: 4967576688, lastSampleAt: '2026-07-16T12:00:02Z', samples: [
+      { second: 1784227200, at: '2026-07-16T12:00:00Z', requests: 710, hits: 554, miss: 137, errors: 19, bandwidthBytes: 720006896, status2xx: 685, status3xx: 0, status4xx: 25, status5xx: 0, statusCodes: { '200': 650, '206': 35, '404': 25 } },
+      { second: 1784227201, at: '2026-07-16T12:00:01Z', requests: 745, hits: 623, miss: 113, errors: 9, bandwidthBytes: 757781453, status2xx: 736, status3xx: 0, status4xx: 9, status5xx: 0, statusCodes: { '200': 700, '206': 36, '404': 9 } },
+      { second: 1784227202, at: '2026-07-16T12:00:02Z', requests: 588, hits: 464, miss: 113, errors: 11, bandwidthBytes: 620947086, status2xx: 573, status3xx: 0, status4xx: 15, status5xx: 0, statusCodes: { '200': 540, '206': 33, '404': 15 } },
     ] },
-    { serviceId: 'SU-vod', serviceName: 'RTÉ Player VOD', latestRequestsPerSecond: null, latestBandwidthBps: null, lastSampleAt: null, samples: [] },
+    { serviceId: 'SU-live', serviceName: 'RTÉ Live', latestRequestsPerSecond: null, latestBandwidthBps: null, lastSampleAt: null, samples: [] },
   ],
   warnings: [],
 };
