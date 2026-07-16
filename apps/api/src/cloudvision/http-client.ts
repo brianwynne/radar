@@ -13,7 +13,7 @@
 //     surfaced as UNAVAILABLE — never fabricated. See the live-validation command.
 import { CloudVisionError } from './errors.js';
 import { buildSnapshot, type AdapterConfig, type RawBgpPeer, type RawDevice, type RawInterface, type RawSnapshot } from './adapter.js';
-import { parseBgpPeer, parseInterfaceRates, parseUtilisation, speedFromStatus, speedFromUtilisation, unwrap } from './analytics-shapes.js';
+import { parseBgpPeer, parseInterfaceRates, parseUtilisation, speedFromStatus, speedFromUtilisation, str, unwrap } from './analytics-shapes.js';
 import type { ClassificationRule } from './classification.js';
 import type { CloudVisionClient, NetworkStateSnapshot } from './types.js';
 
@@ -88,9 +88,12 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
   private lagCache = new Map<string, { at: number; membership: Map<string, string> }>();
   /** Per-interface cache of resolved speed (bps); keyed `deviceId::name`. Stable config. */
   private speedCache = new Map<string, { at: number; speedBps: number }>();
-  /** Per-device cache of interface-name → Sysdb status pointer (the map that resolves each
-   *  interface to its real speed record). Stable, so refreshed only occasionally. */
-  private intfStatusCache = new Map<string, { at: number; ptrs: Map<string, string[]> }>();
+  /** Per-interface cache of the configured description; keyed `deviceId::name`. Stable config. */
+  private descriptionCache = new Map<string, { at: number; description: string | null }>();
+  /** Per-device cache of interface-name → Sysdb pointer maps, keyed `deviceId::status|config`
+   *  (status resolves the speed record, config the description record). Stable, refreshed
+   *  occasionally. */
+  private ptrMapCache = new Map<string, { at: number; ptrs: Map<string, string[]> }>();
 
   constructor(private readonly opts: HttpCloudVisionClientOptions) {
     if (!/^https?:\/\//i.test(opts.endpoint)) throw new Error('HttpCloudVisionReadClient: endpoint must be an http(s) URL.');
@@ -251,12 +254,12 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
     const rates = await this.analyticsGet(this.analyticsBase(deviceId, 'interfaces', 'data', name, 'rates'), correlationId);
     if (Object.keys(rates.updates).length === 0) return null; // no rate data → omit this interface
     const r = parseInterfaceRates(rates.updates);
-    const speedBps = await this.fetchSpeed(deviceId, name, correlationId);
+    const [speedBps, description] = await Promise.all([this.fetchSpeed(deviceId, name, correlationId), this.fetchDescription(deviceId, name, correlationId)]);
     const hasData = r.inBps !== null || r.outBps !== null;
     return {
       deviceId,
       name,
-      description: null, // interface description is not on the analytics node (future enrichment)
+      description, // configured description read from the device Sysdb (e.g. "[Po7] Eir")
       adminState: 'unknown',
       operState: hasData ? 'up' : 'unknown',
       speedBps,
@@ -291,7 +294,7 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
    *  the interface isn't in the status map, the device dataset is unreachable, or the record has
    *  no usable speed (speedUnknown / 0) — leaving fetchSpeed to fall back to derivation. */
   private async realSpeed(deviceId: string, name: string, correlationId?: string): Promise<number | null> {
-    const ptrs = await this.fetchInterfacePointers(deviceId, correlationId);
+    const ptrs = await this.fetchPointerMap(deviceId, 'status', correlationId);
     const ptr = ptrs.get(name);
     if (!ptr) return null;
     try {
@@ -302,24 +305,50 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
     }
   }
 
-  /** interface-name → Sysdb status pointer, from `Sysdb/interface/status/all/intfStatus` (each
-   *  value is a `{ptr:[...]}` to the per-interface record). Cached per device (stable). A failure
-   *  yields an empty map (speed falls back to derivation), never a fabricated pointer. */
-  private async fetchInterfacePointers(deviceId: string, correlationId?: string): Promise<Map<string, string[]>> {
-    const cached = this.intfStatusCache.get(deviceId);
+  /** Configured interface description (e.g. "[Po7] Eir"), read from the device Sysdb config
+   *  record via its pointer. Stable config, so cached; null when unavailable. */
+  private async fetchDescription(deviceId: string, name: string, correlationId?: string): Promise<string | null> {
+    const cacheKey = `${deviceId}::${name}`;
+    const cached = this.descriptionCache.get(cacheKey);
+    if (cached && this.now() - cached.at < SPEED_CACHE_TTL_MS) return cached.description;
+    let description: string | null = null;
+    const ptr = (await this.fetchPointerMap(deviceId, 'config', correlationId)).get(name);
+    if (ptr) {
+      try {
+        const rec = await this.analyticsGet(this.deviceBase(deviceId, ...ptr), correlationId);
+        const d = str(rec.updates.description);
+        description = d && d.trim().length > 0 ? d : null;
+      } catch {
+        description = null;
+      }
+    }
+    this.descriptionCache.set(cacheKey, { at: this.now(), description });
+    return description;
+  }
+
+  /** interface-name → Sysdb pointer map. `status` → `interface/status/all/intfStatus` (resolves
+   *  the speed record); `config` → `interface/config/all/intfConfig` (resolves the description).
+   *  Each value is a `{ptr:[...]}` to the per-interface record. Cached per device (stable). A
+   *  failure yields an empty map (the caller degrades gracefully), never a fabricated pointer. */
+  private async fetchPointerMap(deviceId: string, kind: 'status' | 'config', correlationId?: string): Promise<Map<string, string[]>> {
+    const cacheKey = `${deviceId}::${kind}`;
+    const cached = this.ptrMapCache.get(cacheKey);
     if (cached && this.now() - cached.at < SPEED_CACHE_TTL_MS) return cached.ptrs;
+    const path = kind === 'status'
+      ? this.deviceBase(deviceId, 'Sysdb', 'interface', 'status', 'all', 'intfStatus')
+      : this.deviceBase(deviceId, 'Sysdb', 'interface', 'config', 'all', 'intfConfig');
     const ptrs = new Map<string, string[]>();
     try {
-      const map = await this.analyticsGet(this.deviceBase(deviceId, 'Sysdb', 'interface', 'status', 'all', 'intfStatus'), correlationId);
+      const map = await this.analyticsGet(path, correlationId);
       for (const [name, raw] of Object.entries(map.updates)) {
         const v = unwrap(raw);
         if (isObj(v) && Array.isArray(v.ptr) && v.ptr.every((e) => typeof e === 'string')) ptrs.set(name, v.ptr as string[]);
       }
     } catch (err) {
-      this.opts.logger?.warn({ deviceId, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: interface status map fetch failed');
+      this.opts.logger?.warn({ deviceId, kind, code: err instanceof CloudVisionError ? err.code : 'error' }, 'cloudvision: interface pointer map fetch failed');
       return ptrs;
     }
-    this.intfStatusCache.set(deviceId, { at: this.now(), ptrs });
+    this.ptrMapCache.set(cacheKey, { at: this.now(), ptrs });
     return ptrs;
   }
 

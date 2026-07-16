@@ -64,12 +64,18 @@ const PC_MEMBERS = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['x'] }
 // carries the authoritative speed (physical port → speedEnum; speedMbps 0). speed100Gbps → 100G.
 const IF_STATUS_MAP = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['Sysdb', 'interface', 'status', 'eth', 'phy', 'slice', 'Linecard1', 'intfStatus', 'Ethernet1'] }) } }] };
 const IF_STATUS_REC = { notifications: [{ updates: { speedEnum: wrap({ Name: 'speed100Gbps', Value: { int: 10 } }), speedMbps: wrap({ int: 0 }) } }] };
+// Device Sysdb config: the flat map resolves each interface to its config record, which carries
+// the operator's description.
+const IF_CONFIG_MAP = { notifications: [{ updates: { Ethernet1: wrap({ ptr: ['Sysdb', 'interface', 'config', 'eth', 'phy', 'slice', 'Linecard1', 'intfConfig', 'Ethernet1'] }) } }] };
+const IF_CONFIG_REC = { notifications: [{ updates: { description: wrap('[Po7] Eir') } }] };
 
 /** Route a request path to the right analytics fixture. */
 function analyticsHandler(path: string): Response {
   if (path.includes('/inventory/v1/Device/all')) return ok(INVENTORY);
   if (path.endsWith('/status/all/intfStatus')) return ok(IF_STATUS_MAP); // real-speed pointer map
   if (path.includes('/intfStatus/Ethernet1')) return ok(IF_STATUS_REC); // real-speed record (100G)
+  if (path.endsWith('/config/all/intfConfig')) return ok(IF_CONFIG_MAP); // description pointer map
+  if (path.includes('/intfConfig/Ethernet1')) return ok(IF_CONFIG_REC); // description record
   if (path.includes('/utilisation') || path.includes('/utilization')) return ok(IF_UTIL);
   if (path.endsWith('/expectedMembers')) return ok(PC_MEMBERS);
   if (path.endsWith('/portchannel')) return ok(PC_LIST);
@@ -124,6 +130,7 @@ describe('HttpCloudVisionReadClient', () => {
     expect(eth1.inBps).toBe(8e9);
     expect(eth1.utilisationPercent).toBeCloseTo(40, 1);
     expect(eth1.speedBps).toBeCloseTo(100e9, -8);
+    expect(eth1.description).toBe('[Po7] Eir'); // read from the Sysdb config record
     expect(eth1.bandwidthSource).toBe('REPORTED');
     expect(eth1.memberOf).toBe('Port-Channel7'); // LAG membership from portchannel/expectedMembers
     expect(eth1.observedAt).toBe(new Date(Number(BigInt(TS) / 1_000_000n)).toISOString());
