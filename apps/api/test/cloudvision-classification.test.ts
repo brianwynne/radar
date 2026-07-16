@@ -26,9 +26,14 @@ describe('classifyInterface', () => {
     expect(r).toMatchObject({ linkType: 'PRIVATE_PEERING', provider: 'Eir', classificationSource: 'description_regex' });
   });
 
-  it('returns UNKNOWN (visible, not dropped) when nothing matches', () => {
+  it('returns UNKNOWN (visible, not dropped) when an UNstructured description matches nothing', () => {
     const r = classifyInterface(rules, { deviceId: 'DEVX', name: 'Ethernet5', description: 'mystery link' });
     expect(r).toEqual({ linkType: 'UNKNOWN', provider: null, location: null, classificationSource: 'unknown' });
+  });
+
+  it('falls back to PRIVATE_PEERING with the parsed provider for a bracketed, rule-less description', () => {
+    const r = classifyInterface(rules, { deviceId: 'DEVX', name: 'Ethernet7', description: '[Po9] NewCo Networks - REF123' });
+    expect(r).toMatchObject({ linkType: 'PRIVATE_PEERING', provider: 'NewCo Networks', classificationSource: 'description_regex' });
   });
 
   it('a null description never matches description rules', () => {

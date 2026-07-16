@@ -96,6 +96,13 @@ export function classifyInterface(rules: ClassificationRule[], input: Classifica
       };
     }
   }
+  // No rule matched: a structured "[tag] Provider…" description is still a provider link, so use
+  // the parsed provider name and default to PRIVATE_PEERING (transit/IX/internal are matched by
+  // the rules above via their tags/keywords). Unstructured descriptions stay UNKNOWN.
+  if (input.description && /^\s*\[[^\]]+\]/.test(input.description)) {
+    const provider = parseProviderFromDescription(input.description);
+    if (provider) return { linkType: 'PRIVATE_PEERING', provider, location: null, classificationSource: 'description_regex' };
+  }
   return UNKNOWN;
 }
 

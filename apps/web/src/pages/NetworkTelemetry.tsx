@@ -108,6 +108,35 @@ export function NetworkTelemetry() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggleCollapse = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
 
+  // Copy the top-interfaces table to the clipboard as a real HTML table (so it pastes as a table
+  // into Word/Docs/email), with a tab-separated plain-text fallback for plain targets.
+  const [copiedTop, setCopiedTop] = useState(false);
+  const copyTopInterfaces = async () => {
+    const header = ['Router', 'Interface', 'Description', 'Provider', 'Capacity', 'Current', 'Util'];
+    const body = topInterfaces.map((i) => [
+      i.deviceHostname, i.name, i.description ?? '', i.provider ?? '',
+      formatBps(i.speedBps), formatBps(i.primaryBps), formatPercent(i.utilisationPercent),
+    ]);
+    const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const html =
+      `<table border="1" cellspacing="0" cellpadding="4"><thead><tr>${header.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>` +
+      `<tbody>${body.map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    const tsv = [header, ...body].map((r) => r.join('\t')).join('\n');
+    try {
+      if (navigator.clipboard && 'write' in navigator.clipboard && typeof ClipboardItem !== 'undefined') {
+        await navigator.clipboard.write([
+          new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([tsv], { type: 'text/plain' }) }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(tsv); // older browsers / insecure context
+      }
+      setCopiedTop(true);
+      setTimeout(() => setCopiedTop(false), 1500);
+    } catch {
+      // clipboard unavailable — silently no-op
+    }
+  };
+
   // Build the interface tree: Port-Channels + standalone ports at the top level (sorted),
   // each LAG's member ports indented beneath it. Members are excluded from the top-level
   // sort so a Port-Channel stays grouped with its members.
@@ -246,7 +275,12 @@ export function NetworkTelemetry() {
       </div>
 
       {/* Busiest links — top 10 interfaces by current bandwidth (live), scoped to the Router filter */}
-      <h2>Top interfaces by bandwidth {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
+      <div className="section-head">
+        <h2>Top interfaces by bandwidth {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
+        <button className="btn copy-btn" onClick={copyTopInterfaces} title="Copy this table (tab-separated — paste into a spreadsheet)">
+          {copiedTop ? 'Copied ✓' : 'Copy'}
+        </button>
+      </div>
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>

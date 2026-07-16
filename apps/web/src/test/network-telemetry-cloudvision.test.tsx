@@ -10,6 +10,9 @@ afterEach(() => vi.unstubAllGlobals());
 // description-anchored assertions must be scoped to this one). Anchored on the "Link type"
 // column header, which only the main interface table has.
 const mainTable = (): HTMLElement => screen.getByRole('columnheader', { name: 'Link type' }).closest('table')! as HTMLElement;
+// The top-interfaces table: the matrix-wrap that follows its section heading.
+const topTable = (): HTMLElement =>
+  screen.getByRole('heading', { name: /Top interfaces by bandwidth/ }).closest('.section-head')!.nextElementSibling!.querySelector('table')! as HTMLElement;
 
 describe('Network Telemetry page', () => {
   it('shows summary, top interfaces, interfaces and BGP peers to a NOC viewer', async () => {
@@ -100,18 +103,35 @@ describe('Network Telemetry page', () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin'); // wait for interface data to load
-    const heading = screen.getByRole('heading', { name: 'Top interfaces by bandwidth' });
-    const table = heading.nextElementSibling!.querySelector('table')!;
-    const dataRows = within(table).getAllByRole('row').slice(1); // drop the header row
+    const dataRows = within(topTable()).getAllByRole('row').slice(1); // drop the header row
     // Busiest by bandwidth first: edge1 Port-Channel7 (INEX LAG) at 128 Gb/s (members excluded).
     expect(within(dataRows[0]).getByText('INEX LAG')).toBeInTheDocument();
+  });
+
+  it('copies the top-interfaces table as an HTML table (with a plain-text fallback)', async () => {
+    const captured: Record<string, Blob>[] = [];
+    class FakeClipboardItem { constructor(public data: Record<string, Blob>) { captured.push(data); } }
+    (globalThis as unknown as { ClipboardItem: unknown }).ClipboardItem = FakeClipboardItem;
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { write }, configurable: true });
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    fireEvent.click(screen.getByRole('button', { name: /Copy/ }));
+    expect(write).toHaveBeenCalledTimes(1);
+    const item = captured[0];
+    const html = await item['text/html'].text();
+    expect(html).toContain('<table'); // a real table, not plain text
+    expect(html).toContain('<th>Provider</th>');
+    expect(html).toContain('INEX LAG'); // busiest link's description
+    const tsv = await item['text/plain'].text();
+    expect(tsv.split('\n')[0]).toBe('Router\tInterface\tDescription\tProvider\tCapacity\tCurrent\tUtil');
   });
 
   it('scopes the top-interfaces list to the Router filter', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin');
-    const topTable = () => screen.getByRole('heading', { name: /Top interfaces by bandwidth/ }).nextElementSibling!.querySelector('table')!;
     // Globally, edge1's Ethernet2 is among the busiest.
     expect(within(topTable()).getByText('Ethernet2')).toBeInTheDocument();
     // Select edge2 → the list follows, and edge1's Ethernet2 drops out.
