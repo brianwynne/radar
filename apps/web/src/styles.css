@@ -59,6 +59,8 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 
 .content { padding: 1.25rem; max-width: 1180px; width: 100%; margin: 0 auto; }
 .page-head { margin-bottom: 1rem; }
+/* Clear separation between the page's sections (Devices / Top interfaces / Interfaces / BGP). */
+.page > h2, .page > .section-head { margin-top: 2.25rem; }
 .page-head p { color: var(--ink-soft); margin: 0; }
 
 /* ---- Cards & layout ---- */

@@ -81,14 +81,14 @@ export function NetworkTelemetry() {
 
   const providers = useMemo(() => [...new Set(t.interfaces.map((i) => i.provider).filter((p): p is string => !!p))].sort(), [t.interfaces]);
 
-  // Busiest links: the top 5 interfaces by utilisation. Excludes LAG members (their Port-Channel
-  // already represents their load) so the five slots are distinct links.
+  // Busiest links: the top 10 interfaces by utilisation. Excludes LAG members (their Port-Channel
+  // already represents their load) so the slots are distinct links.
   const topInterfaces = useMemo(
     () =>
       t.interfaces
         .filter((i) => i.memberOf === null && i.utilisationPercent !== null)
         .sort((a, b) => (b.utilisationPercent ?? 0) - (a.utilisationPercent ?? 0))
-        .slice(0, 5),
+        .slice(0, 10),
     [t.interfaces],
   );
 
@@ -231,33 +231,6 @@ export function NetworkTelemetry() {
         <div className="card"><div className="muted">Devices / interfaces</div><div className="stat">{num(t.summary?.deviceCount)} / {num(t.summary?.interfaceCount)}</div></div>
       </div>
 
-      {/* Busiest links — top 5 interfaces by utilisation (live) */}
-      <h2>Top interfaces by utilisation</h2>
-      <div className="matrix-wrap">
-        <table className="matrix">
-          <thead>
-            <tr><th>Router</th><th>Interface</th><th>Name</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
-          </thead>
-          <tbody>
-            {topInterfaces.length === 0 && <tr><td colSpan={7} className="center-note">No interface utilisation yet.</td></tr>}
-            {topInterfaces.map((i) => {
-              const key = ifKey(i.deviceId, i.name);
-              return (
-                <tr key={key}>
-                  <td>{i.deviceHostname}</td>
-                  <td>{i.name}</td>
-                  <td>{i.friendlyName ?? '—'}</td>
-                  <td>{i.provider ?? '—'}</td>
-                  <td>{formatBps(i.speedBps)}</td>
-                  <td>{formatBps(i.primaryBps)}</td>
-                  <td className={utilClass(levelByKey.get(key) ?? 'ok')}>{formatPercent(i.utilisationPercent)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
       {/* Devices — selectable; click a device to drill into its interfaces + BGP peers */}
       <h2>Devices {t.devices.length > 0 && <span className="muted">({t.devices.length})</span>}</h2>
       {selectedDevice && (
@@ -284,6 +257,33 @@ export function NetworkTelemetry() {
                   <td><span className={`badge ${d.streaming ? 'ok' : 'neutral'} badge-sm`}>{d.streaming ? 'streaming' : 'not streaming'}</span></td>
                   <td>{ifCount}</td>
                   <td className="muted">{formatFreshness(d.freshness.ageSeconds)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Busiest links — top 10 interfaces by utilisation (live) */}
+      <h2>Top interfaces by utilisation</h2>
+      <div className="matrix-wrap">
+        <table className="matrix">
+          <thead>
+            <tr><th>Router</th><th>Interface</th><th>Name</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
+          </thead>
+          <tbody>
+            {topInterfaces.length === 0 && <tr><td colSpan={7} className="center-note">No interface utilisation yet.</td></tr>}
+            {topInterfaces.map((i) => {
+              const key = ifKey(i.deviceId, i.name);
+              return (
+                <tr key={key}>
+                  <td>{i.deviceHostname}</td>
+                  <td>{i.name}</td>
+                  <td>{i.friendlyName ?? '—'}</td>
+                  <td>{i.provider ?? '—'}</td>
+                  <td>{formatBps(i.speedBps)}</td>
+                  <td>{formatBps(i.primaryBps)}</td>
+                  <td className={utilClass(levelByKey.get(key) ?? 'ok')}>{formatPercent(i.utilisationPercent)}</td>
                 </tr>
               );
             })}
