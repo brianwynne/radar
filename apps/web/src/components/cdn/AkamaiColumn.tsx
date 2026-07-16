@@ -40,8 +40,9 @@ export function AkamaiColumn() {
 
       {!live && (
         <div className="notice info">
-          Akamai telemetry streams via DataStream 2 → S3, aggregated by RADAR. No records yet — once a
-          stream is delivering for the observed CP codes, per-service traffic and response codes appear here.
+          Not connected. Akamai telemetry streams via <strong>DataStream 2 → S3</strong>, aggregated by
+          RADAR. Configure the stream and RADAR&rsquo;s S3 credentials on the <strong>Integrations</strong>
+          page; per-service traffic and response codes appear here once real edge logs are flowing.
         </div>
       )}
       {t.error && <div className="notice warn">{t.error}</div>}

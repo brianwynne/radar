@@ -17,6 +17,10 @@ export type * from './types.js';
 
 export interface AkamaiConnectorStatus {
   source: AkamaiSource;
+  /** True only when a live S3 source is configured AND recently polled successfully. Replayed data
+   *  arriving via the ingest route does NOT make the connector "connected" — that path is a dev/test
+   *  aid, so a connector with no live S3 stream honestly reads as not connected. */
+  connected: boolean;
   aggregator: AkamaiStatus;
   s3: AkamaiS3PollerStatus;
   /** Whether the shared-secret HTTPS ingest route is enabled. */
@@ -32,23 +36,38 @@ export interface AkamaiConnectorDeps {
 export class AkamaiConnector {
   private readonly aggregator: AkamaiAggregator;
   private readonly poller: AkamaiS3Poller;
-  private readonly source: AkamaiSource;
+  private readonly enabled: boolean;
   private readonly ingestSecret: string;
+  private readonly hasS3: boolean;
+  private readonly maxStaleMs: number;
+  private readonly now: () => number;
 
   constructor(config: AkamaiConfig, deps: AkamaiConnectorDeps = {}) {
-    this.source = config.enabled ? 'akamai' : 'disabled';
+    this.enabled = config.enabled;
     this.ingestSecret = config.ingestSecret;
+    this.now = deps.now ?? (() => Date.now());
     this.aggregator = new AkamaiAggregator(
-      { cpCodes: config.cpCodes, names: config.cpNames, windowSeconds: config.windowSeconds, source: this.source },
+      { cpCodes: config.cpCodes, names: config.cpNames, windowSeconds: config.windowSeconds, source: config.enabled ? 'akamai' : 'disabled' },
       { now: deps.now },
     );
     const s3 = config.enabled && config.s3.bucket && config.s3.accessKeyId && config.s3.secretAccessKey
       ? new S3ReadClient({ bucket: config.s3.bucket, region: config.s3.region, accessKeyId: config.s3.accessKeyId, secretKey: config.s3.secretAccessKey, now: deps.now, fetchImpl: deps.fetchImpl })
       : null;
+    this.hasS3 = s3 !== null;
+    // A live poll is "recent" for a few poll intervals or the retention window, whichever is longer.
+    this.maxStaleMs = Math.max(config.windowSeconds, config.s3.pollIntervalSeconds * 3) * 1000;
     this.poller = new AkamaiS3Poller({
       s3, aggregator: this.aggregator, prefix: config.s3.prefix, intervalMs: config.s3.pollIntervalSeconds * 1000,
       enabled: config.enabled && s3 !== null, now: deps.now, logger: deps.logger,
     });
+  }
+
+  /** Connected only when a live S3 source has polled successfully and recently. The ingest/replay
+   *  route never flips this on — so with no real DataStream 2 stream the connector reads NOT CONNECTED. */
+  connected(): boolean {
+    if (!this.enabled || !this.hasS3) return false;
+    const last = this.poller.status().lastSuccessAt;
+    return last !== null && this.now() - Date.parse(last) < this.maxStaleMs;
   }
 
   /** Ingest a DataStream 2 upload (HTTPS-push / replay). Returns the number of records accepted. */
@@ -58,18 +77,30 @@ export class AkamaiConnector {
 
   /** Whether the shared-secret ingest route should be exposed (a secret is configured). */
   ingestEnabled(): boolean {
-    return this.source !== 'disabled' && this.ingestSecret.length > 0;
+    return this.enabled && this.ingestSecret.length > 0;
   }
 
   verifyIngestSecret(provided: string | undefined): boolean {
     return this.ingestSecret.length > 0 && provided === this.ingestSecret;
   }
 
-  snapshot(): AkamaiSnapshot { return this.aggregator.snapshot(); }
+  /** Not connected ⇒ an honest disabled snapshot: no series (replayed/stale data is not shown as live). */
+  snapshot(): AkamaiSnapshot {
+    const snap = this.aggregator.snapshot();
+    if (this.connected()) return snap;
+    return {
+      ...snap, source: 'disabled', series: [],
+      provenance: { source: 'disabled', synthetic: false, readOnly: true, informationalOnly: true, notice: 'Akamai connector is not connected — no live DataStream 2 source.', retrievedAt: snap.capturedAt },
+    };
+  }
 
   status(): AkamaiConnectorStatus {
-    return { source: this.source, aggregator: this.aggregator.status(), s3: this.poller.status(), ingestEnabled: this.ingestEnabled() };
+    const connected = this.connected();
+    return { source: connected ? 'akamai' : 'disabled', connected, aggregator: this.aggregator.status(), s3: this.poller.status(), ingestEnabled: this.ingestEnabled() };
   }
+
+  /** Run one S3 poll now (used by tests and to warm the connection). */
+  pollOnce(): Promise<{ ok: boolean; objects: number; records: number; error?: string }> { return this.poller.runOnce(); }
 
   start(): void { this.poller.start(); }
   stop(): void { this.poller.stop(); }

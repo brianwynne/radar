@@ -47,21 +47,20 @@ describe('Akamai routes', () => {
     await a.close();
   });
 
-  it('ingests a DS2 batch and serves it as per-CP-code realtime telemetry', async () => {
+  it('accepts an ingest batch but stays NOT CONNECTED without a live S3 source (no replay-as-live)', async () => {
     const a = await app('NOC_VIEWER');
     const ing = await a.inject({ method: 'POST', url: '/api/v1/cdn/akamai/datastream/ingest', headers: { 'content-type': 'application/x-ndjson', 'x-radar-ingest-key': SECRET }, payload: NDJSON });
     expect(ing.statusCode).toBe(200);
-    expect(ing.json().accepted).toBe(2); // the unobserved CP code is filtered out
+    expect(ing.json().accepted).toBe(2); // records are aggregated (the unobserved CP code is filtered out)...
 
+    // ...but with no live S3 stream the connector is not connected: realtime is disabled + empty,
+    // so replayed/ingested data is never surfaced as live.
     const rt = (await a.inject({ url: '/api/v1/cdn/akamai/realtime' })).json();
-    expect(rt.source).toBe('akamai');
-    expect(rt.series).toHaveLength(1);
-    const s = rt.series[0];
-    expect(s.serviceName).toBe('LIVE.RTE.IE');
-    expect(s.samples[0].status2xx).toBe(1);
-    expect(s.samples[0].status4xx).toBe(1);
-    expect(s.samples[0].statusCodes).toEqual({ '200': 1, '404': 1 });
-    expect(s.latestBandwidthBps).toBe(1200 * 8);
+    expect(rt.source).toBe('disabled');
+    expect(rt.series).toEqual([]);
+    const status = (await a.inject({ url: '/api/v1/cdn/akamai/status' })).json();
+    expect(status.connected).toBe(false);
+    expect(status.source).toBe('disabled');
     expect(JSON.stringify(rt)).not.toMatch(new RegExp(SECRET));
     await a.close();
   });
