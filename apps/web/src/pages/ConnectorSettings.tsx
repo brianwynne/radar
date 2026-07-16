@@ -7,6 +7,7 @@ import { api, ApiError } from '../api/client';
 import type {
   ConnectorSettingsView, ConnectorSettingsUpdateRequest, ConnectorTestResult,
   CloudflareConnectionSettings, CloudflareConnectionUpdateRequest, CloudflareConnectionTestResult,
+  FastlyConnection, FastlyConnectionUpdate, FastlyConnectionTestResult,
 } from '../api/types';
 
 export function ConnectorSettings() {
@@ -18,6 +19,7 @@ export function ConnectorSettings() {
       <p className="muted">Service-account tokens are write-only — stored encrypted server-side and never displayed. Leave a token field blank to keep the current token.</p>
       <CloudVisionConnectorForm />
       <CloudflareConnectorForm />
+      <FastlyConnectorForm />
     </section>
   );
 }
@@ -268,6 +270,136 @@ function CloudflareConnectorForm() {
             <div className={`notice ${testResult.ok ? 'ok' : 'danger'}`}>
               {testResult.ok
                 ? `Connection OK (${testResult.source}) — ${testResult.summary?.loadBalancers ?? 0} load balancers, ${testResult.summary?.pools ?? 0} pools, ${testResult.summary?.origins ?? 0} origins.`
+                : `Connection failed (${testResult.source})${testResult.error ? `: ${testResult.error}` : ''}.`}
+            </div>
+          )}
+
+          {view && (
+            <div className="card">
+              <div className="kv"><span>Token configured</span><span>{view.tokenConfigured ? 'yes' : 'no'}</span></div>
+              <div className="kv"><span>Token set at</span><span>{view.tokenSetAt ?? '—'}</span></div>
+              <div className="kv"><span>Last updated by</span><span>{view.updatedBy ?? '—'}</span></div>
+              <div className="kv"><span>Master key available</span><span>{view.masterKeyAvailable ? 'yes' : 'no'}</span></div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- Fastly (commercial CDN observability) --------------------------------------------------
+
+function FastlyConnectorForm() {
+  const [view, setView] = useState<FastlyConnection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [testResult, setTestResult] = useState<FastlyConnectionTestResult | null>(null);
+
+  // Editable form state (token is write-only — never populated from the server).
+  const [enabled, setEnabled] = useState(false);
+  const [mode, setMode] = useState<'mock' | 'live'>('mock');
+  const [apiBase, setApiBase] = useState('');
+  const [serviceIds, setServiceIds] = useState('');
+  const [token, setToken] = useState('');
+  const [clearToken, setClearToken] = useState(false);
+
+  const hydrate = useCallback((s: FastlyConnection) => {
+    setView(s);
+    setEnabled(s.enabled);
+    setMode(s.mode);
+    setApiBase(s.apiBase ?? '');
+    setServiceIds(s.serviceIds.join(', '));
+    setToken('');
+    setClearToken(false);
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      hydrate((await api.fastlyConnection()).settings);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Failed to load Fastly settings.');
+    } finally {
+      setLoading(false);
+    }
+  }, [hydrate]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const save = async () => {
+    setSaved(false);
+    setError(null);
+    const body: FastlyConnectionUpdate = {
+      enabled,
+      mode,
+      apiBase: apiBase.trim() || null,
+      serviceIds: serviceIds.split(',').map((s) => s.trim()).filter(Boolean),
+    };
+    if (clearToken) body.clearToken = true;
+    else if (token.trim().length > 0) body.token = token.trim();
+    try {
+      hydrate((await api.fastlyConnectionUpdate(body)).settings);
+      setSaved(true);
+      setTestResult(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Failed to save.');
+    }
+  };
+
+  const runTest = async () => {
+    setTestResult(null);
+    setError(null);
+    try {
+      setTestResult((await api.fastlyConnectionTest()).result);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Test failed.');
+    }
+  };
+
+  return (
+    <div className="connector-section">
+      <div className="section-head">
+        <h2>Fastly (commercial CDN)</h2>
+        {view && <span className={`badge ${view.source === 'database' ? 'info' : 'neutral'}`}>{view.source === 'database' ? 'managed here' : 'from environment'}</span>}
+      </div>
+      {loading ? <div className="center-note">Loading…</div> : (
+        <>
+          {view && !view.masterKeyAvailable && (
+            <div className="notice warn">No master key is available (<code>/run/secrets/radar_master_key</code>). You can edit non-secret settings, but a token cannot be stored until the master key is provisioned — an environment token (<code>FASTLY_API_TOKEN</code>) still drives the connector.</div>
+          )}
+          {view?.degraded && <div className="notice warn">{view.degraded}</div>}
+          {error && <div className="notice danger">{error}</div>}
+          {saved && <div className="notice ok">Saved. The connector was reconfigured.</div>}
+
+          <div className="card">
+            <div className="field-row"><label className="switch"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Enabled</label></div>
+            <label className="field"><span>Mode</span>
+              <select value={mode} onChange={(e) => setMode(e.target.value as 'mock' | 'live')}>
+                <option value="mock">mock (synthetic, no credentials)</option>
+                <option value="live">live (Fastly)</option>
+              </select>
+            </label>
+            <label className="field"><span>API base <span className="muted">(optional; blank = https://api.fastly.com)</span></span><input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="https://api.fastly.com" /></label>
+            <label className="field"><span>Service IDs <span className="muted">(comma-separated; blank = all)</span></span><input value={serviceIds} onChange={(e) => setServiceIds(e.target.value)} placeholder="SU1z2x…, SU9a8b…" /></label>
+            <label className="field"><span>API token <span className="muted">(read-only, global:read)</span> {view?.tokenConfigured && <span className="badge ok badge-sm">configured</span>}</span>
+              <input type="password" autoComplete="off" value={token} disabled={clearToken} onChange={(e) => setToken(e.target.value)}
+                placeholder={view?.tokenConfigured ? '•••••••• configured — leave blank to keep' : 'not configured'} />
+            </label>
+            {view?.tokenConfigured && (
+              <div className="field-row"><label className="switch"><input type="checkbox" checked={clearToken} onChange={(e) => setClearToken(e.target.checked)} /> Clear the stored token</label></div>
+            )}
+            <div className="actions">
+              <button className="btn primary" onClick={() => void save()}>Save</button>
+              <button className="btn" onClick={() => void runTest()}>Test connection</button>
+            </div>
+          </div>
+
+          {testResult && (
+            <div className={`notice ${testResult.ok ? 'ok' : 'danger'}`}>
+              {testResult.ok
+                ? `Connection OK (${testResult.source}) — ${testResult.summary?.services ?? 0} services.`
                 : `Connection failed (${testResult.source})${testResult.error ? `: ${testResult.error}` : ''}.`}
             </div>
           )}

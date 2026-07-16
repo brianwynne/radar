@@ -8,12 +8,16 @@ import { ENGINEER, renderAt, stubApi } from './helpers';
 
 afterEach(() => vi.unstubAllGlobals());
 
-// Both connector sections load independently; wait for both token fields (order = CloudVision,
-// then Cloudflare) before scoping queries to a section's card so identical controls don't collide.
+// All connector sections load independently; wait for every token field (order = CloudVision,
+// Cloudflare, Fastly) before scoping queries to a section's card so identical controls don't collide.
 const cards = async () => {
-  await waitFor(() => expect(screen.getAllByPlaceholderText(/leave blank to keep/i)).toHaveLength(2));
+  await waitFor(() => expect(screen.getAllByPlaceholderText(/leave blank to keep/i)).toHaveLength(3));
   const tokens = screen.getAllByPlaceholderText(/leave blank to keep/i) as HTMLInputElement[];
-  return { cloudVision: tokens[0].closest('.card') as HTMLElement, cloudflare: tokens[1].closest('.card') as HTMLElement };
+  return {
+    cloudVision: tokens[0].closest('.card') as HTMLElement,
+    cloudflare: tokens[1].closest('.card') as HTMLElement,
+    fastly: tokens[2].closest('.card') as HTMLElement,
+  };
 };
 
 const putBody = (suffix: string) => {
@@ -29,13 +33,14 @@ describe('Integrations Token Management', () => {
     await screen.findByRole('heading', { name: 'Integrations Token Management' });
     await screen.findByRole('heading', { name: /CloudVision \(network telemetry\)/i });
     await screen.findByRole('heading', { name: /Cloudflare \(Réalta cache load balancing\)/i });
+    await screen.findByRole('heading', { name: /Fastly \(commercial CDN\)/i });
   });
 
   it('renders a write-only token field per section (blank even when configured)', async () => {
     stubApi(ENGINEER);
     renderAt('/network/connection');
     const tokens = (await screen.findAllByPlaceholderText(/leave blank to keep/i)) as HTMLInputElement[];
-    expect(tokens).toHaveLength(2);
+    expect(tokens).toHaveLength(3);
     for (const t of tokens) expect(t.value).toBe(''); // never populated from the server
   });
 
@@ -81,5 +86,19 @@ describe('Integrations Token Management', () => {
 
     fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
     expect(await screen.findByText(/Connection OK.*load balancers/i)).toBeInTheDocument();
+  });
+
+  it('saves and tests the Fastly connection', async () => {
+    stubApi(ENGINEER);
+    renderAt('/network/connection');
+    const card = within((await cards()).fastly);
+    const token = card.getByPlaceholderText(/leave blank to keep/i);
+    fireEvent.change(token, { target: { value: 'fastly-token-xyz' } });
+    fireEvent.click(card.getByRole('button', { name: 'Save' }));
+    await screen.findByText(/Saved/i);
+    expect(putBody('/cdn/fastly/connection')).toMatchObject({ token: 'fastly-token-xyz' });
+
+    fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText(/Connection OK.*services/i)).toBeInTheDocument();
   });
 });

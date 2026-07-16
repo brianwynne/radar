@@ -19,6 +19,7 @@ import { createValidationService } from './validation/index.js';
 import { createValidationStore } from './database/validation-store.js';
 import { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { CloudflareConnectorManager } from './cloudflare/manager.js';
+import { FastlyConnectorManager } from './fastly/manager.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -83,6 +84,20 @@ async function main(): Promise<void> {
   await cloudflareManager.init();
   const cloudflarePoller = cloudflareManager.getPoller();
 
+  // Fastly CDN observability: read-only connector managed by the connector manager. Non-secret
+  // settings (API base, service ids, mode) come from Postgres when an Engineer has set them, else
+  // the env base config; the API token (`global:read`) is stored encrypted, its master key sourced
+  // only from /run/secrets/radar_master_key. The manager owns the poller and reconfigures it at runtime.
+  const fastlyManager = new FastlyConnectorManager({
+    baseConfig: config.fastly,
+    repository: createConnectorSettingsStore(pool),
+    secretBox: SecretBox.fromMasterKey(),
+    audit: database.audit,
+    isDevelopment: config.NODE_ENV === 'development',
+  });
+  await fastlyManager.init();
+  const fastlyPoller = fastlyManager.getPoller();
+
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
     database,
@@ -103,6 +118,8 @@ async function main(): Promise<void> {
     cloudVisionManager,
     cloudflarePoller,
     cloudflareManager,
+    fastlyPoller,
+    fastlyManager,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -115,6 +132,7 @@ async function main(): Promise<void> {
     dnsObservationService.stop();
     cloudVisionManager.stop();
     cloudflareManager.stop();
+    fastlyManager.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -135,6 +153,7 @@ async function main(): Promise<void> {
     }
     cloudVisionManager.start(); // self-guards: only polls when the effective config is enabled
     cloudflareManager.start();
+    fastlyManager.start(); // self-guards: only polls when the effective config is enabled
     app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

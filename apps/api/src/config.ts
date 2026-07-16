@@ -8,6 +8,7 @@ import { loadTelemetryConfig, type TelemetryConfig } from './telemetry/config.js
 import { loadCacheTelemetryConfig, type CacheTelemetryConfig } from './telemetry/cache-config.js';
 import { loadCloudVisionConfig, type CloudVisionConfig } from './cloudvision/config.js';
 import { loadCloudflareConfig, type CloudflareConfig } from './cloudflare/config.js';
+import { loadFastlyConfig, type FastlyConfig } from './fastly/config.js';
 import { loadDnsObservationConfig, type DnsObservationConfig } from './dns-observation/config.js';
 import { loadValidationConfig, type ValidationConfig } from './validation/config.js';
 
@@ -99,6 +100,8 @@ export interface Config {
   /** CloudVision network telemetry (disabled by default; mock or read-only live). */
   cloudVision: CloudVisionConfig;
   cloudflare: CloudflareConfig;
+  /** Fastly CDN observability (disabled by default; mock or read-only live). */
+  fastly: FastlyConfig;
   /** Tier-2 active DNS observation (disabled by default). */
   dnsObservation: DnsObservationConfig;
   /** Read-only NS1 live-validation (live runs gated by NS1_VALIDATION_ENABLED). */
@@ -176,6 +179,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // CloudVision network telemetry: disabled by default; mock needs no creds, live fails fast.
   const cloudVision = loadCloudVisionConfig(env);
   const cloudflare = loadCloudflareConfig(env);
+  const fastly = loadFastlyConfig(env);
 
   // Tier-2 active DNS observation: disabled by default; periodic off by default.
   const dnsObservation = loadDnsObservationConfig(env);
@@ -201,6 +205,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cacheTelemetry,
     cloudVision,
     cloudflare,
+    fastly,
     dnsObservation,
     validation,
   };

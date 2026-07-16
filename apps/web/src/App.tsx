@@ -3,6 +3,7 @@ import { useAuth } from './auth/AuthContext';
 import { AppShell } from './components/AppShell';
 import { Dashboard } from './pages/Dashboard';
 import { RealtaCacheLb } from './pages/RealtaCacheLb';
+import { FastlyCdn } from './pages/FastlyCdn';
 import { Ns1Explorer } from './pages/Ns1Explorer';
 import { ValidationNs1 } from './pages/ValidationNs1';
 import { ExplainDns } from './pages/ExplainDns';
@@ -44,6 +45,7 @@ export function App() {
         <Route path="topology" element={<Topology />} />
         <Route path="network" element={<NetworkTelemetry />} />
         <Route path="realta-cache" element={<RealtaCacheLb />} />
+        <Route path="cdn/fastly" element={<FastlyCdn />} />
         <Route path="network/connection" element={<ConnectorSettings />} />
         <Route path="explorer" element={<Ns1Explorer />} />
         <Route path="explorer/:zone" element={<Ns1Explorer />} />

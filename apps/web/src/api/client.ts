@@ -36,6 +36,11 @@ import type {
   CloudflareConnectionResponse,
   CloudflareConnectionUpdateRequest,
   CloudflareConnectionTestResponse,
+  FastlyStatusResponse,
+  FastlyServicesResponse,
+  FastlyConnectionResponse,
+  FastlyConnectionUpdate,
+  FastlyConnectionTestResponse,
   Ns1Status,
   OriginResponse,
   Principal,
@@ -227,4 +232,13 @@ export const api = {
   cloudflareConnection: () => request<CloudflareConnectionResponse>('/api/v1/network/cloudflare/connection'),
   cloudflareConnectionUpdate: (body: CloudflareConnectionUpdateRequest) => request<CloudflareConnectionResponse>('/api/v1/network/cloudflare/connection', { method: 'PUT', body: JSON.stringify(body) }),
   cloudflareConnectionTest: () => request<CloudflareConnectionTestResponse>('/api/v1/network/cloudflare/connection/test', { method: 'POST', body: JSON.stringify({}) }),
+
+  // Fastly CDN observability — read-only per-service delivery telemetry (a commercial CDN platform).
+  fastlyStatus: () => request<FastlyStatusResponse>('/api/v1/cdn/fastly/status'),
+  fastlyServices: () => request<FastlyServicesResponse>('/api/v1/cdn/fastly/services'),
+
+  // Fastly connection settings (Engineer only). The token is write-only.
+  fastlyConnection: () => request<FastlyConnectionResponse>('/api/v1/cdn/fastly/connection'),
+  fastlyConnectionUpdate: (body: FastlyConnectionUpdate) => request<FastlyConnectionResponse>('/api/v1/cdn/fastly/connection', { method: 'PUT', body: JSON.stringify(body) }),
+  fastlyConnectionTest: () => request<FastlyConnectionTestResponse>('/api/v1/cdn/fastly/connection/test', { method: 'POST', body: JSON.stringify({}) }),
 };

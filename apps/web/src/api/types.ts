@@ -993,3 +993,36 @@ export interface CloudflareConnectionResponse { settings: CloudflareConnectionSe
 export interface CloudflareConnectionUpdateRequest { enabled?: boolean; mode?: 'mock' | 'live'; accountId?: string | null; zones?: string[] | null; token?: string; clearToken?: boolean }
 export interface CloudflareConnectionTestResult { ok: boolean; source: string; error?: string; summary?: { loadBalancers: number; pools: number; origins: number } }
 export interface CloudflareConnectionTestResponse { result: CloudflareConnectionTestResult }
+
+// --- Fastly CDN observability (read-only; a commercial CDN delivery platform) ----------------
+export type FastlySource = 'fastly' | 'mock' | 'disabled';
+export interface FastlyProvenance {
+  source: FastlySource; synthetic: boolean; readOnly: boolean; informationalOnly: boolean; notice: string; retrievedAt: string;
+}
+export interface FastlyServiceStats {
+  serviceId: string; serviceName: string; windowSeconds: number;
+  requests: number; requestsPerSecond: number; hits: number; miss: number; hitRatioPercent: number | null;
+  bandwidthBytes: number; bandwidthBps: number; originFetches: number; originOffloadPercent: number | null;
+  status2xx: number; status3xx: number; status4xx: number; status5xx: number; errorRatePercent: number | null;
+}
+export interface FastlySummary {
+  serviceCount: number; totalRequestsPerSecond: number; totalBandwidthBps: number; avgHitRatioPercent: number | null;
+}
+export interface FastlyConnectorStatus {
+  enabled: boolean; running: boolean; source: FastlySource | null; intervalMs: number;
+  lastPollAt: string | null; lastSuccessAt: string | null; lastDurationMs: number | null; consecutiveFailures: number;
+  lastError: string | null; snapshotAgeSeconds: number | null; serviceCount: number;
+}
+export interface FastlyStatusResponse { status: FastlyConnectorStatus | null; summary: FastlySummary | null; provenance: FastlyProvenance; warnings: string[] }
+export interface FastlyServicesResponse { provenance: FastlyProvenance; count: number; items: FastlyServiceStats[] }
+
+// Engineer-managed Fastly connection settings (API base + service ids + write-only token).
+export interface FastlyConnection {
+  connector: 'fastly'; enabled: boolean; mode: 'mock' | 'live'; apiBase: string; serviceIds: string[];
+  tokenConfigured: boolean; tokenSetAt: string | null; updatedBy: string | null; updatedAt: string | null;
+  source: 'database' | 'environment'; masterKeyAvailable: boolean; degraded: string | null;
+}
+export interface FastlyConnectionResponse { settings: FastlyConnection }
+export interface FastlyConnectionUpdate { enabled?: boolean; mode?: 'mock' | 'live'; apiBase?: string | null; serviceIds?: string[] | null; token?: string; clearToken?: boolean }
+export interface FastlyConnectionTestResult { ok: boolean; source: string; error?: string; summary?: { services: number } }
+export interface FastlyConnectionTestResponse { result: FastlyConnectionTestResult }

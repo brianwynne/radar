@@ -274,15 +274,33 @@ export const CLOUDFLARE_STATUS_BODY = {
   provenance: cfProv, warnings: [],
 };
 
+const fyProv = { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, notice: 'MOCK / SYNTHETIC Fastly CDN telemetry.', retrievedAt: '2026-07-16T12:00:00Z' };
+export const FASTLY_SERVICES_BODY = {
+  provenance: fyProv, count: 2,
+  items: [
+    { serviceId: 'SU-vod', serviceName: 'RTÉ Player VOD', windowSeconds: 600, requests: 5400000, requestsPerSecond: 9000, hits: 4968000, miss: 432000, hitRatioPercent: 92, bandwidthBytes: 2600000000000, bandwidthBps: 34666666666, originFetches: 410000, originOffloadPercent: 92.4, status2xx: 5180000, status3xx: 150000, status4xx: 61000, status5xx: 9000, errorRatePercent: 0.2 },
+    { serviceId: 'SU-live', serviceName: 'RTÉ Live', windowSeconds: 600, requests: 2100000, requestsPerSecond: 3500, hits: 1575000, miss: 525000, hitRatioPercent: 75, bandwidthBytes: 1400000000000, bandwidthBps: 18666666666, originFetches: 500000, originOffloadPercent: 76.2, status2xx: 2010000, status3xx: 41000, status4xx: 33000, status5xx: 16000, errorRatePercent: 0.8 },
+  ],
+};
+export const FASTLY_STATUS_BODY = {
+  status: { enabled: true, running: true, source: 'mock', intervalMs: 60000, lastPollAt: '2026-07-16T12:00:00Z', lastSuccessAt: '2026-07-16T12:00:00Z', lastDurationMs: 5, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: 3, serviceCount: 2 },
+  summary: { serviceCount: 2, totalRequestsPerSecond: 12500, totalBandwidthBps: 53333333332, avgHitRatioPercent: 87.3 },
+  provenance: fyProv, warnings: [],
+};
+
 const defaultConnection = { connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'https://cvp.test', verifyTls: true, edgeDeviceIds: ['DEV1'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
 let connectionState: Record<string, unknown> = { ...defaultConnection };
 
 const defaultCloudflareConnection = { connector: 'cloudflare', enabled: true, mode: 'live', accountId: '0dae703e9ae3c6b11a561818549a4192', zones: ['rte.ie'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
 let cloudflareConnectionState: Record<string, unknown> = { ...defaultCloudflareConnection };
 
+const defaultFastlyConnection = { connector: 'fastly', enabled: true, mode: 'live', apiBase: 'https://api.fastly.com', serviceIds: ['SU-vod'], tokenConfigured: true, tokenSetAt: '2026-07-15T10:00:00Z', updatedBy: 'eng@rte.ie', updatedAt: '2026-07-15T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null };
+let fastlyConnectionState: Record<string, unknown> = { ...defaultFastlyConnection };
+
 export function stubApi(principal: Principal): void {
   connectionState = { ...defaultConnection };
   cloudflareConnectionState = { ...defaultCloudflareConnection };
+  fastlyConnectionState = { ...defaultFastlyConnection };
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -303,6 +321,23 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/network/cloudflare/status')) body = CLOUDFLARE_STATUS_BODY;
       else if (p.endsWith('/network/cloudflare/load-balancers')) body = CLOUDFLARE_LBS_BODY;
       else if (p.endsWith('/network/cloudflare/pools')) body = CLOUDFLARE_POOLS_BODY;
+      else if (p.endsWith('/cdn/fastly/status')) body = FASTLY_STATUS_BODY;
+      else if (p.endsWith('/cdn/fastly/services')) body = FASTLY_SERVICES_BODY;
+      else if (p.endsWith('/cdn/fastly/connection/test')) body = { result: { ok: true, source: 'fastly', summary: { services: 3 } } };
+      else if (p.endsWith('/cdn/fastly/connection')) {
+        if (init?.method === 'PUT') {
+          const b = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
+          fastlyConnectionState = {
+            ...fastlyConnectionState,
+            enabled: b.enabled ?? fastlyConnectionState.enabled,
+            mode: b.mode ?? fastlyConnectionState.mode,
+            apiBase: b.apiBase !== undefined ? b.apiBase : fastlyConnectionState.apiBase,
+            serviceIds: b.serviceIds ?? fastlyConnectionState.serviceIds,
+            tokenConfigured: b.clearToken ? false : b.token ? true : fastlyConnectionState.tokenConfigured,
+          };
+        }
+        body = { settings: fastlyConnectionState };
+      }
       else if (p.endsWith('/network/cloudflare/connection/test')) body = { result: { ok: true, source: 'cloudflare', summary: { loadBalancers: 2, pools: 3, origins: 6 } } };
       else if (p.endsWith('/network/cloudflare/connection')) {
         if (init?.method === 'PUT') {
