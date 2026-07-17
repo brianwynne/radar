@@ -65,6 +65,11 @@ describe('FastlyConnectorManager', () => {
     expect(view.tokenConfigured).toBe(true);
     expect(view.serviceIds).toEqual(['svc-a']);
     expect(view.source).toBe('database');
+    // Regression: the realtime streamer must be enabled from the EFFECTIVE (UI/DB) config even
+    // though the env base has realtimeEnabled=false — otherwise the live-tail silently stays off.
+    const rt = manager.getStreamer().status();
+    expect(rt.enabled).toBe(true);
+    expect(rt.services.map((s) => s.serviceId)).toEqual(['svc-a']);
     // The token appears nowhere in the view or the audit trail.
     expect(JSON.stringify(view)).not.toContain(TOKEN);
     expect(JSON.stringify(auditEvents)).not.toContain(TOKEN);

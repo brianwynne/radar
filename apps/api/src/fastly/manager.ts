@@ -169,7 +169,12 @@ export class FastlyConnectorManager {
    *  only and needs explicit service ids (each is a channel long-polled independently). */
   private buildRealtime(): { client: FastlyRealtimeClient | null; services: { id: string; name: string }[]; enabled: boolean; windowSeconds: number; source: FastlySource } {
     const e = this.resolveEffective();
-    const effective: FastlyConfig = { ...this.base, enabled: e.source !== 'disabled', mode: e.mode, apiBase: e.apiBase, token: e.token, serviceIds: e.serviceIds };
+    // Real-time is on whenever the EFFECTIVE connector is live+enabled (whether configured via the
+    // Integrations UI or the environment). `this.base.realtimeEnabled` is derived only from the env
+    // Fastly flags, so a UI-configured connector must not depend on it — otherwise the live-tail
+    // silently stays off even with mode/token/service ids all set.
+    const realtimeEnabled = this.base.realtimeEnabled || (e.source !== 'disabled' && e.mode === 'live');
+    const effective: FastlyConfig = { ...this.base, enabled: e.source !== 'disabled', mode: e.mode, apiBase: e.apiBase, token: e.token, serviceIds: e.serviceIds, realtimeEnabled };
     const client = e.serviceIds.length > 0 ? createFastlyRealtimeClient(effective, { logger: this.logger, fetchImpl: this.fetchImpl }) : null;
     const source: FastlySource = client ? 'fastly' : 'disabled';
     // Names default to the id; the route enriches them from the poller's service snapshot.
