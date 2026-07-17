@@ -38,7 +38,7 @@ const PINNED_KEY = 'radar.cacheLb.pinnedLoadBalancers';
 const POOLS_PINNED_KEY = 'radar.cacheLb.pinnedPools';
 
 export function RealtaCacheLb() {
-  const t = useCloudflare(30_000);
+  const t = useCloudflare(10_000);
   const [search, setSearch] = useState('');
 
   // Pinned load balancers — a persisted focused view at the top of the page, so CDN-specific load

@@ -38,7 +38,7 @@ const schema = z.object({
   CLOUDFLARE_API_BASE: z.string().default('https://api.cloudflare.com/client/v4'),
   CLOUDFLARE_LB_ZONES: z.string().optional(),
   CLOUDFLARE_TIMEOUT_SECONDS: z.coerce.number().int().positive().max(300).default(15),
-  CLOUDFLARE_POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().max(3600).default(60),
+  CLOUDFLARE_POLL_INTERVAL_SECONDS: z.coerce.number().int().positive().max(3600).default(30),
   CLOUDFLARE_MAX_SAMPLE_AGE_SECONDS: z.coerce.number().int().positive().max(3600).default(180),
   CLOUDFLARE_RETRY_ATTEMPTS: z.coerce.number().int().min(0).max(10).default(3),
 });
