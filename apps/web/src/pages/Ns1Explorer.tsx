@@ -205,6 +205,12 @@ export function Ns1Explorer() {
         </div>
       )}
 
+      {zone && domain && type && canExplain && (
+        <div className="card">
+          <IspSteeringOverview zone={zone} domain={domain} type={type} onPick={explainIsp} />
+        </div>
+      )}
+
       {zone && domain && type && (
         // Record and its explanation sit side by side; the record collapses to full width when
         // Explain is hidden, and both stack on narrow screens (flexWrap). minWidth:0 lets the
@@ -256,12 +262,6 @@ export function Ns1Explorer() {
               <ExplainPanel key={`${zone}/${domain}/${type}:${location.key}`} zone={zone} domain={domain} type={type} prefill={rawPrefill} autoRun={prefillMatches} />
             </div>
           )}
-        </div>
-      )}
-
-      {zone && domain && type && canExplain && (
-        <div className="card">
-          <IspSteeringOverview zone={zone} domain={domain} type={type} onPick={explainIsp} />
         </div>
       )}
 
