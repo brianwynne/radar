@@ -3,15 +3,38 @@
 // pipeline, eligible answers, and the expected (probabilistic) delivery-platform
 // distribution — with the required disclaimers. No evaluation logic lives here.
 import { Link } from 'react-router-dom';
-import type { Confidence, ExplainResponse, FilterTrace, TracedAnswer } from '../api/types';
+import type { Confidence, ExplainResponse, FilterTrace, SelectionDeterminism, TracedAnswer } from '../api/types';
 import { ProvenanceLine } from '../components/Provenance';
 import { networkPathForAsn } from '../topology/model';
 
 const confidenceBadge: Record<Confidence, string> = { high: 'ok', medium: 'info', low: 'warn', unknown: 'neutral' };
 
+// Overall reliability of the final selection — governs whether we may say "selected" (definitive)
+// or must say "most likely" (spec: never claim a single active endpoint the config doesn't produce).
+const determinism: Record<SelectionDeterminism, { text: string; badge: string; hint: string; pick: string }> = {
+  deterministic: { text: 'deterministic', badge: 'ok', pick: 'selected', hint: 'All metadata present and no probabilistic filter — the returned answer is fixed for this query context.' },
+  context_dependent: { text: 'context-dependent', badge: 'info', pick: 'selected · this context', hint: 'The outcome depends on resolver / ECS / geo / ASN — a different query context could return a different answer.' },
+  probabilistic: { text: 'probabilistic', badge: 'warn', pick: 'most likely', hint: 'A shuffle / weighted shuffle decides the final answer — only a likelihood is known; one answer is returned per DNS response.' },
+  partial: { text: 'partial', badge: 'warn', pick: 'most likely', hint: 'An unsupported filter is present — RADAR shows the config but cannot claim certainty beyond that step.' },
+};
+
 function labelFor(id: string, answers: TracedAnswer[]): string {
   const a = answers.find((x) => x.id === id);
   return a?.deliveryPlatform ?? a?.label ?? id;
+}
+
+// Aggregate per-answer shares by delivery platform, dropping negligible standbys (<0.5%), so a
+// record with several answers per platform reads as one bar per platform.
+function aggregateByPlatform(shares: { deliveryPlatform?: string; label: string; share: number }[]): { platform: string; share: number }[] {
+  const byPlatform = new Map<string, number>();
+  for (const s of shares) {
+    const p = s.deliveryPlatform ?? s.label;
+    byPlatform.set(p, (byPlatform.get(p) ?? 0) + s.share);
+  }
+  return [...byPlatform.entries()]
+    .filter(([, v]) => v >= 0.005)
+    .sort((a, b) => b[1] - a[1])
+    .map(([platform, share]) => ({ platform, share }));
 }
 
 function Step({ trace, answers, selected }: { trace: FilterTrace; answers: TracedAnswer[]; selected?: string }) {
@@ -64,6 +87,9 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
           ) : (
             <span className="badge warn">partial evaluation</span>
           )}
+          <span className={`badge ${determinism[ev.selectionDeterminism].badge}`} title={determinism[ev.selectionDeterminism].hint}>
+            {determinism[ev.selectionDeterminism].text}
+          </span>
           <Link className="ghost" style={{ marginLeft: 'auto' }} to={`/explorer/${request.zone}/${request.domain}/${request.type}`}>
             View NS1 record
           </Link>
@@ -117,7 +143,15 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
                 ) : (
                   <span className="badge danger" style={{ marginLeft: '0.4rem' }}>removed</span>
                 )}
-                {a.id === ev.selected && <span className="badge info" style={{ marginLeft: '0.3rem' }}>selected</span>}
+                {a.id === ev.selected && (
+                  <span
+                    className={`badge ${ev.selectionDeterminism === 'deterministic' ? 'info' : 'neutral'}`}
+                    style={{ marginLeft: '0.3rem' }}
+                    title={determinism[ev.selectionDeterminism].hint}
+                  >
+                    {determinism[ev.selectionDeterminism].pick}
+                  </span>
+                )}
               </span>
               <span className="mono muted">
                 {a.rdata.join(', ')}
@@ -140,9 +174,9 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
       {ev.expectedDistribution && (
         <div className="card">
           <h3>Expected delivery-platform distribution</h3>
-          {ev.expectedDistribution.shares.map((s) => (
-            <div key={s.answerId} className="dist-row">
-              <span>{s.deliveryPlatform ?? s.label}</span>
+          {aggregateByPlatform(ev.expectedDistribution.shares).map((s) => (
+            <div key={s.platform} className="dist-row">
+              <span>{s.platform}</span>
               <span className="bar-track">
                 <span className="bar-fill" style={{ width: `${Math.round(s.share * 100)}%` }} />
               </span>

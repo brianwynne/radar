@@ -71,6 +71,7 @@ export function makeExplain(req: ReqBody): ExplainResponse {
         : [trace(0, 'up', true, 'eliminate', 'All up.'), trace(1, 'weighted_shuffle', true, 'reorder', 'Ordered by weight.', true)],
       eligibleAnswerIds: eligible,
       selected: partial ? undefined : eligible[0],
+      selectionDeterminism: partial ? 'partial' : 'probabilistic',
       expectedDistribution: partial
         ? undefined
         : {

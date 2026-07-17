@@ -32,6 +32,16 @@ export interface AnswerOutcome {
 /** How a filter acts on the answer list (NS1 guide §8.1). */
 export type FilterBehaviour = 'eliminate' | 'reorder' | 'select' | 'group' | 'modify' | 'unknown';
 
+/** Overall reliability of the local evaluation's final selection (monitoring-screen spec).
+ *  - deterministic: all metadata present, no probabilistic filter — the single answer is fixed for
+ *    this context.
+ *  - context_dependent: the outcome hinged on resolver/ECS/geo/ASN metadata; a different query
+ *    context could differ.
+ *  - probabilistic: a shuffle / weighted-shuffle / shed-load probability is involved — the specific
+ *    returned answer is NOT fixed; only a likelihood is known.
+ *  - partial: at least one filter is unsupported locally; evaluation cannot claim certainty. */
+export type SelectionDeterminism = 'deterministic' | 'context_dependent' | 'probabilistic' | 'partial';
+
 /** One filter's execution trace. Field names follow the NS1 Developer Guide §8.1;
  *  every input answer is accounted for by exactly one outcome. */
 export interface FilterTrace {
@@ -79,7 +89,12 @@ export interface EvaluationResult {
   answers: TracedAnswer[];
   traces: FilterTrace[];
   eligibleAnswerIds: string[];
+  /** The single surviving answer after the chain, when exactly one remains. NOTE: this is only a
+   *  DEFINITIVE selection when `selectionDeterminism === 'deterministic'`; otherwise it is the
+   *  most-likely answer for display and must be worded as such (never "active"). */
   selected?: string;
+  /** How reliable the final selection is; governs how the UI must word `selected`. */
+  selectionDeterminism: SelectionDeterminism;
   expectedDistribution?: ExpectedDistribution;
   complete: boolean;
   stoppedAtFilterIndex?: number;

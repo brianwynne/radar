@@ -70,6 +70,7 @@ describe('on-net IE ISP (AS100)', () => {
     expect(share(r, 'Akamai')).toBeCloseTo(45 / 510, 5);
     expect(r.selected && r.answers.find((a) => a.id === r.selected)!.deliveryPlatform).toBe('Réalta');
     expect(r.complete).toBe(true);
+    expect(r.selectionDeterminism).toBe('probabilistic'); // weighted_shuffle over >1 answer
   });
 });
 
@@ -96,6 +97,7 @@ describe('no ASN match → untagged remain, then prefix fence selects the tagged
   it('netfence_prefix then drops the untagged fallbacks because the prefix answer matched', () => {
     expect(removedAt(r, 'netfence_prefix')).toEqual(expect.arrayContaining(['fastly-allother', 'akamai-allother']));
     expect(r.selected).toBe('prefix-realta');
+    expect(r.selectionDeterminism).toBe('context_dependent'); // one survivor, no shuffle over >1; hinges on ASN/prefix
     expect(share(r, 'Réalta')).toBeCloseTo(1, 5);
   });
 });

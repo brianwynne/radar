@@ -57,6 +57,7 @@ const EXPLAIN: ExplainResponse = {
     ],
     eligibleAnswerIds: ['ans-realta', 'ans-fastly'],
     selected: 'ans-realta',
+    selectionDeterminism: 'probabilistic',
     expectedDistribution: {
       probabilistic: true,
       method: 'weighted_shuffle',

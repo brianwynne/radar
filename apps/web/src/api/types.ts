@@ -81,6 +81,8 @@ export interface FilterTrace {
   warning?: string;
 }
 
+export type SelectionDeterminism = 'deterministic' | 'context_dependent' | 'probabilistic' | 'partial';
+
 export interface ExpectedShare {
   answerId: string;
   label: string;
@@ -115,6 +117,7 @@ export interface EvaluationResult {
   traces: FilterTrace[];
   eligibleAnswerIds: string[];
   selected?: string;
+  selectionDeterminism: SelectionDeterminism;
   expectedDistribution?: ExpectedDistribution;
   complete: boolean;
   stoppedAtFilterIndex?: number;

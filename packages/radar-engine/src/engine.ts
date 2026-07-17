@@ -18,6 +18,7 @@ import type {
   ExpectedDistribution,
   FilterBehaviour,
   FilterTrace,
+  SelectionDeterminism,
   TracedAnswer,
 } from './model.js';
 
@@ -451,21 +452,30 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
   });
 
   const eligibleAnswerIds = current.map((w) => w.id);
-  const lastTrace = traces[traces.length - 1];
-  const selected =
-    lastTrace && lastTrace.supported && lastTrace.type === 'select_first_n' && eligibleAnswerIds.length === 1
-      ? eligibleAnswerIds[0]
-      : eligibleAnswerIds.length === 1
-        ? eligibleAnswerIds[0]
-        : undefined;
+  // The single surviving answer (if any). Whether that is a DEFINITIVE selection or merely the
+  // most-likely answer depends on selectionDeterminism below — a probabilistic reorder (shuffle /
+  // weighted shuffle) upstream of the selection means the specific answer is NOT fixed.
+  const selected = eligibleAnswerIds.length === 1 ? eligibleAnswerIds[0] : undefined;
+
+  const SHUFFLE = new Set(['shuffle', 'weighted_shuffle', 'sticky_shuffle', 'weighted_sticky_shuffle']);
+  const CONTEXT_META = new Set(['asn', 'country', 'ip_prefixes', 'georegion', 'geo']);
+  const probabilistic = traces.some((t) => t.supported && SHUFFLE.has(t.type) && t.input.length > 1);
+  const contextDependent = traces.some((t) => t.supported && t.metadataConsumed.some((m) => CONTEXT_META.has(m)));
+  const selectionDeterminism: SelectionDeterminism = !complete
+    ? 'partial'
+    : probabilistic
+      ? 'probabilistic'
+      : contextDependent
+        ? 'context_dependent'
+        : 'deterministic';
 
   const expectedDistribution = computeDistribution(weightedSet, weightingMethod, current);
   const explanation = buildExplanation(
-    record, identity, byId, selected, eligibleAnswerIds, expectedDistribution, complete, stoppedAtFilterIndex, record.filters, unsupportedFilters,
+    record, identity, byId, selected, selectionDeterminism, eligibleAnswerIds, expectedDistribution, complete, stoppedAtFilterIndex, record.filters, unsupportedFilters,
   );
 
   return {
-    scenario, identity, answers, traces, eligibleAnswerIds, selected,
+    scenario, identity, answers, traces, eligibleAnswerIds, selected, selectionDeterminism,
     expectedDistribution, complete, stoppedAtFilterIndex, explanation, warnings, unsupportedFilters,
   };
 }
@@ -477,6 +487,7 @@ function buildExplanation(
   identity: DerivedIdentity,
   byId: Map<string, Work>,
   selected: string | undefined,
+  determinism: SelectionDeterminism,
   eligible: string[],
   dist: ExpectedDistribution | undefined,
   complete: boolean,
@@ -493,7 +504,19 @@ function buildExplanation(
 
   if (selected) {
     const w = byId.get(selected);
-    parts.push(`Selected delivery platform: ${w?.platform ?? w?.label ?? selected}.`);
+    const name = w?.platform ?? w?.label ?? selected;
+    // Only assert a definitive selection when deterministic. When a shuffle decides the final answer
+    // the specific platform is probabilistic — one answer is returned per response (spec: never
+    // claim a single "active" endpoint the config does not produce).
+    if (determinism === 'deterministic') {
+      parts.push(`Selected delivery platform: ${name} (deterministic for this query).`);
+    } else if (determinism === 'probabilistic') {
+      parts.push(`One answer is returned per DNS response; the specific platform is probabilistic (weighted) — most likely ${name}.`);
+    } else if (determinism === 'context_dependent') {
+      parts.push(`Selected delivery platform for this query context: ${name} (would differ for another resolver/ECS/geo/ASN).`);
+    } else {
+      parts.push(`Most likely delivery platform: ${name} (evaluation partial — an unsupported filter follows).`);
+    }
   } else if (eligible.length > 1) {
     parts.push(`${eligible.length} answers remain eligible; NS1 returns one probabilistically.`);
   } else if (eligible.length === 0) {
@@ -501,7 +524,15 @@ function buildExplanation(
   }
 
   if (dist) {
-    const shares = dist.shares.filter((s) => s.share > 0).map((s) => `${s.deliveryPlatform ?? s.label} ${(s.share * 100).toFixed(0)}%`).join(', ');
+    // Aggregate the per-answer shares by delivery platform and drop negligible standbys (<0.5%,
+    // e.g. CloudFront/emergency-offload answers at ~1e-8) so the sentence reads cleanly.
+    const byPlatform = new Map<string, number>();
+    for (const s of dist.shares) byPlatform.set(s.deliveryPlatform ?? s.label, (byPlatform.get(s.deliveryPlatform ?? s.label) ?? 0) + s.share);
+    const shares = [...byPlatform.entries()]
+      .filter(([, v]) => v >= 0.005)
+      .sort((a, b) => b[1] - a[1])
+      .map(([p, v]) => `${p} ${(v * 100).toFixed(0)}%`)
+      .join(', ');
     if (shares) parts.push(`Expected delivery-platform distribution (probabilistic): ${shares}.`);
   }
 

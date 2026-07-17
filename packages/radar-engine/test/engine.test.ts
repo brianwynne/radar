@@ -83,7 +83,10 @@ describe('Irish ASN (on-net) scenario', () => {
   it('completes, selects one platform, and reports the probabilistic 70/20/10 distribution', () => {
     expect(r.complete).toBe(true);
     expect(r.stoppedAtFilterIndex).toBeUndefined();
-    expect(r.selected).toBe('ans-realta');
+    expect(r.selected).toBe('ans-realta'); // single survivor (most-likely), not a guaranteed pick
+    expect(r.selectionDeterminism).toBe('probabilistic'); // weighted_shuffle decides the final answer
+    expect(r.explanation).toMatch(/probabilistic|most likely/i);
+    expect(r.explanation).not.toMatch(/\bactive\b/i); // never claim an "active" endpoint
     expect(share(r, 'Réalta')).toBeCloseTo(0.7, 5);
     expect(share(r, 'Fastly')).toBeCloseTo(0.2, 5);
     expect(share(r, 'Akamai')).toBeCloseTo(0.1, 5);
