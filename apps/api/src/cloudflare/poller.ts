@@ -1,6 +1,6 @@
 // Periodic poller: keeps the latest Cloudflare snapshot + connector status in memory. Read-only;
 // a poll failure retains the last good snapshot and is surfaced via status (never fabricated).
-import type { CloudflareClient, CloudflareSnapshot } from './types.js';
+import type { CloudflareClient, CloudflareFocusedPoolHealth, CloudflareSnapshot } from './types.js';
 
 export interface CloudflareConnectorStatus {
   enabled: boolean;
@@ -48,6 +48,11 @@ export class CloudflarePoller {
 
   latestSnapshot(): CloudflareSnapshot | null {
     return this.latest;
+  }
+
+  /** Fast tier: live-refresh just the health+RTT of the given pools (the caller caps the id list). */
+  refreshPools(ids: string[], correlationId?: string): Promise<CloudflareFocusedPoolHealth[]> {
+    return this.client.getPoolsHealth(ids, correlationId);
   }
 
   async runOnce(correlationId?: string): Promise<{ ok: boolean; error?: string }> {

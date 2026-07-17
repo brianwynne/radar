@@ -3,7 +3,10 @@
 // load balancers steering across them, including the richer fields (origin steering, load shedding,
 // session affinity, adaptive routing, per-origin RTT + region health, observed by-origin traffic).
 import { summarise } from './http-client.js';
-import type { CloudflareClient, CloudflareLoadBalancer, CloudflareOrigin, CloudflarePool, CloudflareSnapshot } from './types.js';
+import type { CloudflareClient, CloudflareFocusedPoolHealth, CloudflareLoadBalancer, CloudflareOrigin, CloudflarePool, CloudflareSnapshot } from './types.js';
+
+/** Reduce a pool's origins to the fast-refresh health subset (mock: reuses the origin's fields). */
+const focusedHealth = (p: CloudflarePool): CloudflareFocusedPoolHealth => ({ id: p.id, origins: p.origins.map((o) => ({ address: o.address, healthy: o.healthy, rttMs: o.rttMs, regionHealth: o.regionHealth })) });
 
 function origin(name: string, address: string, ok: boolean): CloudflareOrigin {
   const base = 9 + (address.charCodeAt(address.length - 1) % 9);
@@ -85,6 +88,9 @@ export class MockCloudflareClient implements CloudflareClient {
       warnings: [],
     };
   }
+  async getPoolsHealth(ids: string[]): Promise<CloudflareFocusedPoolHealth[]> {
+    return POOLS.filter((p) => ids.includes(p.id)).map(focusedHealth);
+  }
 }
 
 export class DisabledCloudflareClient implements CloudflareClient {
@@ -98,4 +104,5 @@ export class DisabledCloudflareClient implements CloudflareClient {
       warnings: [],
     };
   }
+  async getPoolsHealth(): Promise<CloudflareFocusedPoolHealth[]> { return []; }
 }

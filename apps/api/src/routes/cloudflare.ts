@@ -15,6 +15,9 @@ const DISABLED: CloudflareSnapshot['provenance'] = {
   notice: 'Cloudflare connector is disabled.', retrievedAt: new Date(0).toISOString(),
 };
 
+/** Hard server-side cap on how many pools the fast focused-refresh will live-fetch per call. */
+const MAX_FOCUS_POOLS = 8;
+
 const schema = (summary: string, description: string) => ({ tags: ['cloudflare'], summary, description, security: [{ bearerAuth: [] }] });
 
 export const cloudflareRoutes: FastifyPluginAsync<CloudflareRoutesOptions> = async (app, opts) => {
@@ -42,6 +45,21 @@ export const cloudflareRoutes: FastifyPluginAsync<CloudflareRoutesOptions> = asy
     async () => {
       const items = snapshot()?.pools ?? [];
       return { provenance: provenance(), count: items.length, items };
+    },
+  );
+
+  // Fast tier: live-refresh just the health+RTT of a small, capped set of pinned pools. The cap is a
+  // hard server-side guard so a fast client poll can never exceed Cloudflare's API rate limits,
+  // regardless of how many ids are requested.
+  app.get(
+    '/network/cloudflare/pools/refresh',
+    { preHandler: requirePermission('topology.summary.read'), schema: schema('Cloudflare focused pool refresh', 'Fast tier: live health + RTT for up to a fixed number of pinned pools (bounded to protect Cloudflare rate limits). Steering/config still come from the slower full snapshot.') },
+    async (req) => {
+      const idsRaw = typeof (req.query as { ids?: unknown }).ids === 'string' ? (req.query as { ids: string }).ids : '';
+      const requested = idsRaw.split(',').map((s) => s.trim()).filter((s) => s.length > 0);
+      const ids = requested.slice(0, MAX_FOCUS_POOLS);
+      const pools = opts.poller ? await opts.poller.refreshPools(ids) : [];
+      return { provenance: provenance(), pools, capped: requested.length > ids.length, max: MAX_FOCUS_POOLS };
     },
   );
 };

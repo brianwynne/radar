@@ -356,6 +356,12 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/network/history')) body = NETWORK_HISTORY_BODY;
       else if (p.endsWith('/network/cloudflare/status')) body = CLOUDFLARE_STATUS_BODY;
       else if (p.endsWith('/network/cloudflare/load-balancers')) body = CLOUDFLARE_LBS_BODY;
+      else if (p.endsWith('/network/cloudflare/pools/refresh')) {
+        // Fast tier: return a distinct RTT (99 ms) so tests can prove the overlay replaces the slow value.
+        const ids = (new URLSearchParams(String(input).split('?')[1] ?? '').get('ids') ?? '').split(',').filter(Boolean);
+        const pools = CLOUDFLARE_POOLS_BODY.items.filter((pl) => ids.includes(pl.id)).map((pl) => ({ id: pl.id, origins: pl.origins.map((o) => ({ address: o.address, healthy: o.healthy, rttMs: o.rttMs === null ? null : 99, regionHealth: o.regionHealth })) }));
+        body = { provenance: cfProv, pools, capped: false, max: 8 };
+      }
       else if (p.endsWith('/network/cloudflare/pools')) body = CLOUDFLARE_POOLS_BODY;
       else if (p.endsWith('/cdn/fastly/status')) body = FASTLY_STATUS_BODY;
       else if (p.endsWith('/cdn/fastly/services')) body = FASTLY_SERVICES_BODY;

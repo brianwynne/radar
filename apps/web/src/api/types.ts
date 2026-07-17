@@ -990,6 +990,8 @@ export interface CloudflareConnectorStatus {
 }
 export interface CloudflareStatusResponse { status: CloudflareConnectorStatus | null; summary: CloudflareSummary | null; provenance: CloudflareProvenance; warnings: string[] }
 export interface CloudflareListResponse<T> { provenance: CloudflareProvenance; count: number; items: T[] }
+export interface CloudflareFocusedPoolHealth { id: string; origins: { address: string; healthy: boolean | null; rttMs: number | null; regionHealth: CloudflareOriginRegionHealth[] }[] }
+export interface CloudflareRefreshResponse { provenance: CloudflareProvenance; pools: CloudflareFocusedPoolHealth[]; capped: boolean; max: number }
 
 // Engineer-managed Cloudflare connection settings (account id + zones + write-only token).
 export interface CloudflareConnectionSettings {

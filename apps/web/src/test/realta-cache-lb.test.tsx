@@ -70,6 +70,7 @@ describe('Réalta Cache Load Balancing page', () => {
     fireEvent.click(screen.getByLabelText('Pin live-realta-citywest'));
     const focused = screen.getByText(/Focused pools/).closest('.focused-lbs') as HTMLElement;
     expect(within(focused).getByText('cdn-mem-ctw-1')).toBeInTheDocument();
-    expect(within(focused).getAllByText('12 ms').length).toBeGreaterThan(0); // RTT shown in the focused card
+    // The pinned pool is live-refreshed on the fast tier, which overlays a fresher RTT (mock: 99 ms).
+    expect((await within(focused).findAllByText('99 ms')).length).toBeGreaterThan(0);
   });
 });

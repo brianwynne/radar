@@ -9,8 +9,8 @@
 //   GET /zones/{zone}/load_balancers                        — load balancers + steering policy
 import { CloudflareError } from './errors.js';
 import type {
-  CloudflareClient, CloudflareHealthCheck, CloudflareLoadBalancer, CloudflareObserved, CloudflareObservedBucket,
-  CloudflareOrigin, CloudflarePool, CloudflareSnapshot, CloudflareSteeredPool, CloudflareSummary,
+  CloudflareClient, CloudflareFocusedPoolHealth, CloudflareHealthCheck, CloudflareLoadBalancer, CloudflareObserved, CloudflareObservedBucket,
+  CloudflareOrigin, CloudflareOriginRegionHealth, CloudflarePool, CloudflareSnapshot, CloudflareSteeredPool, CloudflareSummary,
 } from './types.js';
 
 export interface HttpCloudflareClientOptions {
@@ -104,6 +104,16 @@ export class HttpCloudflareReadClient implements CloudflareClient {
       },
       warnings,
     };
+  }
+
+  /** Fast tier: fetch just health + RTT for specific pools. The caller caps `ids`; a per-pool
+   *  failure yields empty origins for that pool (best-effort, never fabricated). */
+  async getPoolsHealth(ids: string[], correlationId?: string): Promise<CloudflareFocusedPoolHealth[]> {
+    const out = await mapLimit(ids, FETCH_CONCURRENCY, async (id): Promise<CloudflareFocusedPoolHealth> => {
+      const popHealth = await this.fetchPoolHealth(id, correlationId);
+      return { id, origins: popHealth ? focusedOriginsFromPopHealth(popHealth) : [] };
+    });
+    return out.filter((x): x is CloudflareFocusedPoolHealth => x !== null);
   }
 
   /** Zones whose load balancers we read: the configured names, else all non-reverse-DNS zones. */
@@ -324,9 +334,11 @@ function buildPool(p: Record<string, unknown>, monitors: Map<string, CloudflareH
   };
 }
 
-/** Merge per-region health + RTT from the pool health endpoint into a pool's origins (by address). */
-function mergePoolHealth(pool: CloudflarePool, popHealth: Record<string, unknown>): void {
-  const byAddress = new Map<string, { region: string; healthy: boolean | null; rttMs: number | null; failureReason: string | null }[]>();
+/** Reduce a pool health endpoint's `pop_health` to per-origin region health + a mean RTT + a derived
+ *  healthy (all check regions up → true, any down → false, else null). Shared by the slow snapshot
+ *  merge and the fast focused refresh. */
+function focusedOriginsFromPopHealth(popHealth: Record<string, unknown>): CloudflareFocusedPoolHealth['origins'] {
+  const byAddress = new Map<string, CloudflareOriginRegionHealth[]>();
   for (const [region, rv] of Object.entries(popHealth)) {
     if (!isObj(rv) || !Array.isArray(rv.origins)) continue;
     for (const entry of rv.origins) {
@@ -339,12 +351,23 @@ function mergePoolHealth(pool: CloudflarePool, popHealth: Record<string, unknown
       }
     }
   }
+  return [...byAddress.entries()].map(([address, regionHealth]) => {
+    const rtts = regionHealth.map((r) => r.rttMs).filter((n): n is number => n !== null && n > 0);
+    const allHealthy = regionHealth.every((r) => r.healthy === true);
+    const anyDown = regionHealth.some((r) => r.healthy === false);
+    return { address, healthy: allHealthy ? true : anyDown ? false : null, rttMs: rtts.length > 0 ? Math.round((rtts.reduce((a, b) => a + b, 0) / rtts.length) * 10) / 10 : null, regionHealth };
+  });
+}
+
+/** Merge per-region health + RTT into a pool's origins (by address). The origin's authoritative
+ *  `healthy` (from the pool object) is left intact; only region detail + RTT are added. */
+function mergePoolHealth(pool: CloudflarePool, popHealth: Record<string, unknown>): void {
+  const byAddress = new Map(focusedOriginsFromPopHealth(popHealth).map((f) => [f.address, f]));
   for (const o of pool.origins) {
-    const rh = byAddress.get(o.address);
-    if (!rh || rh.length === 0) continue;
-    o.regionHealth = rh;
-    const rtts = rh.map((r) => r.rttMs).filter((n): n is number => n !== null && n > 0);
-    o.rttMs = rtts.length > 0 ? Math.round((rtts.reduce((a, b) => a + b, 0) / rtts.length) * 10) / 10 : null;
+    const f = byAddress.get(o.address);
+    if (!f) continue;
+    o.regionHealth = f.regionHealth;
+    o.rttMs = f.rttMs;
   }
 }
 

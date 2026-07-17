@@ -55,4 +55,19 @@ describe('Cloudflare routes', () => {
     expect(status.provenance.notice).toMatch(/MOCK|informational/i);
     await a.close();
   });
+
+  it('the focused pool refresh returns health for requested pools and caps the id list', async () => {
+    const a = await app('NOC_VIEWER');
+    const r = (await a.inject({ url: '/api/v1/network/cloudflare/pools/refresh?ids=citywest,parkwest' })).json();
+    expect(r.pools.map((p: { id: string }) => p.id).sort()).toEqual(['citywest', 'parkwest']);
+    expect(r.pools[0].origins[0]).toHaveProperty('rttMs');
+    expect(r.capped).toBe(false);
+    expect(r.max).toBe(8);
+
+    // More ids than the cap → only the first `max` are fetched, capped:true.
+    const many = Array.from({ length: 12 }, (_, i) => `pool-${i}`).join(',');
+    const capped = (await a.inject({ url: `/api/v1/network/cloudflare/pools/refresh?ids=${many}` })).json();
+    expect(capped.capped).toBe(true);
+    await a.close();
+  });
 });

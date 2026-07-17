@@ -31,6 +31,7 @@ import type {
   ConnectorTestResponse,
   CloudflareStatusResponse,
   CloudflareListResponse,
+  CloudflareRefreshResponse,
   CloudflareLoadBalancer,
   CloudflarePool,
   CloudflareConnectionResponse,
@@ -232,6 +233,7 @@ export const api = {
   cloudflareStatus: () => request<CloudflareStatusResponse>('/api/v1/network/cloudflare/status'),
   cloudflareLoadBalancers: () => request<CloudflareListResponse<CloudflareLoadBalancer>>('/api/v1/network/cloudflare/load-balancers'),
   cloudflarePools: () => request<CloudflareListResponse<CloudflarePool>>('/api/v1/network/cloudflare/pools'),
+  cloudflareRefreshPools: (ids: string[]) => request<CloudflareRefreshResponse>(`/api/v1/network/cloudflare/pools/refresh?ids=${encodeURIComponent(ids.join(','))}`),
 
   // Cloudflare connection settings (Engineer only). The token is write-only.
   cloudflareConnection: () => request<CloudflareConnectionResponse>('/api/v1/network/cloudflare/connection'),

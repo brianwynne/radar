@@ -171,6 +171,15 @@ export interface CloudflareSnapshot {
   warnings: string[];
 }
 
+/** Fast-refresh health for one pinned pool: per-origin health + RTT (the fast-changing fields).
+ *  Config/steering stays on the slow snapshot; only this is re-fetched on the fast tier. */
+export interface CloudflareFocusedPoolHealth {
+  id: string;
+  origins: { address: string; healthy: boolean | null; rttMs: number | null; regionHealth: CloudflareOriginRegionHealth[] }[];
+}
+
 export interface CloudflareClient {
   getSnapshot(correlationId?: string): Promise<CloudflareSnapshot>;
+  /** Fast tier: fetch just the health+RTT for specific pools (bounded — the caller caps the id list). */
+  getPoolsHealth(ids: string[], correlationId?: string): Promise<CloudflareFocusedPoolHealth[]>;
 }

@@ -150,6 +150,16 @@ describe('HttpCloudflareReadClient', () => {
     ]);
   });
 
+  it('getPoolsHealth fast-refreshes just health + RTT for the requested pools', async () => {
+    const { fn } = routingFetch((p) => handler(p));
+    const [ctw] = await client(fn).getPoolsHealth(['p-ctw']);
+    expect(ctw.id).toBe('p-ctw');
+    const up = ctw.origins.find((o) => o.address === '185.54.105.0')!;
+    expect(up).toMatchObject({ healthy: true, rttMs: 12 });
+    expect(up.regionHealth[0]).toMatchObject({ region: 'WEU', healthy: true, rttMs: 12 });
+    expect(ctw.origins.find((o) => o.address === '185.54.105.4')!.healthy).toBe(false); // down in WEU
+  });
+
   it('auto-discovers non-reverse-DNS zones when none are configured (skips .arpa)', async () => {
     const seen: string[] = [];
     const { fn } = routingFetch((p) => { if (p.includes('/load_balancers') && p.includes('/zones/')) seen.push(p.split('/')[2]); return handler(p); });
