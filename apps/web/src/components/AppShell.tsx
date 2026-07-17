@@ -12,7 +12,7 @@ const NAV = [
   // Hidden until complete — routes remain, just unlinked from the nav.
   // { to: '/live-steering', label: 'Live Steering', perm: 'steering.summary.read', end: false },
   // { to: '/steering', label: 'Steering', perm: 'steering.summary.read', end: false },
-  { to: '/topology', label: 'Topology', perm: 'topology.summary.read', end: false },
+  // { to: '/topology', label: 'Topology', perm: 'topology.summary.read', end: false },
   { to: '/network', label: 'Network Telemetry', perm: 'topology.summary.read', end: true },
   { to: '/load-balancing', label: 'Load Balancing', perm: 'topology.summary.read', end: false },
   { to: '/cdn', label: 'Commercial CDN', perm: 'topology.summary.read', end: false },
