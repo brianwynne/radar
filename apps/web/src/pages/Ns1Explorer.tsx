@@ -17,6 +17,9 @@ interface RecordSummary {
   type: string;
 }
 
+// A bare /explorer lands on this zone when it exists, so the operator starts in the primary zone.
+const DEFAULT_ZONE = 'nsone.rte.ie';
+
 function zoneName(z: unknown, i: number): string {
   return (z as { zone?: string }).zone ?? `zone-${i}`;
 }
@@ -52,12 +55,17 @@ export function Ns1Explorer() {
   const [recordError, setRecordError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecordRef[]>(getRecent());
 
-  // Zone list (once).
+  // Zone list (once). With no zone selected, default into the primary zone if it's available.
   useEffect(() => {
     api
       .zones()
-      .then((r) => setZones(r.zones.map(zoneName)))
+      .then((r) => {
+        const names = r.zones.map(zoneName);
+        setZones(names);
+        if (!zone && names.includes(DEFAULT_ZONE)) navigate(`/explorer/${DEFAULT_ZONE}`, { replace: true });
+      })
       .catch(() => setZonesError('Could not load zones.'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Records within the selected zone.
