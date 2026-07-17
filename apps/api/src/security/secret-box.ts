@@ -8,6 +8,10 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEq
 import { existsSync, readFileSync } from 'node:fs';
 
 const MASTER_KEY_FILE = '/run/secrets/radar_master_key';
+// The key VALUE is still only ever read from a file (never from env). Only the file LOCATION may be
+// overridden — via RADAR_MASTER_KEY_FILE — so a non-container dev/test host can point at a local key
+// file. Unset (production) ⇒ the mounted secret path above.
+const masterKeyPath = (): string => process.env.RADAR_MASTER_KEY_FILE || MASTER_KEY_FILE;
 const ALGO = 'aes-256-gcm';
 const NONCE_BYTES = 12;
 const KEY_BYTES = 32;
@@ -51,7 +55,7 @@ function tryBase64(raw: string): Buffer | null {
 /** Load the master key from the mounted secret. Returns null when absent/unreadable/invalid
  *  — callers must then refuse to store or read encrypted secrets (fail closed). The key
  *  bytes are never logged. */
-export function loadMasterKey(path: string = MASTER_KEY_FILE): Buffer | null {
+export function loadMasterKey(path: string = masterKeyPath()): Buffer | null {
   try {
     if (!existsSync(path)) return null;
     const raw = readFileSync(path, 'utf8').trim();
