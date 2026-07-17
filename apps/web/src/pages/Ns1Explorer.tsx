@@ -177,51 +177,56 @@ export function Ns1Explorer() {
       )}
 
       {zone && domain && type && (
-        <div className="card">
-          <div className="step-head">
-            <h3 style={{ margin: 0 }}>
-              Record: <span className="mono">{domain}</span> {type}
-            </h3>
-            <button className={`ghost ${view === 'normalised' ? 'active' : ''}`} onClick={() => setView('normalised')}>
-              Normalised
-            </button>
-            <button
-              className={`ghost ${view === 'raw' ? 'active' : ''}`}
-              onClick={() => setView('raw')}
-              disabled={!canRaw}
-              title={canRaw ? 'Raw NS1 object' : 'Requires the ns1.raw.read permission'}
-            >
-              Raw NS1
-            </button>
-            {canExplain && (
-              <button className={`primary ${showExplain ? 'active' : ''}`} style={{ marginLeft: 'auto' }} onClick={() => setShowExplain((v) => !v)}>
-                {showExplain ? 'Hide explanation' : 'Explain this record'}
+        // Record and its explanation sit side by side; the record collapses to full width when
+        // Explain is hidden, and both stack on narrow screens (flexWrap). minWidth:0 lets the
+        // raw-JSON pre scroll inside its column instead of forcing the row wider.
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div className="card" style={{ flex: showExplain ? '1 1 340px' : '1 1 100%', minWidth: 0 }}>
+            <div className="step-head">
+              <h3 style={{ margin: 0 }}>
+                Record: <span className="mono">{domain}</span> {type}
+              </h3>
+              <button className={`ghost ${view === 'normalised' ? 'active' : ''}`} onClick={() => setView('normalised')}>
+                Normalised
               </button>
+              <button
+                className={`ghost ${view === 'raw' ? 'active' : ''}`}
+                onClick={() => setView('raw')}
+                disabled={!canRaw}
+                title={canRaw ? 'Raw NS1 object' : 'Requires the ns1.raw.read permission'}
+              >
+                Raw NS1
+              </button>
+              {canExplain && (
+                <button className={`primary ${showExplain ? 'active' : ''}`} style={{ marginLeft: 'auto' }} onClick={() => setShowExplain((v) => !v)}>
+                  {showExplain ? 'Hide explanation' : 'Explain this record'}
+                </button>
+              )}
+            </div>
+            {recordError ? (
+              <div className="notice danger">{recordError}</div>
+            ) : payload === null ? (
+              <span className="muted">Loading record…</span>
+            ) : (
+              <>
+                <ProvenanceLine p={payload.provenance} />
+                <pre className="raw-json">{JSON.stringify(payload.body, null, 2)}</pre>
+              </>
             )}
           </div>
-          {recordError ? (
-            <div className="notice danger">{recordError}</div>
-          ) : payload === null ? (
-            <span className="muted">Loading record…</span>
-          ) : (
-            <>
-              <ProvenanceLine p={payload.provenance} />
-              <pre className="raw-json">{JSON.stringify(payload.body, null, 2)}</pre>
-            </>
-          )}
-        </div>
-      )}
 
-      {zone && domain && type && canExplain && showExplain && (
-        <div className="card">
-          <div className="page-head" style={{ marginBottom: '0.75rem' }}>
-            <h2 style={{ margin: 0 }}>Explain DNS Decision</h2>
-            <p>
-              Evaluate how NS1 steers a request for <span className="mono">{domain}</span> {type}, filter by filter. Vary the
-              request scenario below.
-            </p>
-          </div>
-          <ExplainPanel key={`${zone}/${domain}/${type}`} zone={zone} domain={domain} type={type} prefill={rawPrefill} autoRun={prefillMatches} />
+          {canExplain && showExplain && (
+            <div className="card" style={{ flex: '1.4 1 460px', minWidth: 0 }}>
+              <div className="page-head" style={{ marginBottom: '0.75rem' }}>
+                <h2 style={{ margin: 0 }}>Explain DNS Decision</h2>
+                <p>
+                  Evaluate how NS1 steers a request for <span className="mono">{domain}</span> {type}, filter by filter. Vary the
+                  request scenario below.
+                </p>
+              </div>
+              <ExplainPanel key={`${zone}/${domain}/${type}`} zone={zone} domain={domain} type={type} prefill={rawPrefill} autoRun={prefillMatches} />
+            </div>
+          )}
         </div>
       )}
 
