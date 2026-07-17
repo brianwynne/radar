@@ -15,11 +15,38 @@ function health(ok: boolean | null): { badge: string; label: string } {
   return { badge: 'neutral', label: 'unknown' };
 }
 
+const PINNED_KEY = 'radar.cacheLb.pinnedLoadBalancers';
+
 export function RealtaCacheLb() {
   const t = useCloudflare(30_000);
   const [search, setSearch] = useState('');
 
+  // Pinned load balancers — a persisted focused view at the top of the page, so CDN-specific load
+  // balancers can be kept in sight regardless of search or list order.
+  const [pinned, setPinned] = useState<Set<string>>(() => {
+    try { const raw = localStorage.getItem(PINNED_KEY); return new Set<string>(raw ? JSON.parse(raw) : []); } catch { return new Set(); }
+  });
+  useEffect(() => {
+    try { localStorage.setItem(PINNED_KEY, JSON.stringify([...pinned])); } catch { /* storage unavailable — in-memory only */ }
+  }, [pinned]);
+  const togglePin = (id: string) => setPinned((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const clearPinned = () => setPinned(new Set());
+
   const q = search.trim().toLowerCase();
+
+  // The pinned focused view always shows the selected LBs, independent of the search filter.
+  const pinnedLbs = useMemo(() => t.loadBalancers.filter((lb) => pinned.has(lb.id)), [t.loadBalancers, pinned]);
+
+  /** Pool chips with configured weight + observed share, shared by the focused cards and the table. */
+  const poolChips = (lb: (typeof t.loadBalancers)[number]) => {
+    if (lb.defaultPools.length === 0) return '—';
+    const obsBy = new Map((lb.observed?.byPool ?? []).map((b) => [b.key, b.sharePercent]));
+    return lb.defaultPools.map((p) => {
+      const share = p.poolName ? obsBy.get(p.poolName) : undefined;
+      const bits = [p.weight !== null ? `w${p.weight}` : null, share !== undefined ? `${share}%` : null].filter(Boolean).join(' · ');
+      return <span key={p.poolId} className="chip selected" title={p.poolName ? undefined : p.poolId}>{p.poolName ?? p.poolId.slice(0, 8)}{bits && <span className="muted"> · {bits}</span>}</span>;
+    });
+  };
   const loadBalancers = useMemo(
     () => t.loadBalancers.filter((lb) => !q || `${lb.name} ${lb.zoneName ?? ''} ${lb.steeringPolicy} ${lb.defaultPools.map((p) => p.poolName ?? '').join(' ')}`.toLowerCase().includes(q)),
     [t.loadBalancers, q],
@@ -64,6 +91,38 @@ export function RealtaCacheLb() {
       {t.error && <div className="notice danger">{t.error}</div>}
       {t.warnings.map((w, i) => <div key={i} className="notice warn">{w}</div>)}
 
+      {/* Focused view — pinned load balancers, kept at the top of the page. */}
+      {pinnedLbs.length > 0 && (
+        <div className="focused-lbs">
+          <div className="section-head" style={{ alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>Focused load balancers <span className="muted">({pinnedLbs.length})</span></h2>
+            <button className="btn btn-sm" onClick={clearPinned}>Clear all</button>
+          </div>
+          <div className="grid cols-2">
+            {pinnedLbs.map((lb) => (
+              <div key={lb.id} className="card focused-lb">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                  <div>
+                    <strong>{lb.name}</strong>
+                    <div className="muted" style={{ fontSize: '0.72rem' }}>{lb.zoneName ?? ''}</div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                    <span className={`badge ${lb.enabled ? 'ok' : 'neutral'} badge-sm`}>{lb.enabled ? 'enabled' : 'disabled'}</span>
+                    <button className="btn btn-sm" title="Unpin" aria-label={`Unpin ${lb.name}`} onClick={() => togglePin(lb.id)}>✕</button>
+                  </div>
+                </div>
+                <div style={{ marginTop: '0.4rem' }}><span className="chip">{lb.steeringPolicy}</span>{lb.locationStrategy && <span className="muted"> · {lb.locationStrategy}</span>}</div>
+                <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>Steers across</div>
+                <div>{poolChips(lb)}</div>
+                <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>
+                  {lb.observed ? `${lb.observed.totalRequests.toLocaleString()} reqs (1h)` : 'no observed traffic'} · fallback {lb.fallbackPool?.poolName ?? lb.fallbackPool?.poolId.slice(0, 8) ?? '—'}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Summary */}
       <div className="grid cols-4">
         <div className="card"><div className="muted">Load balancers</div><div className="stat">{num(t.summary?.loadBalancerCount)}</div></div>
@@ -82,25 +141,21 @@ export function RealtaCacheLb() {
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
-            <tr><th>Hostname</th><th>Policy · location</th><th>Steers across (pool · weight · observed)</th><th>Fallback</th><th>Observed 1h</th><th>State</th></tr>
+            <tr><th className="col-pin" title="Pin to the focused view"></th><th>Hostname</th><th>Policy · location</th><th>Steers across (pool · weight · observed)</th><th>Fallback</th><th>Observed 1h</th><th>State</th></tr>
           </thead>
           <tbody>
-            {loadBalancers.length === 0 && <tr><td colSpan={6} className="center-note">No load balancers.</td></tr>}
+            {loadBalancers.length === 0 && <tr><td colSpan={7} className="center-note">No load balancers.</td></tr>}
             {loadBalancers.map((lb) => {
-              const obsBy = new Map((lb.observed?.byPool ?? []).map((b) => [b.key, b.sharePercent]));
               const obsTitle = lb.observed
                 ? `by region: ${lb.observed.byRegion.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}\nby PoP: ${lb.observed.byColo.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}`
                 : undefined;
               return (
-                <tr key={lb.id}>
+                <tr key={lb.id} className={pinned.has(lb.id) ? 'row-selected' : ''}>
+                  <td className="col-pin"><input type="checkbox" checked={pinned.has(lb.id)} onChange={() => togglePin(lb.id)} aria-label={`Pin ${lb.name}`} /></td>
                   <td>{lb.name}<div className="muted" style={{ fontSize: '0.72rem' }}>{lb.zoneName ?? ''}</div></td>
                   <td><span className="chip">{lb.steeringPolicy}</span>{lb.locationStrategy && <span className="muted"> · {lb.locationStrategy}</span>}</td>
                   <td>
-                    {lb.defaultPools.length === 0 ? '—' : lb.defaultPools.map((p) => {
-                      const share = p.poolName ? obsBy.get(p.poolName) : undefined;
-                      const bits = [p.weight !== null ? `w${p.weight}` : null, share !== undefined ? `${share}%` : null].filter(Boolean).join(' · ');
-                      return <span key={p.poolId} className="chip selected" title={p.poolName ? undefined : p.poolId}>{p.poolName ?? p.poolId.slice(0, 8)}{bits && <span className="muted"> · {bits}</span>}</span>;
-                    })}
+                    {poolChips(lb)}
                     {Object.keys(lb.regionPools).length > 0 && <span className="muted"> · +region overrides</span>}
                   </td>
                   <td className="muted">{lb.fallbackPool?.poolName ?? lb.fallbackPool?.poolId.slice(0, 8) ?? '—'}</td>

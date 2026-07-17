@@ -269,3 +269,9 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .code-num { font-weight: 700; font-variant-numeric: tabular-nums; }
 .code-val { font-variant-numeric: tabular-nums; text-align: right; }
 .code-share { font-size: 0.72rem; text-align: right; }
+
+/* Réalta Cache LB — pin-to-focus. */
+.col-pin { width: 2rem; text-align: center; }
+.col-pin input { cursor: pointer; }
+.focused-lbs { margin: 0.5rem 0 1rem; padding: 0.75rem; border: 1px solid var(--accent, var(--border)); border-radius: 10px; }
+.focused-lb { border: 1px solid var(--border); }
