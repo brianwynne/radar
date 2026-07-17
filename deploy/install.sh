@@ -39,12 +39,17 @@ BUNDLE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # cloudflared / an external load balancer). A self-signed cert is still seeded so nginx serves 443
 # for the local origin connection.
 SKIP_CERT=0
+WITH_CERT=0
 for arg in "$@"; do
   case "$arg" in
     --skip-cert|--no-letsencrypt|--behind-proxy) SKIP_CERT=1 ;;
-    -h|--help) echo "usage: install.sh [--skip-cert]"; exit 0 ;;
+    --with-cert|--letsencrypt) WITH_CERT=1 ;;
+    -h|--help) echo "usage: install.sh [--skip-cert | --with-cert]"; exit 0 ;;
   esac
 done
+# Sticky posture: on a re-install/upgrade, keep a previous --skip-cert choice (its marker) unless
+# --with-cert explicitly opts back into Let's Encrypt — so `radar upgrade` never silently re-enables it.
+[ "$SKIP_CERT" -eq 0 ] && [ "$WITH_CERT" -eq 0 ] && [ -e "${ETC_DIR}/.tls-external" ] && SKIP_CERT=1
 
 # --- 0. Preflight ---------------------------------------------------------------------------
 [ "$(id -u)" -eq 0 ]        || die "must be run as root (use sudo)."
