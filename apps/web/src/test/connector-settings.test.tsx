@@ -35,6 +35,7 @@ describe('Integrations Token Management', () => {
     await screen.findByRole('heading', { name: /Cloudflare \(Réalta cache load balancing\)/i });
     await screen.findByRole('heading', { name: /Fastly \(commercial CDN\)/i });
     await screen.findByRole('heading', { name: /Akamai \(DataStream 2/i });
+    await screen.findByRole('heading', { name: /NS1 \(steering source\)/i });
   });
 
   it('renders a write-only token field per section (blank even when configured)', async () => {
@@ -118,5 +119,21 @@ describe('Integrations Token Management', () => {
 
     fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
     expect(await screen.findByText(/S3 connection OK.*5 object/i)).toBeInTheDocument();
+  });
+
+  it('saves the NS1 read-only key (write-only) going live, and tests the connection', async () => {
+    stubApi(ENGINEER);
+    renderAt('/network/connection');
+    const heading = await screen.findByRole('heading', { name: /NS1 \(steering source\)/i });
+    const card = within(heading.closest('.connector-section') as HTMLElement);
+
+    fireEvent.change(await card.findByRole('combobox'), { target: { value: 'live' } }); // mode → live
+    fireEvent.change(card.getByPlaceholderText(/not configured/i), { target: { value: 'ns1-readonly-key' } });
+    fireEvent.click(card.getByRole('button', { name: 'Save' }));
+    await screen.findByText(/Saved/i);
+    expect(putBody('/ns1/connection')).toMatchObject({ mode: 'live', key: 'ns1-readonly-key' });
+
+    fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText(/Connection OK.*12 zones/i)).toBeInTheDocument();
   });
 });

@@ -1086,3 +1086,13 @@ export interface FastlyConnectionResponse { settings: FastlyConnection }
 export interface FastlyConnectionUpdate { enabled?: boolean; mode?: 'mock' | 'live'; apiBase?: string | null; serviceIds?: string[] | null; token?: string; clearToken?: boolean }
 export interface FastlyConnectionTestResult { ok: boolean; source: string; error?: string; summary?: { services: number } }
 export interface FastlyConnectionTestResponse { result: FastlyConnectionTestResult }
+
+// Engineer-managed NS1 connection settings (mode + API base + read-only key). The key is write-only.
+export interface Ns1ConnectionSettings {
+  connector: 'ns1'; mode: 'mock' | 'live'; apiBase: string; keyConfigured: boolean; keySetAt: string | null;
+  updatedBy: string | null; updatedAt: string | null; source: 'database' | 'environment'; live: boolean; masterKeyAvailable: boolean; degraded: string | null;
+}
+export interface Ns1ConnectionResponse { settings: Ns1ConnectionSettings }
+export interface Ns1ConnectionUpdate { mode?: 'mock' | 'live'; apiBase?: string | null; key?: string; clearKey?: boolean }
+export interface Ns1ConnectionTestResult { ok: boolean; source: string; error?: string; summary?: { zones: number } }
+export interface Ns1ConnectionTestResponse { result: Ns1ConnectionTestResult }

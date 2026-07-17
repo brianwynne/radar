@@ -44,6 +44,9 @@ import type {
   AkamaiConnectionResponse,
   AkamaiConnectionUpdate,
   AkamaiConnectionTestResponse,
+  Ns1ConnectionResponse,
+  Ns1ConnectionUpdate,
+  Ns1ConnectionTestResponse,
   FastlyConnectionResponse,
   FastlyConnectionUpdate,
   FastlyConnectionTestResponse,
@@ -250,6 +253,11 @@ export const api = {
   akamaiConnection: () => request<AkamaiConnectionResponse>('/api/v1/cdn/akamai/connection'),
   akamaiConnectionUpdate: (body: AkamaiConnectionUpdate) => request<AkamaiConnectionResponse>('/api/v1/cdn/akamai/connection', { method: 'PUT', body: JSON.stringify(body) }),
   akamaiConnectionTest: () => request<AkamaiConnectionTestResponse>('/api/v1/cdn/akamai/connection/test', { method: 'POST', body: JSON.stringify({}) }),
+
+  // NS1 connection settings (Engineer only). The read-only NS1 key is write-only.
+  ns1Connection: () => request<Ns1ConnectionResponse>('/api/v1/ns1/connection'),
+  ns1ConnectionUpdate: (body: Ns1ConnectionUpdate) => request<Ns1ConnectionResponse>('/api/v1/ns1/connection', { method: 'PUT', body: JSON.stringify(body) }),
+  ns1ConnectionTest: () => request<Ns1ConnectionTestResponse>('/api/v1/ns1/connection/test', { method: 'POST', body: JSON.stringify({}) }),
 
   // Fastly connection settings (Engineer only). The token is write-only.
   fastlyConnection: () => request<FastlyConnectionResponse>('/api/v1/cdn/fastly/connection'),

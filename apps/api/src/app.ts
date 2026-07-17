@@ -10,6 +10,8 @@ import type { Config } from './config.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { ns1Routes } from './routes/ns1.js';
+import { ns1ConnectionRoutes } from './routes/ns1-connection.js';
+import type { Ns1ConnectorManager } from './ns1/manager.js';
 import { dnsRoutes } from './routes/dns.js';
 import { snapshotRoutes } from './routes/snapshots.js';
 import { auditRoutes } from './routes/audit.js';
@@ -60,6 +62,7 @@ const CORRELATION_HEADER = 'x-correlation-id';
 export interface BuildDeps extends AuthDeps {
   databaseHealth?: DatabaseHealthCheck;
   ns1Client?: Ns1ReadClient;
+  ns1Manager?: Ns1ConnectorManager;
   database?: Database;
   steeringStore?: SteeringStore;
   changeDetection?: ChangeDetectionService;
@@ -198,6 +201,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(ns1Routes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1 });
   await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1 });
   await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database });
+  await app.register(ns1ConnectionRoutes, { prefix: '/api/v1', manager: deps.ns1Manager });
   await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });
   await app.register(changeDetectionRoutes, { prefix: '/api/v1', service: deps.changeDetection });
   await app.register(liveSteeringRoutes, { prefix: '/api/v1', store: deps.steeringStore });

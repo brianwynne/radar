@@ -9,7 +9,7 @@ import { databaseHealthCheck } from './database/health.js';
 import { createDatabase } from './database/repositories.js';
 import { createSteeringStore } from './database/steering-store.js';
 import { PostgresPollerLock } from './database/poller-lock.js';
-import { createNs1Client } from './ns1/index.js';
+import { Ns1ConnectorManager } from './ns1/manager.js';
 import { createChangeDetectionService } from './change-detection/index.js';
 import { createTelemetryClient } from './telemetry/index.js';
 import { createCacheTelemetryClient } from './telemetry/cache-index.js';
@@ -33,7 +33,18 @@ async function main(): Promise<void> {
   const pool = createPool(config.database);
   const database = createDatabase(pool);
   const steeringStore = createSteeringStore(pool);
-  const ns1Client = createNs1Client(config.ns1);
+  // NS1 (the core steering source): managed by the connector manager so an Engineer can set the
+  // read-only NS1 key + mode on the Integrations page. The manager owns a stable, reconfigurable
+  // client that the whole engine holds; the key is stored encrypted (master key from
+  // /run/secrets/radar_master_key), else the env NS1_API_KEY / RADAR_MODE base config drives it.
+  const ns1Manager = new Ns1ConnectorManager({
+    baseConfig: config.ns1,
+    repository: createConnectorSettingsStore(pool),
+    secretBox: SecretBox.fromMasterKey(),
+    audit: database.audit,
+  });
+  await ns1Manager.init();
+  const ns1Client = ns1Manager.getClient();
   const changeDetection = config.changeDetection.enabled
     ? createChangeDetectionService({
         client: ns1Client,
@@ -118,6 +129,7 @@ async function main(): Promise<void> {
     database,
     steeringStore,
     ns1Client,
+    ns1Manager,
     changeDetection,
     telemetryClient,
     telemetryMode: config.telemetry.mode,

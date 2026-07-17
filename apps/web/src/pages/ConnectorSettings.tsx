@@ -9,6 +9,7 @@ import type {
   CloudflareConnectionSettings, CloudflareConnectionUpdateRequest, CloudflareConnectionTestResult,
   FastlyConnection, FastlyConnectionUpdate, FastlyConnectionTestResult,
   AkamaiConnectionSettings, AkamaiConnectionUpdate, AkamaiConnectionTestResult,
+  Ns1ConnectionSettings, Ns1ConnectionUpdate, Ns1ConnectionTestResult,
 } from '../api/types';
 
 export function ConnectorSettings() {
@@ -18,6 +19,7 @@ export function ConnectorSettings() {
         <h1>Integrations Token Management</h1>
       </header>
       <p className="muted">Service-account tokens are write-only — stored encrypted server-side and never displayed. Leave a token field blank to keep the current token.</p>
+      <Ns1ConnectorForm />
       <CloudVisionConnectorForm />
       <CloudflareConnectorForm />
       <FastlyConnectorForm />
@@ -564,6 +566,126 @@ function AkamaiConnectorForm() {
               <div className="kv"><span>Secret set at</span><span>{view.secretSetAt ?? '—'}</span></div>
               <div className="kv"><span>Last updated by</span><span>{view.updatedBy ?? '—'}</span></div>
               <div className="kv"><span>Connected</span><span>{view.connected ? 'yes' : 'no'}</span></div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- NS1 (the core steering source) ---------------------------------------------------------
+
+function Ns1ConnectorForm() {
+  const [view, setView] = useState<Ns1ConnectionSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [testResult, setTestResult] = useState<Ns1ConnectionTestResult | null>(null);
+
+  // Editable form state (the key is write-only — never populated from the server).
+  const [mode, setMode] = useState<'mock' | 'live'>('mock');
+  const [apiBase, setApiBase] = useState('');
+  const [key, setKey] = useState('');
+  const [clearKey, setClearKey] = useState(false);
+
+  const hydrate = useCallback((s: Ns1ConnectionSettings) => {
+    setView(s);
+    setMode(s.mode);
+    setApiBase(s.apiBase);
+    setKey('');
+    setClearKey(false);
+  }, []);
+
+  const load = useCallback(async () => {
+    try {
+      hydrate((await api.ns1Connection()).settings);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Failed to load NS1 settings.');
+    } finally {
+      setLoading(false);
+    }
+  }, [hydrate]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const save = async () => {
+    setSaved(false);
+    setError(null);
+    const body: Ns1ConnectionUpdate = { mode, apiBase: apiBase.trim() || null };
+    if (clearKey) body.clearKey = true;
+    else if (key.trim().length > 0) body.key = key.trim();
+    try {
+      hydrate((await api.ns1ConnectionUpdate(body)).settings);
+      setSaved(true);
+      setTestResult(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Failed to save.');
+    }
+  };
+
+  const runTest = async () => {
+    setTestResult(null);
+    setError(null);
+    try {
+      setTestResult((await api.ns1ConnectionTest()).result);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Test failed.');
+    }
+  };
+
+  return (
+    <div className="connector-section">
+      <div className="section-head">
+        <h2>NS1 (steering source)</h2>
+        {view && <span className={`badge ${view.live ? 'ok' : 'neutral'}`}>{view.live ? 'LIVE' : 'MOCK'}</span>}
+      </div>
+      <p className="muted">RADAR reads IBM NS1 Connect configuration read-only to explain steering. Live mode needs a <strong>read-only</strong> NS1 API key with view access to the zones you want explained. RADAR never writes to NS1.</p>
+      {loading ? <div className="center-note">Loading…</div> : (
+        <>
+          {view && !view.masterKeyAvailable && (
+            <div className="notice warn">No master key is available (<code>/run/secrets/radar_master_key</code>). You can edit non-secret settings, but the NS1 key cannot be stored until the master key is provisioned — an environment key (<code>NS1_API_KEY</code> + <code>RADAR_MODE=live</code>) still drives the connector.</div>
+          )}
+          {view?.degraded && <div className="notice warn">{view.degraded}</div>}
+          {error && <div className="notice danger">{error}</div>}
+          {saved && <div className="notice ok">Saved. The NS1 client was reconfigured.</div>}
+
+          <div className="card">
+            <label className="field"><span>Mode</span>
+              <select value={mode} onChange={(e) => setMode(e.target.value as 'mock' | 'live')}>
+                <option value="mock">mock (fixtures, no credential)</option>
+                <option value="live">live (NS1)</option>
+              </select>
+            </label>
+            <label className="field"><span>API base <span className="muted">(blank = https://api.nsone.net/v1)</span></span><input value={apiBase} onChange={(e) => setApiBase(e.target.value)} placeholder="https://api.nsone.net/v1" /></label>
+            <label className="field"><span>Read-only API key <span className="muted">(write-only)</span> {view?.keyConfigured && <span className="badge ok badge-sm">configured</span>}</span>
+              <input type="password" autoComplete="off" value={key} disabled={clearKey} onChange={(e) => setKey(e.target.value)}
+                placeholder={view?.keyConfigured ? '•••••••• configured — leave blank to keep' : 'not configured'} />
+            </label>
+            {view?.keyConfigured && (
+              <div className="field-row"><label className="switch"><input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} /> Clear the stored key</label></div>
+            )}
+            <div className="actions">
+              <button className="btn primary" onClick={() => void save()}>Save</button>
+              <button className="btn" onClick={() => void runTest()}>Test connection</button>
+            </div>
+          </div>
+
+          {testResult && (
+            <div className={`notice ${testResult.ok ? 'ok' : 'danger'}`}>
+              {testResult.ok
+                ? `Connection OK (${testResult.source}) — ${testResult.summary?.zones ?? 0} zones visible.`
+                : `Connection failed (${testResult.source})${testResult.error ? `: ${testResult.error}` : ''}.`}
+            </div>
+          )}
+
+          {view && (
+            <div className="card">
+              <div className="kv"><span>Key configured</span><span>{view.keyConfigured ? 'yes' : 'no'}</span></div>
+              <div className="kv"><span>Key set at</span><span>{view.keySetAt ?? '—'}</span></div>
+              <div className="kv"><span>Last updated by</span><span>{view.updatedBy ?? '—'}</span></div>
+              <div className="kv"><span>Effective</span><span>{view.live ? 'live' : 'mock'}</span></div>
             </div>
           )}
         </>
