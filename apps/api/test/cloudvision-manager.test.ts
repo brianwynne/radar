@@ -124,6 +124,26 @@ describe('fail closed + live validation', () => {
   });
 });
 
+describe('malformed endpoint (regression)', () => {
+  it('rejects a no-scheme endpoint at save even in development', async () => {
+    const mgr = new CloudVisionConnectorManager({ baseConfig, repository: new FakeRepo(), secretBox: new SecretBox(randomBytes(32)), audit: { record: async () => undefined }, isDevelopment: true, now: () => NOW });
+    await expect(mgr.updateSettings({ enabled: true, mode: 'live', endpoint: 'www.cv.arista.io', token: TOKEN }, actor)).rejects.toMatchObject({ code: 'ENDPOINT_INSECURE' });
+    mgr.stop();
+  });
+
+  it('a persisted malformed endpoint degrades instead of crashing init', async () => {
+    const box = new SecretBox(randomBytes(32));
+    const sealed = box.seal(TOKEN);
+    const repo = new FakeRepo();
+    repo.row = { connector: 'cloudvision', enabled: true, mode: 'live', endpoint: 'www.cv.arista.io', verifyTls: true, edgeDeviceIds: 'DEV1', tokenCiphertext: sealed.ciphertext, tokenNonce: sealed.nonce, tokenTag: sealed.tag, tokenSetAt: new Date(NOW), updatedBy: 'x', updatedAt: new Date(NOW) };
+    const mgr = new CloudVisionConnectorManager({ baseConfig, repository: repo, secretBox: box, audit: { record: async () => undefined }, isDevelopment: true, now: () => NOW });
+    await expect(mgr.init()).resolves.toBeUndefined(); // must NOT throw (was: crash on startup)
+    expect(mgr.getSettingsView().degraded).toMatch(/http\(s\) URL/);
+    expect(mgr.getPoller().status().source).toBe('disabled');
+    mgr.stop();
+  });
+});
+
 describe('runtime reconfigure', () => {
   it('switching to mock makes the poller report the mock source', async () => {
     const { manager } = make();

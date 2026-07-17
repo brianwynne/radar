@@ -165,6 +165,9 @@ export class CloudVisionConnectorManager {
       }
       if (!degraded && !token) degraded = 'No service-account token configured.';
       if (!degraded && !r.endpoint) degraded = 'No endpoint configured.';
+      // Fail closed on a malformed endpoint: the live client constructor rejects a non-http(s) URL,
+      // which would otherwise throw here (500 on save, and crash on the next startup that reloads it).
+      else if (!degraded && r.endpoint && !/^https?:\/\//i.test(r.endpoint)) degraded = 'Endpoint must be an http(s) URL (e.g. https://www.arista.io).';
     }
 
     const source: CloudVisionSource = !r.enabled ? 'disabled' : r.mode === 'mock' ? 'mock' : degraded ? 'disabled' : 'cloudvision';
@@ -246,6 +249,9 @@ export class CloudVisionConnectorManager {
     // Live requires an endpoint and a token that will exist AFTER this update.
     if (enabled && mode === 'live') {
       if (!endpoint) throw new ConnectorManagerError('ENDPOINT_REQUIRED', 'A live connection requires an endpoint.');
+      // A malformed endpoint (no http/https scheme) is rejected in ALL environments — it would break
+      // the client at build time. The HTTPS-only rule is additionally enforced outside development.
+      if (!/^https?:\/\//i.test(endpoint)) throw new ConnectorManagerError('ENDPOINT_INSECURE', 'The endpoint must be an http(s) URL (e.g. https://www.arista.io).');
       if (!this.isDev && !/^https:\/\//i.test(endpoint)) throw new ConnectorManagerError('ENDPOINT_INSECURE', 'The endpoint must use HTTPS outside development.');
       const tokenAfter = tokenAction === 'replace' ? true : tokenAction === 'clear' ? false : this.tokenConfigured();
       if (!tokenAfter) throw new ConnectorManagerError('TOKEN_REQUIRED', 'A live connection requires a service-account token.');
