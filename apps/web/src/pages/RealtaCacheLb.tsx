@@ -9,8 +9,7 @@ import { formatFreshness } from '../telemetry/format';
 import type { CloudflareOrigin, CloudflarePool } from '../api/types';
 
 /** Client-side caps that keep the fast tier bounded (the server enforces its own hard cap too). */
-const MAX_FOCUS_POOLS = 8; // pools live-refreshed on the fast tier
-const MAX_PINS = 6; // combined pinned load balancers + pools
+const MAX_FOCUS_POOLS = 8; // pools live-refreshed on the fast tier (extras still pin, just refresh at the slow rate)
 
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : String(n));
 
@@ -91,9 +90,6 @@ export function RealtaCacheLb() {
   }), [t.pools, focused.byId]);
 
   const pinnedPoolList = useMemo(() => mergedPools.filter((p) => pinnedPools.has(p.id)), [mergedPools, pinnedPools]);
-
-  // At the combined pin cap, new items can't be pinned (keeps the fast tier bounded).
-  const atPinCap = pinned.size + pinnedPools.size >= MAX_PINS;
 
   // Pool-level RTT = mean response time of the pool's enabled origins (from the pool health endpoint).
   const poolRtt = useMemo(() => {
@@ -273,7 +269,7 @@ export function RealtaCacheLb() {
               const policyDetail = [affinity, lb.adaptiveRoutingFailoverAcrossPools ? 'adaptive failover' : ''].filter(Boolean).join(' · ');
               return (
                 <tr key={lb.id} className={pinned.has(lb.id) ? 'row-selected' : ''}>
-                  <td className="col-pin"><input type="checkbox" checked={pinned.has(lb.id)} disabled={atPinCap && !pinned.has(lb.id)} onChange={() => togglePin(lb.id)} aria-label={`Pin ${lb.name}`} title={atPinCap && !pinned.has(lb.id) ? `Pin limit reached (${MAX_PINS})` : undefined} /></td>
+                  <td className="col-pin"><input type="checkbox" checked={pinned.has(lb.id)} onChange={() => togglePin(lb.id)} aria-label={`Pin ${lb.name}`} /></td>
                   <td>{lb.name}<div className="muted" style={{ fontSize: '0.72rem' }}>{lb.zoneName ?? ''}</div></td>
                   <td><span className="chip">{lb.steeringPolicy}</span>{lb.locationStrategy && <span className="muted"> · {lb.locationStrategy}</span>}
                     {policyDetail && <div className="muted" style={{ fontSize: '0.72rem' }}>{policyDetail}</div>}
@@ -309,7 +305,7 @@ export function RealtaCacheLb() {
               const ph = health(p.healthy);
               return [
                 <tr key={p.id} className={`lag-parent ${pinnedPools.has(p.id) ? 'row-selected' : ''}`}>
-                  <td className="col-pin"><input type="checkbox" checked={pinnedPools.has(p.id)} disabled={atPinCap && !pinnedPools.has(p.id)} onChange={() => togglePinPool(p.id)} aria-label={`Pin ${p.name}`} title={atPinCap && !pinnedPools.has(p.id) ? `Pin limit reached (${MAX_PINS})` : undefined} /></td>
+                  <td className="col-pin"><input type="checkbox" checked={pinnedPools.has(p.id)} onChange={() => togglePinPool(p.id)} aria-label={`Pin ${p.name}`} /></td>
                   <td>{p.name} <span className="muted">· {p.healthyOrigins}/{p.totalOrigins} origins healthy</span>
                     {p.healthCheck && <div className="muted" style={{ fontSize: '0.72rem' }}>check: {p.healthCheck.method ?? p.healthCheck.type} {p.healthCheck.path ?? ''} → {p.healthCheck.expectedCodes ?? ''}{p.healthCheck.expectedBody ? ` "${p.healthCheck.expectedBody}"` : ''}{p.healthCheck.port ? ` :${p.healthCheck.port}` : ''}</div>}
                     <div className="muted" style={{ fontSize: '0.72rem' }}>{poolDetail(p)}</div>
