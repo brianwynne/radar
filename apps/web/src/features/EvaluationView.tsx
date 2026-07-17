@@ -74,6 +74,9 @@ function Step({ trace, answers, selected }: { trace: FilterTrace; answers: Trace
 
 export function EvaluationView({ data }: { data: ExplainResponse }) {
   const { evaluation: ev, provenance, request } = data;
+  // Tolerate an evaluation that predates selectionDeterminism (e.g. a stale API) — treat unknown as
+  // probabilistic (the conservative, never-overclaiming default) rather than crashing the view.
+  const det = determinism[ev.selectionDeterminism] ?? determinism.probabilistic;
 
   return (
     <div>
@@ -87,8 +90,8 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
           ) : (
             <span className="badge warn">partial evaluation</span>
           )}
-          <span className={`badge ${determinism[ev.selectionDeterminism].badge}`} title={determinism[ev.selectionDeterminism].hint}>
-            {determinism[ev.selectionDeterminism].text}
+          <span className={`badge ${det.badge}`} title={det.hint}>
+            {det.text}
           </span>
           <Link className="ghost" style={{ marginLeft: 'auto' }} to={`/explorer/${request.zone}/${request.domain}/${request.type}`}>
             View NS1 record
@@ -147,9 +150,9 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
                   <span
                     className={`badge ${ev.selectionDeterminism === 'deterministic' ? 'info' : 'neutral'}`}
                     style={{ marginLeft: '0.3rem' }}
-                    title={determinism[ev.selectionDeterminism].hint}
+                    title={det.hint}
                   >
-                    {determinism[ev.selectionDeterminism].pick}
+                    {det.pick}
                   </span>
                 )}
               </span>
