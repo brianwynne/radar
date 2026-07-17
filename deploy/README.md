@@ -70,6 +70,24 @@ in that file and `.env.example`.
 | Secrets | Root-only sources in `/etc/radar/secrets` → tmpfs `/run/secrets/*` (0400, `radar`-only) |
 | Network | API binds `127.0.0.1` only; nginx is the sole public listener; ufw `22/80/443` |
 
+## Outbound connectivity
+
+RADAR is read-only to these upstreams and only reaches the ones you configure a connector for.
+`ufw` leaves egress open by default, so a standard install needs nothing extra; on a host with a
+restrictive **outbound** policy, allow HTTPS (443) to the hosts for the features you enable:
+
+| Host | Used by | Needed when |
+|---|---|---|
+| `api.nsone.net` | NS1 steering config (live mode) | `RADAR_MODE=live` / NS1 connector |
+| `stat.ripe.net` | ASN → network-owner resolution (Network breakdown) | Always useful; **degrades gracefully** to "unresolved" if blocked |
+| `www.arista.io` (CVaaS) | CloudVision network telemetry | CloudVision connector |
+| `api.cloudflare.com` | Cloudflare Load Balancing | Cloudflare connector |
+| `api.fastly.com`, `rt.fastly.com` | Fastly commercial-CDN telemetry | Fastly connector |
+| `*.amazonaws.com` (S3) | Akamai DataStream 2 logs | Akamai connector |
+
+Authoritative-DNS observation (Tier-2) additionally needs outbound UDP/TCP 53 to the NS1
+nameservers. All of these fail soft — a blocked host disables its feature, it never crashes the API.
+
 ## Manage
 
 ```bash
