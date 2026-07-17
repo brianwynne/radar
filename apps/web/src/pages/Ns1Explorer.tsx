@@ -17,8 +17,10 @@ interface RecordSummary {
   type: string;
 }
 
-// A bare /explorer lands on this zone when it exists, so the operator starts in the primary zone.
+// A bare /explorer lands on this zone/record when they exist, so the operator starts in the
+// primary zone on the primary record.
 const DEFAULT_ZONE = 'nsone.rte.ie';
+const DEFAULT_RECORD = { domain: 'live.nsone.rte.ie', type: 'CNAME' };
 
 function zoneName(z: unknown, i: number): string {
   return (z as { zone?: string }).zone ?? `zone-${i}`;
@@ -79,11 +81,22 @@ export function Ns1Explorer() {
     setRecordsError(null);
     api
       .zone(zone)
-      .then((r) => active && setRecords(extractRecords(r.zone)))
+      .then((r) => {
+        if (!active) return;
+        const recs = extractRecords(r.zone);
+        setRecords(recs);
+        // In the primary zone with no record selected, default to the primary record if it exists.
+        if (!domain && !type && zone === DEFAULT_ZONE && recs.some((rec) => rec.domain === DEFAULT_RECORD.domain && rec.type === DEFAULT_RECORD.type)) {
+          navigate(`/explorer/${DEFAULT_ZONE}/${DEFAULT_RECORD.domain}/${DEFAULT_RECORD.type}`, { replace: true });
+        }
+      })
       .catch((e: unknown) => active && setRecordsError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not load records.'));
     return () => {
       active = false;
     };
+    // Keyed on zone only — the default-record redirect reads domain/type at fetch time and must
+    // not refetch the zone when the record changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone]);
 
   // Track the selected record in the recent list.
