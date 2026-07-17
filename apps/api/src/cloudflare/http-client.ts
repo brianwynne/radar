@@ -334,33 +334,46 @@ function buildPool(p: Record<string, unknown>, monitors: Map<string, CloudflareH
   };
 }
 
-/** Reduce a pool health endpoint's `pop_health` to per-origin region health + a mean RTT + a derived
- *  healthy (all check regions up → true, any down → false, else null). Shared by the slow snapshot
- *  merge and the fast focused refresh. */
+/** Max down-regions kept per origin (Cloudflare checks from hundreds of PoPs — we only surface the
+ *  ones failing, which is the useful diagnostic, and keeps the payload small). */
+const MAX_DOWN_REGIONS = 12;
+
+const median = (nums: number[]): number | null => {
+  if (nums.length === 0) return null;
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  const m = s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+  return Math.round(m * 10) / 10;
+};
+
+/** Reduce a pool health endpoint's `pop_health` to per-origin { median RTT across check regions,
+ *  the regions currently DOWN }. Does NOT compute an overall healthy verdict — that stays with
+ *  Cloudflare's authoritative aggregate on the pool object. Shared by the slow merge + fast refresh. */
 function focusedOriginsFromPopHealth(popHealth: Record<string, unknown>): CloudflareFocusedPoolHealth['origins'] {
-  const byAddress = new Map<string, CloudflareOriginRegionHealth[]>();
+  const rttsByAddress = new Map<string, number[]>();
+  const downByAddress = new Map<string, CloudflareOriginRegionHealth[]>();
   for (const [region, rv] of Object.entries(popHealth)) {
     if (!isObj(rv) || !Array.isArray(rv.origins)) continue;
     for (const entry of rv.origins) {
       if (!isObj(entry)) continue;
       for (const [address, ov] of Object.entries(entry)) {
         if (!isObj(ov)) continue;
-        const list = byAddress.get(address) ?? [];
-        list.push({ region, healthy: boolN(ov.healthy), rttMs: parseRtt(ov.rtt), failureReason: str(ov.failure_reason) });
-        byAddress.set(address, list);
+        const rtt = parseRtt(ov.rtt);
+        if (rtt !== null && rtt > 0) { const l = rttsByAddress.get(address) ?? []; l.push(rtt); rttsByAddress.set(address, l); }
+        if (boolN(ov.healthy) === false) {
+          const l = downByAddress.get(address) ?? [];
+          if (l.length < MAX_DOWN_REGIONS) l.push({ region, healthy: false, rttMs: rtt, failureReason: str(ov.failure_reason) });
+          downByAddress.set(address, l);
+        }
       }
     }
   }
-  return [...byAddress.entries()].map(([address, regionHealth]) => {
-    const rtts = regionHealth.map((r) => r.rttMs).filter((n): n is number => n !== null && n > 0);
-    const allHealthy = regionHealth.every((r) => r.healthy === true);
-    const anyDown = regionHealth.some((r) => r.healthy === false);
-    return { address, healthy: allHealthy ? true : anyDown ? false : null, rttMs: rtts.length > 0 ? Math.round((rtts.reduce((a, b) => a + b, 0) / rtts.length) * 10) / 10 : null, regionHealth };
-  });
+  const addresses = new Set([...rttsByAddress.keys(), ...downByAddress.keys()]);
+  return [...addresses].map((address) => ({ address, rttMs: median(rttsByAddress.get(address) ?? []), regionHealth: downByAddress.get(address) ?? [] }));
 }
 
-/** Merge per-region health + RTT into a pool's origins (by address). The origin's authoritative
- *  `healthy` (from the pool object) is left intact; only region detail + RTT are added. */
+/** Merge RTT + down-region detail into a pool's origins (by address). The origin's authoritative
+ *  `healthy` (from the pool object) is left intact — never overridden by per-region check results. */
 function mergePoolHealth(pool: CloudflarePool, popHealth: Record<string, unknown>): void {
   const byAddress = new Map(focusedOriginsFromPopHealth(popHealth).map((f) => [f.address, f]));
   for (const o of pool.origins) {

@@ -171,11 +171,13 @@ export interface CloudflareSnapshot {
   warnings: string[];
 }
 
-/** Fast-refresh health for one pinned pool: per-origin health + RTT (the fast-changing fields).
- *  Config/steering stays on the slow snapshot; only this is re-fetched on the fast tier. */
+/** Fast-refresh data for one pinned pool: per-origin RTT + the regions currently reporting DOWN.
+ *  The origin's overall healthy verdict is NOT derived here — Cloudflare's authoritative aggregate
+ *  (from the pool object, on the slow snapshot) is the source of truth. A handful of distant check
+ *  regions failing (e.g. geo-filtered) does not make an origin unhealthy. */
 export interface CloudflareFocusedPoolHealth {
   id: string;
-  origins: { address: string; healthy: boolean | null; rttMs: number | null; regionHealth: CloudflareOriginRegionHealth[] }[];
+  origins: { address: string; rttMs: number | null; regionHealth: CloudflareOriginRegionHealth[] }[];
 }
 
 export interface CloudflareClient {

@@ -6,7 +6,7 @@ import { summarise } from './http-client.js';
 import type { CloudflareClient, CloudflareFocusedPoolHealth, CloudflareLoadBalancer, CloudflareOrigin, CloudflarePool, CloudflareSnapshot } from './types.js';
 
 /** Reduce a pool's origins to the fast-refresh health subset (mock: reuses the origin's fields). */
-const focusedHealth = (p: CloudflarePool): CloudflareFocusedPoolHealth => ({ id: p.id, origins: p.origins.map((o) => ({ address: o.address, healthy: o.healthy, rttMs: o.rttMs, regionHealth: o.regionHealth })) });
+const focusedHealth = (p: CloudflarePool): CloudflareFocusedPoolHealth => ({ id: p.id, origins: p.origins.map((o) => ({ address: o.address, rttMs: o.rttMs, regionHealth: o.regionHealth })) });
 
 function origin(name: string, address: string, ok: boolean): CloudflareOrigin {
   const base = 9 + (address.charCodeAt(address.length - 1) % 9);

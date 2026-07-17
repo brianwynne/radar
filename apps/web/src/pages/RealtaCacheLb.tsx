@@ -84,7 +84,10 @@ export function RealtaCacheLb() {
     const fresh = focused.byId.get(p.id);
     if (!fresh) return p;
     const byAddr = new Map(fresh.origins.map((o) => [o.address, o]));
-    return { ...p, origins: p.origins.map((o) => { const f = byAddr.get(o.address); return f ? { ...o, healthy: f.healthy ?? o.healthy, rttMs: f.rttMs, regionHealth: f.regionHealth } : o; }) };
+    // Overlay only the fast-changing RTT + down-region detail; NEVER the health verdict — Cloudflare's
+    // authoritative aggregate (o.healthy from the slow snapshot) stands, so a few far-off check regions
+    // failing (e.g. geo-filtered) can't flip an origin to "unhealthy".
+    return { ...p, origins: p.origins.map((o) => { const f = byAddr.get(o.address); return f ? { ...o, rttMs: f.rttMs, regionHealth: f.regionHealth } : o; }) };
   }), [t.pools, focused.byId]);
 
   const pinnedPoolList = useMemo(() => mergedPools.filter((p) => pinnedPools.has(p.id)), [mergedPools, pinnedPools]);

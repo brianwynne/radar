@@ -129,9 +129,9 @@ describe('HttpCloudflareReadClient', () => {
     const o1 = ctw.origins.find((o) => o.address === '185.54.105.0')!;
     expect(o1.rttMs).toBe(12);
     expect(o1.hostHeader).toBe('origin.rte.ie');
-    expect(o1.regionHealth).toEqual([{ region: 'WEU', healthy: true, rttMs: 12, failureReason: 'No failures' }]);
+    expect(o1.regionHealth).toEqual([]); // healthy in all check regions → no down-region detail
     const o2 = ctw.origins.find((o) => o.address === '185.54.105.4')!;
-    expect(o2.regionHealth[0]).toMatchObject({ healthy: false, failureReason: 'connection refused' });
+    expect(o2.regionHealth[0]).toMatchObject({ region: 'WEU', healthy: false, failureReason: 'connection refused' }); // only DOWN regions kept
 
     // LB-level config.
     const lb = snap.loadBalancers.find((l) => l.name === 'liveedge.rte.ie')!;
@@ -150,14 +150,17 @@ describe('HttpCloudflareReadClient', () => {
     ]);
   });
 
-  it('getPoolsHealth fast-refreshes just health + RTT for the requested pools', async () => {
+  it('getPoolsHealth fast-refreshes RTT + down-regions only (no health verdict — that stays authoritative)', async () => {
     const { fn } = routingFetch((p) => handler(p));
     const [ctw] = await client(fn).getPoolsHealth(['p-ctw']);
     expect(ctw.id).toBe('p-ctw');
     const up = ctw.origins.find((o) => o.address === '185.54.105.0')!;
-    expect(up).toMatchObject({ healthy: true, rttMs: 12 });
-    expect(up.regionHealth[0]).toMatchObject({ region: 'WEU', healthy: true, rttMs: 12 });
-    expect(ctw.origins.find((o) => o.address === '185.54.105.4')!.healthy).toBe(false); // down in WEU
+    expect(up.rttMs).toBe(12);
+    expect(up.regionHealth).toEqual([]); // healthy everywhere → no down regions
+    // The origin down in WEU keeps that region in the detail, but the fast payload carries no overall verdict.
+    const down = ctw.origins.find((o) => o.address === '185.54.105.4')!;
+    expect(down.regionHealth[0]).toMatchObject({ region: 'WEU', healthy: false, failureReason: 'connection refused' });
+    expect(down).not.toHaveProperty('healthy');
   });
 
   it('auto-discovers non-reverse-DNS zones when none are configured (skips .arpa)', async () => {
