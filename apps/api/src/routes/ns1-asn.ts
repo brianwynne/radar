@@ -38,24 +38,26 @@ export const ns1AsnRoutes: FastifyPluginAsync<Ns1AsnRouteOptions> = async (app, 
       try {
         const record = normaliseRecord(await client.getRecord(zone, domain, type, req.id));
 
-        // Which delivery answers each ASN is tagged in (one ASN can appear in several answers).
+        // Two views over the same data. Per-ANSWER groups (in configured order) are the useful
+        // "each part of the chain" view; the per-NETWORK rows invert it (which answers a network
+        // is tagged in). Both reference the same resolved holder map.
         const tagsByAsn = new Map<number, AnswerTag[]>();
-        for (const a of record.answers) {
+        const groups: { answerId: string | null; note: string | null; platform: string | null; weight: number | null; target: string; asns: number[] }[] = [];
+        record.answers.forEach((a, i) => {
           const meta = a.meta?.asn;
           const asns = Array.isArray(meta) ? meta.map(Number).filter((n) => Number.isInteger(n) && n > 0) : [];
-          if (asns.length === 0) continue;
-          const tag: AnswerTag = {
-            answerId: a.id ?? null,
-            note: typeof a.meta?.note === 'string' ? a.meta.note : null,
-            platform: deliveryPlatformOf(a) ?? null,
-            weight: typeof a.meta?.weight === 'number' ? a.meta.weight : null,
-          };
+          if (asns.length === 0) return;
+          const answerId = a.id ?? `answer-${i}`;
+          const note = typeof a.meta?.note === 'string' ? a.meta.note : null;
+          const platform = deliveryPlatformOf(a) ?? null;
+          const weight = typeof a.meta?.weight === 'number' ? a.meta.weight : null;
+          groups.push({ answerId, note, platform, weight, target: a.answer.join(', '), asns });
           for (const asn of asns) {
             const arr = tagsByAsn.get(asn) ?? [];
-            arr.push(tag);
+            arr.push({ answerId, note, platform, weight });
             tagsByAsn.set(asn, arr);
           }
-        }
+        });
 
         const uniqueAsns = [...tagsByAsn.keys()].sort((x, y) => x - y);
         const holders = await resolver.resolve(uniqueAsns);
@@ -63,6 +65,17 @@ export const ns1AsnRoutes: FastifyPluginAsync<Ns1AsnRouteOptions> = async (app, 
           const holder = holders.get(asn) ?? null;
           return { asn, holder, resolved: holder !== null, tags: tagsByAsn.get(asn)! };
         });
+        const answers = groups.map((g) => ({
+          answerId: g.answerId,
+          note: g.note,
+          platform: g.platform,
+          weight: g.weight,
+          target: g.target,
+          asnCount: g.asns.length,
+          networks: g.asns
+            .map((asn) => ({ asn, holder: holders.get(asn) ?? null }))
+            .sort((x, y) => (x.holder ?? '').localeCompare(y.holder ?? '') || x.asn - y.asn),
+        }));
         const resolvedCount = rows.filter((r) => r.resolved).length;
 
         return {
@@ -72,6 +85,7 @@ export const ns1AsnRoutes: FastifyPluginAsync<Ns1AsnRouteOptions> = async (app, 
           asnCount: uniqueAsns.length,
           resolvedCount,
           unresolvedCount: uniqueAsns.length - resolvedCount,
+          answers,
           rows,
         };
       } catch (err) {

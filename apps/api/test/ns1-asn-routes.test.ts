@@ -63,6 +63,12 @@ describe('NS1 ASN breakdown', () => {
     expect(eir.tags.find((t: { platform: string }) => t.platform === 'Réalta').weight).toBe(220);
 
     expect(body.rows[1]).toMatchObject({ asn: 6830, holder: 'Liberty Global', resolved: true });
+
+    // By-answer view: groups in configured order, each with its resolved networks (no-ASN answer excluded).
+    expect(body.answers.map((g: { answerId: string }) => g.answerId)).toEqual(['eir', 'eir-akamai', 'lg']);
+    const eirGroup = body.answers[0];
+    expect(eirGroup).toMatchObject({ platform: 'Réalta', weight: 220, asnCount: 1 });
+    expect(eirGroup.networks).toEqual([{ asn: 5466, holder: 'EIRCOM Eircom Limited' }]);
     await a.close();
   });
 

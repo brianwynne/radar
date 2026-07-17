@@ -155,6 +155,16 @@ export interface AsnBreakdownRow {
   tags: AsnTag[];
 }
 
+export interface AsnAnswerGroup {
+  answerId: string | null;
+  note: string | null;
+  platform: string | null;
+  weight: number | null;
+  target: string;
+  asnCount: number;
+  networks: { asn: number; holder: string | null }[];
+}
+
 export interface AsnBreakdownResponse {
   provenance: Provenance;
   record: { zone: string; domain: string; type: string };
@@ -162,6 +172,7 @@ export interface AsnBreakdownResponse {
   asnCount: number;
   resolvedCount: number;
   unresolvedCount: number;
+  answers: AsnAnswerGroup[];
   rows: AsnBreakdownRow[];
 }
 
