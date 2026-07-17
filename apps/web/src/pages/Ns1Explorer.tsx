@@ -9,6 +9,8 @@ import { ProvenanceLine } from '../components/Provenance';
 import { addRecent, getRecent, type RecordRef } from '../ns1/recent';
 import { SnapshotsPanel } from '../features/Snapshots';
 import { ExplainPanel, type ExplainScenario } from '../features/ExplainPanel';
+import { IspSteeringOverview } from '../features/IspSteeringOverview';
+import { ispToScenario, type Isp } from '../steering/isps';
 import type { Provenance } from '../api/types';
 
 type View = 'normalised' | 'raw';
@@ -133,6 +135,12 @@ export function Ns1Explorer() {
 
   const selectRecord = (r: RecordSummary) => navigate(`/explorer/${zone}/${r.domain}/${r.type}`);
 
+  // Picking an ISP from the overview deep-links back into this record with that ISP's identity,
+  // which opens and auto-runs the Explain panel for that subscriber (via the prefill effect above).
+  const explainIsp = (isp: Isp) => {
+    if (zone && domain && type) navigate(`/explorer/${zone}/${domain}/${type}`, { state: { prefill: { zone, domain, type, ...ispToScenario(isp) } } });
+  };
+
   return (
     <div>
       <div className="page-head">
@@ -245,9 +253,15 @@ export function Ns1Explorer() {
                   request scenario below.
                 </p>
               </div>
-              <ExplainPanel key={`${zone}/${domain}/${type}`} zone={zone} domain={domain} type={type} prefill={rawPrefill} autoRun={prefillMatches} />
+              <ExplainPanel key={`${zone}/${domain}/${type}:${location.key}`} zone={zone} domain={domain} type={type} prefill={rawPrefill} autoRun={prefillMatches} />
             </div>
           )}
+        </div>
+      )}
+
+      {zone && domain && type && canExplain && (
+        <div className="card">
+          <IspSteeringOverview zone={zone} domain={domain} type={type} onPick={explainIsp} />
         </div>
       )}
 

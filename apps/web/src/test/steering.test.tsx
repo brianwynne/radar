@@ -49,7 +49,7 @@ describe('Steering Matrix', () => {
     expect(await screen.findByText(/most likely delivery platform/i)).toBeInTheDocument();
     expect(screen.getAllByText(/AS5466/).length).toBeGreaterThan(0); // Eir / AS5466
     expect(screen.getByText('weighted_shuffle')).toBeInTheDocument(); // Filter Chain
-    expect(screen.getByText('78%')).toBeInTheDocument(); // expected distribution bar
+    expect(screen.getAllByText('78%').length).toBeGreaterThan(0); // expected distribution bar (also in the ISP overview)
     expect(screen.getAllByText('Eir PNI').length).toBeGreaterThan(0); // network path (also echoed in the ISP hint)
     expect(screen.getAllByText(/Cloudflare/).length).toBeGreaterThan(0); // downstream component
   });

@@ -137,8 +137,8 @@ describe('Explain DNS workflow (embedded in the NS1 Explorer)', () => {
     expect(await screen.findByText(/Réalta is the most likely delivery platform/i)).toBeInTheDocument();
     // Filter Chain steps rendered
     expect(screen.getByText('weighted_shuffle')).toBeInTheDocument();
-    // Expected probabilistic distribution
-    expect(screen.getByText('78%')).toBeInTheDocument();
+    // Expected probabilistic distribution (also shown per-ISP in the overview → allow multiples)
+    expect(screen.getAllByText('78%').length).toBeGreaterThan(0);
     expect(screen.getByText(/Probabilistic, not a guaranteed traffic share/i)).toBeInTheDocument();
     // Synthetic provenance disclosed on the result
     expect(screen.getAllByText(/SYNTHETIC/i).length).toBeGreaterThan(0);
