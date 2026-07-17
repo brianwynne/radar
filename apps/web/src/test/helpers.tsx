@@ -72,6 +72,8 @@ export function makeExplain(req: ReqBody): ExplainResponse {
       eligibleAnswerIds: eligible,
       selected: partial ? undefined : eligible[0],
       selectionDeterminism: partial ? 'partial' : 'probabilistic',
+      metadataConfigured: ['asn', 'weight'],
+      metadataConsumed: partial ? ['up'] : ['up', 'asn', 'weight'],
       expectedDistribution: partial
         ? undefined
         : {

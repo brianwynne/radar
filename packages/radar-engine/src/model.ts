@@ -101,4 +101,10 @@ export interface EvaluationResult {
   explanation: string;
   warnings: string[];
   unsupportedFilters: string[];
+  /** Steering metadata keys present on the record's answers (excludes descriptive `note`). */
+  metadataConfigured: string[];
+  /** Metadata keys actually read by a supported, enabled filter in this chain. Keys in
+   *  `metadataConfigured` but not here are configured-but-unused — they have no steering effect
+   *  in the current chain (spec §7). */
+  metadataConsumed: string[];
 }

@@ -374,7 +374,11 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
 
   const works: Work[] = record.answers.map((a, i) => {
     const platform = platformOf(a);
-    const id = a.id || (platform ? platform.toLowerCase().replace(/\s+/g, '-') : undefined) || `answer-${i}`;
+    // A stable, UNIQUE id per answer object. When NS1 supplies an id, use it; otherwise derive one
+    // that always includes the original index so two answers with the same value/platform (and no
+    // id) remain distinct — the model must preserve duplicate answers, never collapse them (spec §5/§6).
+    const base = (platform ?? a.answer.join('_') ?? 'answer').toLowerCase().replace(/\s+/g, '-');
+    const id = a.id || `${base}-${i}`;
     return { id, label: platform || a.answer.join(', ') || id, platform, raw: a };
   });
   const byId = new Map(works.map((w) => [w.id, w]));
@@ -469,6 +473,15 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
         ? 'context_dependent'
         : 'deterministic';
 
+  // Which steering metadata is present on the answers vs actually read by the chain. Keys present
+  // but not consumed have no steering effect in this chain (spec §7 — surface, don't hide).
+  const metadataConfigured = [
+    ...new Set(record.answers.flatMap((a) => Object.keys(a.meta ?? {}).filter((k) => k !== 'note'))),
+  ].sort();
+  const metadataConsumed = [
+    ...new Set(traces.filter((t) => t.supported && !t.disabled).flatMap((t) => t.metadataConsumed)),
+  ].sort();
+
   const expectedDistribution = computeDistribution(weightedSet, weightingMethod, current);
   const explanation = buildExplanation(
     record, identity, byId, selected, selectionDeterminism, eligibleAnswerIds, expectedDistribution, complete, stoppedAtFilterIndex, record.filters, unsupportedFilters,
@@ -477,6 +490,7 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
   return {
     scenario, identity, answers, traces, eligibleAnswerIds, selected, selectionDeterminism,
     expectedDistribution, complete, stoppedAtFilterIndex, explanation, warnings, unsupportedFilters,
+    metadataConfigured, metadataConsumed,
   };
 }
 

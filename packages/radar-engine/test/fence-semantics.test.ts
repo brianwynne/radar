@@ -102,6 +102,22 @@ describe('no ASN match → untagged remain, then prefix fence selects the tagged
   });
 });
 
+describe('metadata: consumed by the chain vs configured but unused (spec §7)', () => {
+  it('reports the metadata the chain reads, and flags configured-but-unused keys', () => {
+    // Add a priority to one answer — nothing in the chain reads priority, so it must show as
+    // configured but NOT consumed.
+    const withPriority: NS1Record = {
+      ...record,
+      answers: record.answers.map((a) => (a.id === 'eir-realta' ? { ...a, meta: { ...a.meta, priority: 1 } } : a)),
+    };
+    const r = evaluate(withPriority, scen('IE', 100, '198.51.100.0/24'));
+    expect(r.metadataConfigured).toEqual(expect.arrayContaining(['asn', 'country', 'ip_prefixes', 'priority', 'weight']));
+    expect(r.metadataConsumed).toEqual(expect.arrayContaining(['asn', 'country', 'ip_prefixes', 'weight']));
+    expect(r.metadataConsumed).not.toContain('priority'); // no priority filter → no steering effect
+    expect(r.metadataConfigured).not.toContain('note'); // descriptive, not steering metadata
+  });
+});
+
 describe('without the remove_no_* flag, untagged answers are retained (fallback semantics)', () => {
   it('keeps "all other" answers when netfence_asn has no remove_no_asn', () => {
     const noFlag: NS1Record = {

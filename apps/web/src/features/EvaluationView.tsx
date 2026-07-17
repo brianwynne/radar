@@ -77,6 +77,8 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
   // Tolerate an evaluation that predates selectionDeterminism (e.g. a stale API) — treat unknown as
   // probabilistic (the conservative, never-overclaiming default) rather than crashing the view.
   const det = determinism[ev.selectionDeterminism] ?? determinism.probabilistic;
+  const metaConsumed = ev.metadataConsumed ?? [];
+  const metaUnused = (ev.metadataConfigured ?? []).filter((m) => !metaConsumed.includes(m));
 
   return (
     <div>
@@ -162,6 +164,32 @@ export function EvaluationView({ data }: { data: ExplainResponse }) {
               </span>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <h3>Metadata</h3>
+        <div className="kv">
+          <span>Consumed by this chain</span>
+          <span>
+            {metaConsumed.length > 0
+              ? metaConsumed.map((m) => <span key={m} className="badge ok" style={{ marginRight: '0.3rem' }}>{m}</span>)
+              : <span className="muted">none</span>}
+          </span>
+        </div>
+        <div className="kv">
+          <span>Configured but not consumed</span>
+          <span>
+            {metaUnused.length > 0 ? (
+              metaUnused.map((m) => (
+                <span key={m} className="badge neutral" style={{ marginRight: '0.3rem' }} title="Present on answers but no filter in this chain reads it — no steering effect.">
+                  {m}
+                </span>
+              ))
+            ) : (
+              <span className="muted">none — every configured metadata key is used</span>
+            )}
+          </span>
         </div>
       </div>
 

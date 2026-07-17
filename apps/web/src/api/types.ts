@@ -124,6 +124,8 @@ export interface EvaluationResult {
   explanation: string;
   warnings: string[];
   unsupportedFilters: string[];
+  metadataConfigured: string[];
+  metadataConsumed: string[];
 }
 
 export interface ExplainRequest {

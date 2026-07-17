@@ -71,6 +71,8 @@ const EXPLAIN: ExplainResponse = {
     explanation: 'Réalta is the most likely delivery platform for this request.',
     warnings: [],
     unsupportedFilters: [],
+    metadataConfigured: ['asn', 'weight'],
+    metadataConsumed: ['asn', 'weight'],
   },
 };
 
