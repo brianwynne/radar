@@ -88,12 +88,34 @@ restrictive **outbound** policy, allow HTTPS (443) to the hosts for the features
 Authoritative-DNS observation (Tier-2) additionally needs outbound UDP/TCP 53 to the NS1
 nameservers. All of these fail soft — a blocked host disables its feature, it never crashes the API.
 
-## Manage
+## Manage — the `radar` CLI
+
+The installer drops a `radar` command on `PATH` and a login banner (MOTD) that shows version,
+health and the common commands on every SSH login.
 
 ```bash
-systemctl status radar-api radar-migrate nginx postgresql
-journalctl -u radar-api -f
+radar status                          # service, health and installed version
+radar logs -f                         # follow the API journal (journalctl args pass through)
+radar restart | start | stop          # control the API service
+radar version                         # installed version
+radar upgrade [--version vX.Y.Z]      # download, verify (sha256) and apply a release (latest if omitted)
+radar rollback                        # reinstall the previously-installed version
+radar set-token [<token>]             # store a GitHub token for a private-repo release download
+radar help
 ```
 
-Upgrading: extract the new bundle and re-run `sudo ./deploy/install.sh` — it redeploys the code,
-re-runs migrations (idempotent), and keeps your `/etc/radar/radar.env`, secrets and TLS cert.
+### Upgrading
+
+```bash
+sudo radar upgrade --version v0.1.0        # or omit --version for the latest published release
+```
+
+`upgrade` fetches the matching `radar-<tag>-linux-<arch>.tar.gz` release asset, verifies its
+checksum, and runs the bundle's own idempotent `install.sh`: the code in `/opt/radar` is swapped,
+migrations re-run, and services restart — while `/etc/radar/radar.env`, secrets, TLS cert and the
+database are kept. `radar rollback` reinstalls the version you were on before the last upgrade.
+
+Private repo: the release assets require a GitHub token — set it once with `sudo radar set-token`
+(stored root-only at `/etc/radar/.github-token`) or export `GITHUB_TOKEN`.
+
+The equivalent manual path still works: extract a bundle and run `sudo ./deploy/install.sh`.

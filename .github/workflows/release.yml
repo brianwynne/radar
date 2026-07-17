@@ -67,6 +67,7 @@ jobs:
           cp -a packages/radar-data/migrations "$STAGE/packages/radar-data/"
           mkdir -p "$STAGE/apps/web"; cp -a apps/web/dist "$STAGE/apps/web/"
           cp -a deploy "$STAGE/"
+          printf '%s' "${{ steps.ver.outputs.tag }}" > "$STAGE/VERSION"  # `radar version`/status + login banner
           tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/$NAME.tar.gz" "$NAME"
           ( cd "$RUNNER_TEMP" && sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256" )
           echo "artifact=$RUNNER_TEMP/$NAME.tar.gz" >> "$GITHUB_OUTPUT"

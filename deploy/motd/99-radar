@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#
+# Dynamic MOTD for RADAR hosts — printed on each login via update-motd(5).
+# Kept fast (no long-running probes) so it never delays login. Installed to
+# /etc/update-motd.d/99-radar by deploy/install.sh.
+OPT_DIR="/opt/radar"
+ETC_DIR="/etc/radar"
+c()  { printf '\033[%sm' "$1"; }   # colour
+r()  { printf '\033[0m'; }         # reset
+
+ver="?"; [ -f "${OPT_DIR}/VERSION" ] && ver="$(cat "${OPT_DIR}/VERSION")"
+api="inactive"; systemctl is-active --quiet radar-api.service 2>/dev/null && api="active"
+health="n/a"; curl -fsS --max-time 1 http://127.0.0.1:3000/api/v1/health/live >/dev/null 2>&1 && health="OK" || health="not responding"
+
+# Pending manual steps (self-signed TLS still in place / OIDC not yet configured).
+pending=()
+if openssl x509 -noout -subject -in "${ETC_DIR}/tls/fullchain.pem" 2>/dev/null | grep -q "CN *= *radar.local"; then
+  pending+=("TLS: replace the self-signed cert in ${ETC_DIR}/tls/, then: sudo systemctl reload nginx")
+fi
+if [ -f "${ETC_DIR}/radar.env" ] && ! grep -Eq '^\s*OIDC_ISSUER_URL=..' "${ETC_DIR}/radar.env" 2>/dev/null; then
+  pending+=("AUTH: set OIDC_* in ${ETC_DIR}/radar.env, then: sudo systemctl restart radar-api")
+fi
+
+printf '\n'
+printf ' %sRADAR%s  —  RTÉ delivery steering explainability\n' "$(c '1;36')" "$(r)"
+printf ' ───────────────────────────────────────────────────────────\n'
+printf '   version %s%s%s    api %s    health %s\n' "$(c '1')" "$ver" "$(r)" "$api" "$health"
+if [ "${#pending[@]}" -gt 0 ]; then
+  printf '\n   %sSetup still required:%s\n' "$(c '1;33')" "$(r)"
+  for p in "${pending[@]}"; do printf '     • %s\n' "$p"; done
+fi
+printf '\n   %sManage%s (see: radar help)\n' "$(c '1')" "$(r)"
+printf '     radar status              service, health and version\n'
+printf '     radar logs -f             follow the API log\n'
+printf '     radar restart             restart the API\n'
+printf '     radar upgrade [--version vX.Y.Z]   install a release (latest if omitted)\n'
+printf '     radar rollback            reinstall the previous version\n'
+printf '\n'

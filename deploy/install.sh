@@ -149,6 +149,19 @@ install -o root -g root -m 0644 "${OPT_DIR}/deploy/systemd/radar-api.service"   
 systemctl daemon-reload
 systemctl enable radar-migrate.service radar-api.service >/dev/null 2>&1 || true
 
+# --- 8b. Management CLI + login banner ------------------------------------------------------
+log "Installing the 'radar' CLI and login banner…"
+install -o root -g root -m 0755 "${OPT_DIR}/deploy/radar" /usr/local/bin/radar
+install -d -o root -g root -m 0755 /etc/update-motd.d
+install -o root -g root -m 0755 "${OPT_DIR}/deploy/motd/99-radar" /etc/update-motd.d/99-radar
+# Record the installed version for `radar version`/status and the banner (the bundle ships VERSION;
+# fall back to the API package version for a dev-tree install).
+if [ -f "${BUNDLE_ROOT}/VERSION" ]; then
+  install -o root -g root -m 0644 "${BUNDLE_ROOT}/VERSION" "${OPT_DIR}/VERSION"
+else
+  node -p "require('${OPT_DIR}/apps/api/package.json').version" 2>/dev/null > "${OPT_DIR}/VERSION" || true
+fi
+
 # --- 9. nginx site -------------------------------------------------------------------------
 log "Configuring nginx…"
 install -o root -g root -m 0644 "${OPT_DIR}/deploy/nginx/radar.conf" /etc/nginx/sites-available/radar.conf
@@ -185,8 +198,8 @@ $( [ -n "$ok" ] && echo "✓ RADAR is installed and running." || echo "⚠ RADAR
   Web UI : https://<this-host>/         (self-signed cert — browser warning until you add yours)
   API    : http://127.0.0.1:3000/api/v1/health/live  (loopback only, behind nginx)
 
-  Manage : systemctl status radar-api | radar-migrate | nginx | postgresql
-  Logs   : journalctl -u radar-api -f
+  Manage : radar status | radar logs -f | radar restart | radar upgrade [--version vX.Y.Z]
+           (login banner shows this too; `radar help` for all commands)
 
   TWO remaining manual steps:
    1) TLS  — replace /etc/radar/tls/{fullchain.pem,privkey.pem} with your certificate,
