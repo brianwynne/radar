@@ -11,7 +11,7 @@ import type { AuditEvent, AuditRepository, ConfigurationSnapshot, SnapshotReposi
 
 const RECORD = {
   domain: 'live.rte.ie',
-  type: 'A',
+  type: 'CNAME',
   use_client_subnet: true,
   answers: [
     { id: 'ans-realta', answer: ['192.0.2.10'], meta: { up: true, weight: 70, asn: [5466] } },
@@ -20,7 +20,7 @@ const RECORD = {
   filters: [{ filter: 'up' }, { filter: 'weighted_shuffle' }, { filter: 'select_first_n', config: { N: 1 } }],
 };
 
-const relevant: ActivityItem = { id: 'act-10', occurredAt: '2026-07-07T10:00:00Z', action: 'update', resourceType: 'record', resourceKey: 'live.rte.ie/A', actor: 'brian', raw: {} };
+const relevant: ActivityItem = { id: 'act-10', occurredAt: '2026-07-07T10:00:00Z', action: 'update', resourceType: 'record', resourceKey: 'live.rte.ie/CNAME', actor: 'brian', raw: {} };
 const older: ActivityItem = { id: 'act-1', occurredAt: '2026-07-06T09:00:00Z', action: 'view', resourceType: 'zone', resourceKey: 'rte.ie', raw: {} };
 const irrelevantNew: ActivityItem = { id: 'act-11', occurredAt: '2026-07-07T11:00:00Z', action: 'view', resourceType: 'zone', resourceKey: 'rte.ie', raw: {} };
 
@@ -101,7 +101,7 @@ describe('ChangeDetectionService', () => {
     expect(events).toHaveLength(1);
     expect(events[0].evaluations).toHaveLength(ISP_SCENARIOS.length);
     expect(events[0].snapshotId).toBe(snaps[0].id);
-    expect(events[0].record).toMatchObject({ zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' });
+    expect(events[0].record).toMatchObject({ zone: 'rte.ie', domain: 'live.rte.ie', type: 'CNAME' });
     expect(audits.some((a) => a.action === 'steering.change.detected')).toBe(true);
     expect(audits.some((a) => a.action === 'snapshot.create')).toBe(true); // atomic capture audit
     expect(svc.status().eventsPublished).toBe(1);

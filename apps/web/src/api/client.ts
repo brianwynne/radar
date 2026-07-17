@@ -58,6 +58,7 @@ import type {
   ValidationRunResponse,
   ValidationUnsupportedFeaturesResponse,
   AsnBreakdownResponse,
+  Ns1ActiveRecordResponse,
   RawRecordResponse,
   RecordResponse,
   SnapshotCaptureResponse,
@@ -115,6 +116,7 @@ export const api = {
     request<RawRecordResponse>(`/api/v1/ns1/zones/${enc(zone)}/${enc(domain)}/${enc(type)}/raw`),
   asnBreakdown: (zone: string, domain: string, type: string) =>
     request<AsnBreakdownResponse>(`/api/v1/ns1/asn-breakdown/${enc(zone)}/${enc(domain)}/${enc(type)}`),
+  activeRecord: () => request<Ns1ActiveRecordResponse>('/api/v1/ns1/active-record'),
   explain: (body: ExplainRequest) =>
     request<ExplainResponse>('/api/v1/dns/explain', { method: 'POST', body: JSON.stringify(body) }),
   activity: (limit?: number) => request<ActivityResponse>(`/api/v1/ns1/activity${limit ? `?limit=${limit}` : ''}`),

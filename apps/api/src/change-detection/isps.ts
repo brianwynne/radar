@@ -13,7 +13,9 @@ export const ISP_SCENARIOS: IspScenario[] = [
 ];
 
 /** Records RADAR watches for change (the Live Steering evaluation target). */
-export const DEFAULT_WATCHED_RECORDS: WatchedRecord[] = [{ zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }];
+// live.rte.ie is a CNAME pointing at the currently-active nsone steering record; watching it means
+// change-detection fires when RTÉ re-points it (i.e. the active record switches).
+export const DEFAULT_WATCHED_RECORDS: WatchedRecord[] = [{ zone: 'rte.ie', domain: 'live.rte.ie', type: 'CNAME' }];
 
 /** CONFIGURED mapping of requester ASN → preferred RTÉ network path (manually maintained;
  *  kept in step with apps/web/src/topology/model.ts). */

@@ -141,6 +141,18 @@ export interface ExplainResponse {
   evaluation: EvaluationResult;
 }
 
+export interface Ns1ActiveRecordResponse {
+  provenance: Provenance;
+  /** The public entry domain resolved to find the active record (e.g. live.rte.ie). */
+  entry: string;
+  /** The entry's current CNAME target (the active record's FQDN), or null if unresolved. */
+  target: string | null;
+  /** The active steering record, or null when it can't be resolved/read. */
+  active: { zone: string; domain: string; type: string } | null;
+  filterCount: number | null;
+  warnings: string[];
+}
+
 export interface AsnTag {
   answerId: string | null;
   note: string | null;

@@ -1,7 +1,7 @@
 // NS1 Explorer — read-only discovery and inspection across every record the API exposes.
 // The selected record is URL-addressable (/explorer/:zone/:domain/:type), so Steering and
 // Explain can deep-link into it. Raw JSON is gated on ns1.raw.read. GET-only throughout.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
@@ -12,7 +12,7 @@ import { ExplainPanel, type ExplainScenario } from '../features/ExplainPanel';
 import { IspSteeringOverview } from '../features/IspSteeringOverview';
 import { AsnBreakdown } from '../features/AsnBreakdown';
 import { ispToScenario, type Isp } from '../steering/isps';
-import type { Provenance } from '../api/types';
+import type { Ns1ActiveRecordResponse, Provenance } from '../api/types';
 
 type View = 'normalised' | 'raw';
 interface RecordSummary {
@@ -20,15 +20,11 @@ interface RecordSummary {
   type: string;
 }
 
-// A bare /explorer lands on this zone/record when they exist, so the operator starts in the
-// primary zone on the primary record.
+// A bare /explorer lands in the primary zone, then on the currently-ACTIVE steering record
+// (resolved live from live.rte.ie's CNAME). DEFAULT_RECORD is only a fallback if the active record
+// can't be resolved.
 const DEFAULT_ZONE = 'nsone.rte.ie';
 const DEFAULT_RECORD = { domain: 'live.nsone.rte.ie', type: 'CNAME' };
-
-// How many filters the record's Filter Chain has — a record with a chain is actively steering
-// traffic (vs a plain static record). Works on both the normalised and raw record body.
-const filterChainLength = (body: Record<string, unknown> | null | undefined): number =>
-  body && Array.isArray(body.filters) ? body.filters.length : 0;
 
 function zoneName(z: unknown, i: number): string {
   return (z as { zone?: string }).zone ?? `zone-${i}`;
@@ -65,6 +61,26 @@ export function Ns1Explorer() {
   const [recordError, setRecordError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecordRef[]>(getRecent());
 
+  // The currently-active steering record: live.rte.ie CNAMEs to it (resolved live via DNS). Polled
+  // so a re-point (the active record switching) is detected while the page is open.
+  const [activeRecord, setActiveRecord] = useState<Ns1ActiveRecordResponse | null>(null);
+  const activeDomainRef = useRef<string | null>(null);
+  const [activeChanged, setActiveChanged] = useState<{ from: string; to: string } | null>(null);
+  useEffect(() => {
+    let stop = false;
+    const load = () =>
+      api.activeRecord().then((r) => {
+        if (stop) return;
+        setActiveRecord(r);
+        const dom = r.active?.domain ?? null;
+        if (activeDomainRef.current && dom && activeDomainRef.current !== dom) setActiveChanged({ from: activeDomainRef.current, to: dom });
+        if (dom) activeDomainRef.current = dom;
+      }).catch(() => { /* keep the last-known active record */ });
+    void load();
+    const t = setInterval(load, 30_000);
+    return () => { stop = true; clearInterval(t); };
+  }, []);
+
   // Zone list (once). With no zone selected, default into the primary zone if it's available.
   useEffect(() => {
     api
@@ -84,28 +100,29 @@ export function Ns1Explorer() {
       setRecords(null);
       return;
     }
-    let active = true;
+    let alive = true;
     setRecords(null);
     setRecordsError(null);
     api
       .zone(zone)
-      .then((r) => {
-        if (!active) return;
-        const recs = extractRecords(r.zone);
-        setRecords(recs);
-        // In the primary zone with no record selected, default to the primary record if it exists.
-        if (!domain && !type && zone === DEFAULT_ZONE && recs.some((rec) => rec.domain === DEFAULT_RECORD.domain && rec.type === DEFAULT_RECORD.type)) {
-          navigate(`/explorer/${DEFAULT_ZONE}/${DEFAULT_RECORD.domain}/${DEFAULT_RECORD.type}`, { replace: true });
-        }
-      })
-      .catch((e: unknown) => active && setRecordsError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not load records.'));
+      .then((r) => alive && setRecords(extractRecords(r.zone)))
+      .catch((e: unknown) => alive && setRecordsError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not load records.'));
     return () => {
-      active = false;
+      alive = false;
     };
-    // Keyed on zone only — the default-record redirect reads domain/type at fetch time and must
-    // not refetch the zone when the record changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone]);
+
+  // Default landing record: within the primary zone with nothing selected, jump to the ACTIVE
+  // steering record (resolved from live.rte.ie), or DEFAULT_RECORD if the active one can't be
+  // resolved. Waits for both the records list and the active-record lookup.
+  useEffect(() => {
+    if (domain || type || zone !== DEFAULT_ZONE || !records) return;
+    const act = activeRecord?.active;
+    const target = act && act.zone === zone ? { domain: act.domain, type: act.type } : activeRecord ? DEFAULT_RECORD : null;
+    if (target && records.some((r) => r.domain === target.domain && r.type === target.type)) {
+      navigate(`/explorer/${zone}/${target.domain}/${target.type}`, { replace: true });
+    }
+  }, [zone, domain, type, records, activeRecord, navigate]);
 
   // Track the selected record in the recent list.
   useEffect(() => {
@@ -147,12 +164,36 @@ export function Ns1Explorer() {
     if (zone && domain && type) navigate(`/explorer/${zone}/${domain}/${type}`, { state: { prefill: { zone, domain, type, ...ispToScenario(isp) } } });
   };
 
+  const act = activeRecord?.active ?? null;
+  const isActiveRecord = Boolean(act && zone === act.zone && domain === act.domain && type === act.type);
+  const goToActive = () => act && navigate(`/explorer/${act.zone}/${act.domain}/${act.type}`);
+
   return (
     <div>
       <div className="page-head">
         <h1>NS1 Explorer</h1>
         <p>Read-only discovery of NS1 zones and records. GET-only — RADAR never writes to NS1.</p>
       </div>
+
+      {/* The active steering record can switch (live.rte.ie is re-pointed); surface it + any change. */}
+      {activeChanged && (
+        <div className="notice warn" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <span className="badge warn">ACTIVE RECORD CHANGED</span>
+          <span><b>live.rte.ie</b> now points to <span className="mono">{activeChanged.to}</span> (was <span className="mono">{activeChanged.from}</span>).</span>
+          <button className="ghost" style={{ marginLeft: 'auto' }} onClick={goToActive}>View active record</button>
+          <button className="ghost" onClick={() => setActiveChanged(null)}>Dismiss</button>
+        </div>
+      )}
+      {act && (
+        <div className="notice info" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <span className={`badge ${isActiveRecord ? 'ok' : 'neutral'}`}>ACTIVE STEERING RECORD</span>
+          <span><b>live.rte.ie</b> → <span className="mono">{act.domain}</span>{activeRecord?.filterCount != null ? ` · ${activeRecord.filterCount}-filter chain` : ''}</span>
+          {!isActiveRecord && <button className="ghost" style={{ marginLeft: 'auto' }} onClick={goToActive}>Go to active record</button>}
+        </div>
+      )}
+      {activeRecord?.entry && !act && (
+        <div className="notice warn">Active steering record could not be resolved{activeRecord.warnings?.[0] ? ` — ${activeRecord.warnings[0]}` : ''}.</div>
+      )}
 
       <div className="card">
         <div className="step-head">
@@ -250,21 +291,12 @@ export function Ns1Explorer() {
               <span className="muted">Loading record…</span>
             ) : (
               <>
-                {(() => {
-                  const live = payload.provenance.mode === 'live' && !payload.provenance.synthetic;
-                  const filters = filterChainLength(payload.body);
-                  return (
-                    <div className={`notice ${live ? 'info' : 'warn'}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
-                      <span className={`badge ${live ? 'ok' : 'warn'}`}>{live ? 'LIVE RECORD' : 'MOCK / SYNTHETIC'}</span>
-                      <span>{live ? 'Reading the production NS1 configuration (read-only).' : 'Synthetic sample — not production data.'}</span>
-                      {filters > 0 && (
-                        <span className="badge neutral" style={{ marginLeft: 'auto' }} title="This record has an NS1 Filter Chain — it actively steers traffic.">
-                          actively steering · {filters}-filter chain
-                        </span>
-                      )}
-                    </div>
-                  );
-                })()}
+                {isActiveRecord && (
+                  <div className="notice info" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <span className="badge ok">ACTIVE</span>
+                    <span>This is the record <b>live.rte.ie</b> currently points to — it is steering live traffic.</span>
+                  </div>
+                )}
                 <ProvenanceLine p={payload.provenance} />
                 <pre className="raw-json">{JSON.stringify(payload.body, null, 2)}</pre>
               </>
