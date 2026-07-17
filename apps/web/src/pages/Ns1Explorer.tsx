@@ -10,6 +10,7 @@ import { addRecent, getRecent, type RecordRef } from '../ns1/recent';
 import { SnapshotsPanel } from '../features/Snapshots';
 import { ExplainPanel, type ExplainScenario } from '../features/ExplainPanel';
 import { IspSteeringOverview } from '../features/IspSteeringOverview';
+import { AsnBreakdown } from '../features/AsnBreakdown';
 import { ispToScenario, type Isp } from '../steering/isps';
 import type { Provenance } from '../api/types';
 
@@ -262,6 +263,12 @@ export function Ns1Explorer() {
               <ExplainPanel key={`${zone}/${domain}/${type}:${location.key}`} zone={zone} domain={domain} type={type} prefill={rawPrefill} autoRun={prefillMatches} />
             </div>
           )}
+        </div>
+      )}
+
+      {zone && domain && type && (
+        <div className="card">
+          <AsnBreakdown zone={zone} domain={domain} type={type} />
         </div>
       )}
 

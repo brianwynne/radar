@@ -141,6 +141,30 @@ export interface ExplainResponse {
   evaluation: EvaluationResult;
 }
 
+export interface AsnTag {
+  answerId: string | null;
+  note: string | null;
+  platform: string | null;
+  weight: number | null;
+}
+
+export interface AsnBreakdownRow {
+  asn: number;
+  holder: string | null;
+  resolved: boolean;
+  tags: AsnTag[];
+}
+
+export interface AsnBreakdownResponse {
+  provenance: Provenance;
+  record: { zone: string; domain: string; type: string };
+  source: string;
+  asnCount: number;
+  resolvedCount: number;
+  unresolvedCount: number;
+  rows: AsnBreakdownRow[];
+}
+
 export interface ZonesResponse {
   provenance: Provenance;
   zones: unknown[];

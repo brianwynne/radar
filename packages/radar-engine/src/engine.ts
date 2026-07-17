@@ -63,7 +63,7 @@ const platformFromRdata = (rdata: string[]): string | undefined => {
   }
   return undefined;
 };
-const platformOf = (a: NS1Answer): string | undefined =>
+export const platformOf = (a: NS1Answer): string | undefined =>
   platformFromRdata(a.answer) ?? (typeof a.meta?.note === 'string' ? a.meta.note : undefined);
 
 /** NS1 config flags arrive as "1" / 1 / true (the real Filter Chain uses string "1"). */

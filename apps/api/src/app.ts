@@ -10,6 +10,7 @@ import type { Config } from './config.js';
 import { healthRoutes } from './routes/health.js';
 import { meRoutes } from './routes/me.js';
 import { ns1Routes } from './routes/ns1.js';
+import { ns1AsnRoutes } from './routes/ns1-asn.js';
 import { ns1ConnectionRoutes } from './routes/ns1-connection.js';
 import type { Ns1ConnectorManager } from './ns1/manager.js';
 import { dnsRoutes } from './routes/dns.js';
@@ -53,6 +54,7 @@ import type { CloudVisionPoller } from './cloudvision/poller.js';
 import type { CloudVisionSource } from './cloudvision/types.js';
 import { createNs1Client } from './ns1/index.js';
 import type { Ns1ReadClient } from './ns1/index.js';
+import type { AsnResolver } from './ns1/asn-resolver.js';
 
 const CORRELATION_HEADER = 'x-correlation-id';
 
@@ -63,6 +65,7 @@ export interface BuildDeps extends AuthDeps {
   databaseHealth?: DatabaseHealthCheck;
   ns1Client?: Ns1ReadClient;
   ns1Manager?: Ns1ConnectorManager;
+  asnResolver?: AsnResolver;
   database?: Database;
   steeringStore?: SteeringStore;
   changeDetection?: ChangeDetectionService;
@@ -199,6 +202,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   // credential. Tests may inject a fixture client via deps.
   const ns1Client = deps.ns1Client ?? createNs1Client(config.ns1);
   await app.register(ns1Routes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1 });
+  await app.register(ns1AsnRoutes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1, resolver: deps.asnResolver });
   await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1 });
   await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database });
   await app.register(ns1ConnectionRoutes, { prefix: '/api/v1', manager: deps.ns1Manager });
