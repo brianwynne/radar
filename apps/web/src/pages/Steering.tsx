@@ -70,7 +70,8 @@ export function Steering() {
     [rows, country, net, statusFilter],
   );
 
-  const openExplain = (s: SteeringScenario) => navigate('/explain', { state: { prefill: scenarioToPrefill(s) } });
+  const openExplain = (s: SteeringScenario) =>
+    navigate(`/explorer/${s.request.zone}/${s.request.domain}/${s.request.type}`, { state: { prefill: scenarioToPrefill(s) } });
 
   return (
     <div>
@@ -171,7 +172,7 @@ export function Steering() {
                           .join(', ')
                       : '—';
                   return (
-                    <tr key={s.id} onClick={() => openExplain(s)} title="Open in Explain DNS">
+                    <tr key={s.id} onClick={() => openExplain(s)} title="Explain in NS1 Explorer">
                       <td>{s.label}</td>
                       <td>{s.country}</td>
                       <td>AS{s.asn}</td>
@@ -215,7 +216,7 @@ export function Steering() {
         </div>
         <div className="notice info" style={{ marginTop: '0.75rem' }}>
           Expected shares are <b>probabilistic</b> (weighted shuffle), never a guaranteed traffic split. Partial
-          evaluations do not assert a definitive platform. Select a row to open the full Explain DNS view.
+          evaluations do not assert a definitive platform. Select a row to explain it in the NS1 Explorer.
         </div>
       </div>
     </div>

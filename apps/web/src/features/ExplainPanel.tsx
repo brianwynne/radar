@@ -1,16 +1,13 @@
-// Explain DNS Decision — the core RADAR workflow. A Viewing Engineer enters (or arrives
-// from the Steering Matrix with) a DNS-request scenario; RADAR calls /api/v1/dns/explain
-// and renders a filter-by-filter explanation.
+// Explain a DNS decision for a single, already-selected NS1 record. Scoped to a zone/domain/type
+// (supplied by the NS1 Explorer, which owns record selection); the operator varies the request
+// SCENARIO — resolver, ECS, geo/ASN identity, Réalta health — and RADAR renders the filter-by-filter
+// evaluation from /api/v1/dns/explain. This is the Explain workflow embedded in the Explorer.
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useLocation } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import type { ExplainRequest, ExplainResponse } from '../api/types';
-import { EvaluationView } from '../features/EvaluationView';
+import { EvaluationView } from './EvaluationView';
 
-interface FormState {
-  zone: string;
-  domain: string;
-  type: string;
+export interface ExplainScenario {
   resolverIp: string;
   ecsPresent: boolean;
   ecsPrefix: string;
@@ -19,10 +16,7 @@ interface FormState {
   realtaDown: boolean;
 }
 
-const DEFAULT: FormState = {
-  zone: 'rte.ie',
-  domain: 'live.rte.ie',
-  type: 'A',
+export const DEFAULT_SCENARIO: ExplainScenario = {
   resolverIp: '9.9.9.9',
   ecsPresent: true,
   ecsPrefix: '185.2.100.0/24',
@@ -31,46 +25,58 @@ const DEFAULT: FormState = {
   realtaDown: false,
 };
 
-const PRESETS: { name: string; patch: Partial<FormState> }[] = [
+// Callers (Steering, Dashboard) may hand us a prefill that also carries zone/domain/type; we take
+// only the scenario fields — the record itself is fixed by the Explorer selection.
+export function toScenario(prefill?: Partial<ExplainScenario> | null): ExplainScenario {
+  return { ...DEFAULT_SCENARIO, ...(prefill ?? {}) };
+}
+
+const PRESETS: { name: string; patch: Partial<ExplainScenario> }[] = [
   { name: 'Ireland · ECS · AS5466', patch: { resolverIp: '9.9.9.9', ecsPresent: true, ecsPrefix: '185.2.100.0/24', country: 'IE', asn: '5466', realtaDown: false } },
   { name: 'Ireland · public resolver (no ECS)', patch: { resolverIp: '8.8.8.8', ecsPresent: false, ecsPrefix: '', country: 'IE', asn: '', realtaDown: false } },
   { name: 'Germany · ECS · AS3320', patch: { resolverIp: '9.9.9.9', ecsPresent: true, ecsPrefix: '91.0.0.0/24', country: 'DE', asn: '3320', realtaDown: false } },
   { name: 'Réalta down', patch: { realtaDown: true } },
 ];
 
-function toRequest(f: FormState): ExplainRequest {
-  const asn = f.asn.trim() ? Number(f.asn.trim()) : undefined;
+function toRequest(zone: string, domain: string, type: string, s: ExplainScenario): ExplainRequest {
+  const asn = s.asn.trim() ? Number(s.asn.trim()) : undefined;
   return {
-    zone: f.zone.trim(),
-    domain: f.domain.trim(),
-    type: f.type.trim(),
+    zone,
+    domain,
+    type,
     scenario: {
-      resolverIp: f.resolverIp.trim(),
-      ecsPresent: f.ecsPresent,
-      ...(f.ecsPresent && f.ecsPrefix.trim() ? { ecsPrefix: f.ecsPrefix.trim() } : {}),
-      ...(f.country.trim() ? { country: f.country.trim().toUpperCase() } : {}),
+      resolverIp: s.resolverIp.trim(),
+      ecsPresent: s.ecsPresent,
+      ...(s.ecsPresent && s.ecsPrefix.trim() ? { ecsPrefix: s.ecsPrefix.trim() } : {}),
+      ...(s.country.trim() ? { country: s.country.trim().toUpperCase() } : {}),
       ...(asn !== undefined && !Number.isNaN(asn) ? { asn } : {}),
-      ...(f.realtaDown ? { healthOverrides: { 'ans-realta': false } } : {}),
+      ...(s.realtaDown ? { healthOverrides: { 'ans-realta': false } } : {}),
     },
   };
 }
 
-export function ExplainDns() {
-  const location = useLocation();
-  const prefill = (location.state as { prefill?: FormState } | null)?.prefill;
-  const [form, setForm] = useState<FormState>(prefill ?? DEFAULT);
+interface Props {
+  zone: string;
+  domain: string;
+  type: string;
+  prefill?: Partial<ExplainScenario> | null;
+  autoRun?: boolean;
+}
+
+export function ExplainPanel({ zone, domain, type, prefill, autoRun }: Props) {
+  const [form, setForm] = useState<ExplainScenario>(() => toScenario(prefill));
   const [result, setResult] = useState<ExplainResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const autoRan = useRef(false);
 
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof ExplainScenario>(k: K, v: ExplainScenario[K]) => setForm((f) => ({ ...f, [k]: v }));
 
-  async function runExplain(f: FormState): Promise<void> {
+  async function runExplain(s: ExplainScenario): Promise<void> {
     setLoading(true);
     setError(null);
     try {
-      setResult(await api.explain(toRequest(f)));
+      setResult(await api.explain(toRequest(zone, domain, type, s)));
     } catch (err) {
       setError(err instanceof ApiError ? `${err.code}: ${err.message}` : 'Evaluation failed.');
       setResult(null);
@@ -79,13 +85,14 @@ export function ExplainDns() {
     }
   }
 
-  // Arriving from the Steering Matrix pre-fills and immediately runs the evaluation.
+  // Arriving with a prefill (from the Steering Matrix or Dashboard) runs the evaluation immediately.
   useEffect(() => {
-    if (prefill && !autoRan.current) {
+    if (autoRun && !autoRan.current) {
       autoRan.current = true;
-      void runExplain(prefill);
+      void runExplain(form);
     }
-  }, [prefill]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRun]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -94,12 +101,7 @@ export function ExplainDns() {
 
   return (
     <div>
-      <div className="page-head">
-        <h1>Explain DNS Decision</h1>
-        <p>Evaluate how NS1 steers a DNS request to a delivery platform, filter by filter.</p>
-      </div>
-
-      <form className="card" onSubmit={submit}>
+      <form onSubmit={submit}>
         <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
           {PRESETS.map((p) => (
             <button type="button" key={p.name} className="ghost" onClick={() => setForm((f) => ({ ...f, ...p.patch }))}>
@@ -108,9 +110,6 @@ export function ExplainDns() {
           ))}
         </div>
         <div className="form-grid">
-          <label className="field">Zone<input value={form.zone} onChange={(e) => set('zone', e.target.value)} /></label>
-          <label className="field">Domain<input value={form.domain} onChange={(e) => set('domain', e.target.value)} /></label>
-          <label className="field">Type<input value={form.type} onChange={(e) => set('type', e.target.value)} /></label>
           <label className="field">Resolver IP<input value={form.resolverIp} onChange={(e) => set('resolverIp', e.target.value)} /></label>
           <label className="field checkbox">
             <input type="checkbox" checked={form.ecsPresent} onChange={(e) => set('ecsPresent', e.target.checked)} /> ECS present

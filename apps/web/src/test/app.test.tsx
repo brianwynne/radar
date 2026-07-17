@@ -113,25 +113,24 @@ describe('mock/synthetic disclosure', () => {
 });
 
 describe('RBAC-aware navigation (cosmetic; API still enforces)', () => {
-  it('hides Explain/Explorer from a NOC viewer and shows them to a Viewing Engineer', async () => {
+  it('hides the NS1 Explorer from a NOC viewer and shows it to a Viewing Engineer', async () => {
     stubApi(NOC);
     const noc = renderAt('/');
     await screen.findByText(/NOC Overview/i);
-    expect(screen.queryByRole('link', { name: 'Explain' })).toBeNull();
     expect(screen.queryByRole('link', { name: 'NS1 Explorer' })).toBeNull();
     noc.unmount();
 
     stubApi(VE);
     renderAt('/');
-    expect(await screen.findByRole('link', { name: 'Explain' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'NS1 Explorer' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'NS1 Explorer' })).toBeInTheDocument();
   });
 });
 
-describe('Explain DNS workflow', () => {
+describe('Explain DNS workflow (embedded in the NS1 Explorer)', () => {
   it('submits a scenario and renders the graphical evaluation, distribution and disclaimers', async () => {
     stubApi(VE);
-    renderAt('/explain');
+    renderAt('/explorer/rte.ie/live.rte.ie/A');
+    await userEvent.click(await screen.findByRole('button', { name: /Explain this record/i }));
     const button = await screen.findByRole('button', { name: /Explain decision/i });
     await userEvent.click(button);
 

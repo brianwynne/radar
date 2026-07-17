@@ -2,12 +2,13 @@
 // The selected record is URL-addressable (/explorer/:zone/:domain/:type), so Steering and
 // Explain can deep-link into it. Raw JSON is gated on ns1.raw.read. GET-only throughout.
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { ProvenanceLine } from '../components/Provenance';
 import { addRecent, getRecent, type RecordRef } from '../ns1/recent';
 import { SnapshotsPanel } from '../features/Snapshots';
+import { ExplainPanel, type ExplainScenario } from '../features/ExplainPanel';
 import type { Provenance } from '../api/types';
 
 type View = 'normalised' | 'raw';
@@ -31,8 +32,16 @@ function extractRecords(zone: Record<string, unknown>): RecordSummary[] {
 export function Ns1Explorer() {
   const { hasPermission } = useAuth();
   const canRaw = hasPermission('ns1.raw.read');
+  const canExplain = hasPermission('dns.explain.read');
   const navigate = useNavigate();
+  const location = useLocation();
   const { zone, domain, type } = useParams<{ zone: string; domain: string; type: string }>();
+
+  // Steering / Dashboard deep-link here with a scenario to explain the selected record. Its
+  // zone/domain/type identify the record; the scenario fields seed the inline Explain panel.
+  const rawPrefill = (location.state as { prefill?: Partial<ExplainScenario> & { zone?: string; domain?: string; type?: string } } | null)?.prefill;
+  const prefillMatches = Boolean(rawPrefill && rawPrefill.zone === zone && rawPrefill.domain === domain && rawPrefill.type === type);
+  const [showExplain, setShowExplain] = useState(false);
 
   const [zones, setZones] = useState<string[] | null>(null);
   const [zonesError, setZonesError] = useState<string | null>(null);
@@ -73,6 +82,12 @@ export function Ns1Explorer() {
   useEffect(() => {
     if (zone && domain && type) setRecent(addRecent({ zone, domain, type }));
   }, [zone, domain, type]);
+
+  // Selecting a record collapses Explain; arriving with a matching prefill opens it (and auto-runs).
+  useEffect(() => {
+    setShowExplain(prefillMatches);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [zone, domain, type, location.key]);
 
   // The selected record (normalised or raw).
   useEffect(() => {
@@ -178,19 +193,9 @@ export function Ns1Explorer() {
             >
               Raw NS1
             </button>
-            {hasPermission('dns.explain.read') && (
-              <button
-                className="primary"
-                style={{ marginLeft: 'auto' }}
-                onClick={() =>
-                  navigate('/explain', {
-                    state: {
-                      prefill: { zone, domain, type, resolverIp: '9.9.9.9', ecsPresent: true, ecsPrefix: '185.2.100.0/24', country: 'IE', asn: '5466', realtaDown: false },
-                    },
-                  })
-                }
-              >
-                Explain this record
+            {canExplain && (
+              <button className={`primary ${showExplain ? 'active' : ''}`} style={{ marginLeft: 'auto' }} onClick={() => setShowExplain((v) => !v)}>
+                {showExplain ? 'Hide explanation' : 'Explain this record'}
               </button>
             )}
           </div>
@@ -204,6 +209,19 @@ export function Ns1Explorer() {
               <pre className="raw-json">{JSON.stringify(payload.body, null, 2)}</pre>
             </>
           )}
+        </div>
+      )}
+
+      {zone && domain && type && canExplain && showExplain && (
+        <div className="card">
+          <div className="page-head" style={{ marginBottom: '0.75rem' }}>
+            <h2 style={{ margin: 0 }}>Explain DNS Decision</h2>
+            <p>
+              Evaluate how NS1 steers a request for <span className="mono">{domain}</span> {type}, filter by filter. Vary the
+              request scenario below.
+            </p>
+          </div>
+          <ExplainPanel key={`${zone}/${domain}/${type}`} zone={zone} domain={domain} type={type} prefill={rawPrefill} autoRun={prefillMatches} />
         </div>
       )}
 

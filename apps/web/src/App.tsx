@@ -1,4 +1,4 @@
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './auth/AuthContext';
 import { AppShell } from './components/AppShell';
 import { Dashboard } from './pages/Dashboard';
@@ -6,7 +6,6 @@ import { RealtaCacheLb } from './pages/RealtaCacheLb';
 import { CommercialCdn } from './pages/CommercialCdn';
 import { Ns1Explorer } from './pages/Ns1Explorer';
 import { ValidationNs1 } from './pages/ValidationNs1';
-import { ExplainDns } from './pages/ExplainDns';
 import { Steering } from './pages/Steering';
 import { LiveSteering } from './pages/LiveSteering';
 import { Topology } from './pages/Topology';
@@ -39,7 +38,7 @@ export function App() {
     <Routes>
       <Route element={<AppShell />}>
         <Route index element={<Dashboard />} />
-        <Route path="explain" element={<ExplainDns />} />
+        <Route path="explain" element={<Navigate to="/explorer" replace />} />
         <Route path="live-steering" element={<LiveSteering />} />
         <Route path="steering" element={<Steering />} />
         <Route path="topology" element={<Topology />} />

@@ -47,7 +47,7 @@ export function Dashboard() {
         <div className="card">
           <div className="muted">Steering explainability</div>
           <div className="stat">Ready</div>
-          {hasPermission('dns.explain.read') ? <Link to="/explain">Explain a DNS decision →</Link> : <span className="muted">Requires Viewing Engineer</span>}
+          {hasPermission('dns.explain.read') ? <Link to="/explorer">Explore &amp; explain a DNS decision →</Link> : <span className="muted">Requires Viewing Engineer</span>}
         </div>
         <div className="card">
           <div className="muted">Write access</div>
