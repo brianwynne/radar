@@ -18,6 +18,25 @@ modules), the database migrations, and the `deploy/` installer/units/config.
 
 ## Install
 
+### One-command bootstrap (recommended)
+
+On a bare Ubuntu host, this pulls the release bundle for the host's architecture from GitHub,
+verifies its checksum, and runs the installer — no manual download or `scp`. The repo is private,
+so a GitHub token is needed both to fetch the script and to download the bundle:
+
+```bash
+export GH=<github-token>
+curl -fsSL -H "Authorization: Bearer $GH" -H "Accept: application/vnd.github.raw" \
+  "https://api.github.com/repos/brianwynne/radar/contents/deploy/bootstrap.sh?ref=main" \
+  | sudo GITHUB_TOKEN="$GH" bash -s -- --version v0.1.0-rc2
+```
+
+Omit `--version` to install the newest release (pre-releases included). The bootstrap also saves the
+token to `/etc/radar/.github-token`, so subsequent `radar upgrade` runs need no token. After it
+finishes: `sudo radar cert --domain <fqdn> --email <addr>`.
+
+### Manual (from a downloaded bundle)
+
 ```bash
 # on the target Ubuntu host (as a sudo-capable user)
 tar xzf radar-<version>-linux-<arch>.tar.gz
