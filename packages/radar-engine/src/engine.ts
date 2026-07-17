@@ -46,8 +46,28 @@ type FilterFn = (input: Work[], config: Record<string, unknown>, ctx: Scenario) 
 const isFeed = (v: unknown): v is { feed: string } =>
   typeof v === 'object' && v !== null && 'feed' in (v as Record<string, unknown>);
 
+// RADAR-owned answer → delivery-platform table (NS1 guide §27). The platform is derived from the
+// answer RDATA (the CNAME/target the record steers to), because operator notes are freeform and
+// often absent. Falls back to meta.note, then the raw rdata. Extend as RTÉ adds delivery targets.
+const PLATFORM_PATTERNS: readonly (readonly [RegExp, string])[] = [
+  [/(^|\.)rte\.ie\.?$/i, 'Réalta'], // RTÉ's own CDN (e.g. liveedge.rte.ie)
+  [/\.fastly\.net\.?$/i, 'Fastly'],
+  [/\.akamai(zed|edge)?\.net\.?$/i, 'Akamai'],
+  [/\.cloudfront\.net\.?$/i, 'CloudFront'],
+];
+const platformFromRdata = (rdata: string[]): string | undefined => {
+  for (const v of rdata) {
+    const host = String(v).trim();
+    for (const [re, name] of PLATFORM_PATTERNS) if (re.test(host)) return name;
+  }
+  return undefined;
+};
 const platformOf = (a: NS1Answer): string | undefined =>
-  typeof a.meta?.note === 'string' ? a.meta.note : undefined;
+  platformFromRdata(a.answer) ?? (typeof a.meta?.note === 'string' ? a.meta.note : undefined);
+
+/** NS1 config flags arrive as "1" / 1 / true (the real Filter Chain uses string "1"). */
+const flagOn = (v: unknown): boolean =>
+  v === true || v === 1 || v === '1' || (typeof v === 'string' && v.toLowerCase() === 'true');
 
 function upOf(w: Work, ctx: Scenario): { up: boolean; assumed: boolean; reason: string } {
   const ov = ctx.healthOverrides?.[w.id];
@@ -125,7 +145,46 @@ const up: FilterFn = (input, _c, ctx) => {
   };
 };
 
-const netfence_asn: FilterFn = (input, _c, ctx) => {
+// Shared "fence" (sift) implementation for netfence_asn / netfence_prefix / geofence_country.
+// NS1 semantics (guide §11–13, confirmed against live resolutions of live.nsone.rte.ie):
+//   • Answers TAGGED with this metadata are kept iff the user matches; non-matching tagged removed.
+//   • Answers with NO tag (untagged/global) are kept as a fallback — UNLESS `removeUntagged` (the
+//     record's remove_no_* flag) is set AND at least one tagged answer matched, in which case the
+//     untagged answers are dropped (the tagged group "wins").
+//   • Feed-driven tags are of unknown state: kept, and they suppress untagged removal (we can't
+//     assert a match), lowering confidence.
+type Tag = 'match' | 'nomatch' | 'untagged' | 'feed';
+function fence(
+  input: Work[],
+  metaKey: 'asn' | 'ip_prefixes' | 'country',
+  removeUntagged: boolean,
+  classify: (w: Work) => Tag,
+  describe: (w: Work, tag: Tag) => string,
+  summary: string,
+): StepResult {
+  const tags = input.map((w) => ({ w, tag: classify(w) }));
+  const matched = tags.some((t) => t.tag === 'match');
+  const feedSeen = tags.some((t) => t.tag === 'feed');
+  const dropUntagged = removeUntagged && matched && !feedSeen;
+  const output: Work[] = [];
+  const outcomes: AnswerOutcome[] = [];
+  for (const { w, tag } of tags) {
+    const keep = tag === 'match' || tag === 'feed' || (tag === 'untagged' && !dropUntagged);
+    if (keep) output.push(w);
+    outcomes.push({ answerId: w.id, disposition: keep ? 'retained' : 'removed', reason: describe(w, tag) });
+  }
+  return {
+    output,
+    outcomes,
+    reorder: false,
+    metadataConsumed: [metaKey],
+    confidence: feedSeen ? 'medium' : 'high',
+    reason: `${summary}: matched ${tags.filter((t) => t.tag === 'match').length}, untagged ${dropUntagged ? 'dropped (a tag matched)' : 'kept'}, removed ${input.length - output.length}, retained ${output.length}.`,
+    warning: feedSeen && removeUntagged ? 'Feed-driven tag present: cannot assert a match, so untagged answers were kept.' : undefined,
+  };
+}
+
+const netfence_asn: FilterFn = (input, config, ctx) => {
   if (ctx.asn === undefined) {
     return {
       output: input,
@@ -137,36 +196,24 @@ const netfence_asn: FilterFn = (input, _c, ctx) => {
       warning: 'netfence_asn skipped: no ASN available.',
     };
   }
-  const output: Work[] = [];
-  const outcomes: AnswerOutcome[] = [];
-  let feedSeen = false;
-  for (const w of input) {
+  const asn = ctx.asn;
+  const tagOf = (w: Work): Tag => {
     const set = asnMeta(w.raw.meta?.asn);
-    if (set === undefined) {
-      output.push(w);
-      outcomes.push({ answerId: w.id, disposition: 'retained', reason: 'no ASN metadata → global answer, kept' });
-    } else if (set === 'feed') {
-      feedSeen = true;
-      output.push(w);
-      outcomes.push({ answerId: w.id, disposition: 'retained', reason: 'ASN metadata is feed-driven → kept (state unknown in v1)' });
-    } else if (set.includes(ctx.asn)) {
-      output.push(w);
-      outcomes.push({ answerId: w.id, disposition: 'retained', reason: `ASN ${ctx.asn} in answer set [${set.join(', ')}]` });
-    } else {
-      outcomes.push({ answerId: w.id, disposition: 'removed', reason: `ASN ${ctx.asn} not in answer set [${set.join(', ')}]` });
-    }
-  }
-  return {
-    output,
-    outcomes,
-    reorder: false,
-    metadataConsumed: ['asn'],
-    confidence: feedSeen ? 'medium' : 'high',
-    reason: `Fenced by ASN ${ctx.asn}: retained ${output.length}, removed ${input.length - output.length}.`,
+    if (set === undefined) return 'untagged';
+    if (set === 'feed') return 'feed';
+    return set.includes(asn) ? 'match' : 'nomatch';
   };
+  return fence(input, 'asn', flagOn(config.remove_no_asn), tagOf, (w, tag) => {
+    const set = asnMeta(w.raw.meta?.asn);
+    const list = Array.isArray(set) ? `[${set.join(', ')}]` : '';
+    if (tag === 'match') return `ASN ${asn} in answer set ${list}`;
+    if (tag === 'feed') return 'ASN metadata is feed-driven → kept (state unknown in v1)';
+    if (tag === 'nomatch') return `ASN ${asn} not in answer set ${list}`;
+    return flagOn(config.remove_no_asn) ? 'untagged (no ASN meta) → dropped: a tagged answer matched (remove_no_asn)' : 'no ASN metadata → global answer, kept';
+  }, `Fenced by ASN ${asn}`);
 };
 
-const netfence_prefix: FilterFn = (input, _c, ctx) => {
+const netfence_prefix: FilterFn = (input, config, ctx) => {
   const clientPrefix = ctx.ecsPresent ? ctx.ecsPrefix : ctx.clientPrefix;
   if (!clientPrefix) {
     return {
@@ -179,34 +226,20 @@ const netfence_prefix: FilterFn = (input, _c, ctx) => {
       warning: 'netfence_prefix skipped: no client prefix.',
     };
   }
-  const output: Work[] = [];
-  const outcomes: AnswerOutcome[] = [];
-  for (const w of input) {
+  const tagOf = (w: Work): Tag => {
     const set = listMeta(w.raw.meta?.ip_prefixes);
-    if (set === undefined) {
-      output.push(w);
-      outcomes.push({ answerId: w.id, disposition: 'retained', reason: 'no prefix metadata → global answer, kept' });
-    } else if (set === 'feed') {
-      output.push(w);
-      outcomes.push({ answerId: w.id, disposition: 'retained', reason: 'prefix metadata is feed-driven → kept' });
-    } else {
-      const match = set.some((p) => cidrContains(p, clientPrefix) === true);
-      if (match) {
-        output.push(w);
-        outcomes.push({ answerId: w.id, disposition: 'retained', reason: `client ${clientPrefix} within answer prefixes` });
-      } else {
-        outcomes.push({ answerId: w.id, disposition: 'removed', reason: `client ${clientPrefix} not within [${set.join(', ')}]` });
-      }
-    }
-  }
-  return {
-    output,
-    outcomes,
-    reorder: false,
-    metadataConsumed: ['ip_prefixes'],
-    confidence: 'high',
-    reason: `Fenced by prefix ${clientPrefix}: retained ${output.length}, removed ${input.length - output.length}.`,
+    if (set === undefined) return 'untagged';
+    if (set === 'feed') return 'feed';
+    return set.some((p) => cidrContains(p, clientPrefix) === true) ? 'match' : 'nomatch';
   };
+  return fence(input, 'ip_prefixes', flagOn(config.remove_no_ip_prefixes), tagOf, (w, tag) => {
+    const set = listMeta(w.raw.meta?.ip_prefixes);
+    const list = Array.isArray(set) ? `[${set.join(', ')}]` : '';
+    if (tag === 'match') return `client ${clientPrefix} within answer prefixes ${list}`;
+    if (tag === 'feed') return 'prefix metadata is feed-driven → kept';
+    if (tag === 'nomatch') return `client ${clientPrefix} not within ${list}`;
+    return flagOn(config.remove_no_ip_prefixes) ? 'untagged (no prefix meta) → dropped: a tagged answer matched (remove_no_ip_prefixes)' : 'no prefix metadata → global answer, kept';
+  }, `Fenced by prefix ${clientPrefix}`);
 };
 
 const geotarget_country: FilterFn = (input, _c, ctx) => {
@@ -254,33 +287,18 @@ const geofence_country: FilterFn = (input, config, ctx) => {
     };
   }
   const country = ctx.country.toUpperCase();
-  const removeNoLoc = config.remove_no_location === true;
-  const output: Work[] = [];
-  const outcomes: AnswerOutcome[] = [];
-  for (const w of input) {
+  const tagOf = (w: Work): Tag => {
     const cs = countryList(w.raw.meta?.country);
-    if (cs.length === 0) {
-      if (removeNoLoc) {
-        outcomes.push({ answerId: w.id, disposition: 'removed', reason: 'no country metadata & remove_no_location=true' });
-      } else {
-        output.push(w);
-        outcomes.push({ answerId: w.id, disposition: 'retained', reason: 'no country metadata → kept (fallback)' });
-      }
-    } else if (cs.includes(country)) {
-      output.push(w);
-      outcomes.push({ answerId: w.id, disposition: 'retained', reason: `country ${country} in [${cs.join(', ')}]` });
-    } else {
-      outcomes.push({ answerId: w.id, disposition: 'removed', reason: `country ${country} not in [${cs.join(', ')}]` });
-    }
-  }
-  return {
-    output,
-    outcomes,
-    reorder: false,
-    metadataConsumed: ['country'],
-    confidence: 'high',
-    reason: `Fenced by country ${country}: retained ${output.length}, removed ${input.length - output.length}.`,
+    if (cs.length === 0) return 'untagged';
+    return cs.includes(country) ? 'match' : 'nomatch';
   };
+  return fence(input, 'country', flagOn(config.remove_no_location), tagOf, (w, tag) => {
+    const cs = countryList(w.raw.meta?.country);
+    const list = `[${cs.join(', ')}]`;
+    if (tag === 'match') return `country ${country} in ${list}`;
+    if (tag === 'nomatch') return `country ${country} not in ${list}`;
+    return flagOn(config.remove_no_location) ? 'untagged (no country meta) → dropped: a geo-tagged answer matched (remove_no_location)' : 'no country metadata → kept (fallback)';
+  }, `Fenced by country ${country}`);
 };
 
 // NOTE: `priority`, `cost`, `shed_load` and the Pulsar filters are deliberately NOT
