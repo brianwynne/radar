@@ -21,8 +21,19 @@ modules), the database migrations, and the `deploy/` installer/units/config.
 ### One-command bootstrap (recommended)
 
 On a bare Ubuntu host, this pulls the release bundle for the host's architecture from GitHub,
-verifies its checksum, and runs the installer — no manual download or `scp`. The repo is private,
-so a GitHub token is needed both to fetch the script and to download the bundle:
+verifies its checksum, and runs the installer — no manual download or `scp`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/brianwynne/radar/main/deploy/bootstrap.sh \
+  | sudo bash -s -- --version v0.1.0-rc2
+```
+
+- Omit `--version` to install the newest release (pre-releases included).
+- Add **`--skip-cert`** when TLS is terminated upstream (Cloudflare Tunnel / cloudflared / a proxy) —
+  see *TLS* below.
+- After it finishes (unless `--skip-cert`): `sudo radar cert --domain <fqdn> --email <addr>`.
+
+While the repo is private, pass a token instead (also saved for future `radar upgrade`):
 
 ```bash
 export GH=<github-token>
@@ -30,10 +41,6 @@ curl -fsSL -H "Authorization: Bearer $GH" -H "Accept: application/vnd.github.raw
   "https://api.github.com/repos/brianwynne/radar/contents/deploy/bootstrap.sh?ref=main" \
   | sudo GITHUB_TOKEN="$GH" bash -s -- --version v0.1.0-rc2
 ```
-
-Omit `--version` to install the newest release (pre-releases included). The bootstrap also saves the
-token to `/etc/radar/.github-token`, so subsequent `radar upgrade` runs need no token. After it
-finishes: `sudo radar cert --domain <fqdn> --email <addr>`.
 
 ### Manual (from a downloaded bundle)
 
@@ -140,6 +147,14 @@ nginx reloads. **Renewals are automatic** via `certbot.timer`, and certbot's ren
 the same open-80 → renew → close-80 dance and reload nginx — installed to
 `/etc/letsencrypt/renewal-hooks/{pre,post,deploy}/`. Until you issue a real cert, the seeded
 self-signed pair keeps HTTPS working (with a browser warning).
+
+**TLS terminated upstream (cloudflared / a proxy / a load balancer):** install with **`--skip-cert`**.
+certbot and the renewal hooks are not set up, the login banner won't nag about TLS, and no port 80
+is involved. nginx still serves 443 locally with the self-signed cert, so point your tunnel at
+`https://localhost` (with `noTLSVerify: true`, since the origin cert is self-signed) or at
+`http://localhost` if you add a plain-HTTP server block. With cloudflared the tunnel dials **out** to
+Cloudflare, so no inbound ports are needed at all — the EC2 security group can drop 80/443 entirely
+and keep only SSH.
 
 ### Upgrading
 

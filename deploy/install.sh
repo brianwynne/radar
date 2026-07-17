@@ -35,6 +35,17 @@ die()  { printf '\033[1;31m[radar] ERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 BUNDLE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
+# --skip-cert: don't set up Let's Encrypt (TLS is terminated upstream — e.g. Cloudflare Tunnel /
+# cloudflared / an external load balancer). A self-signed cert is still seeded so nginx serves 443
+# for the local origin connection.
+SKIP_CERT=0
+for arg in "$@"; do
+  case "$arg" in
+    --skip-cert|--no-letsencrypt|--behind-proxy) SKIP_CERT=1 ;;
+    -h|--help) echo "usage: install.sh [--skip-cert]"; exit 0 ;;
+  esac
+done
+
 # --- 0. Preflight ---------------------------------------------------------------------------
 [ "$(id -u)" -eq 0 ]        || die "must be run as root (use sudo)."
 command -v apt-get >/dev/null || die "this installer supports Debian/Ubuntu (apt-get not found)."
@@ -48,7 +59,9 @@ export DEBIAN_FRONTEND=noninteractive
 # --- 1. System packages (Node 22 via NodeSource; PostgreSQL, nginx from Ubuntu) -------------
 log "Installing system packages…"
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg openssl ufw postgresql nginx certbot >/dev/null
+PKGS="ca-certificates curl gnupg openssl ufw postgresql nginx"
+[ "$SKIP_CERT" -eq 0 ] && PKGS="$PKGS certbot"
+apt-get install -y -qq $PKGS >/dev/null
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -lt "$NODE_MAJOR" ]; then
   log "Installing Node.js ${NODE_MAJOR} (NodeSource)…"
   curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null
@@ -172,21 +185,37 @@ systemctl enable nginx >/dev/null 2>&1 || true
 
 # ACME webroot (nginx serves the HTTP-01 challenge from here on port 80) + renewal hooks that
 # open port 80 only for the duration of a renewal and install the renewed cert for nginx.
-log "Setting up Let's Encrypt (certbot) renewal hooks…"
-install -d -o root -g root -m 0755 /var/www/certbot
-for phase in pre post deploy; do
-  install -d -o root -g root -m 0755 "/etc/letsencrypt/renewal-hooks/${phase}"
-  for hook in "${OPT_DIR}/deploy/letsencrypt/renewal-hooks/${phase}"/*.sh; do
-    [ -e "$hook" ] && install -o root -g root -m 0755 "$hook" "/etc/letsencrypt/renewal-hooks/${phase}/$(basename "$hook")"
+rm -f "${ETC_DIR}/.tls-external"
+if [ "$SKIP_CERT" -eq 0 ]; then
+  log "Setting up Let's Encrypt (certbot) renewal hooks…"
+  install -d -o root -g root -m 0755 /var/www/certbot
+  for phase in pre post deploy; do
+    install -d -o root -g root -m 0755 "/etc/letsencrypt/renewal-hooks/${phase}"
+    for hook in "${OPT_DIR}/deploy/letsencrypt/renewal-hooks/${phase}"/*.sh; do
+      [ -e "$hook" ] && install -o root -g root -m 0755 "$hook" "/etc/letsencrypt/renewal-hooks/${phase}/$(basename "$hook")"
+    done
   done
-done
-systemctl enable certbot.timer >/dev/null 2>&1 || true   # twice-daily `certbot renew`
+  systemctl enable certbot.timer >/dev/null 2>&1 || true   # twice-daily `certbot renew`
+else
+  log "Skipping Let's Encrypt — TLS is terminated upstream (self-signed cert kept for the origin)."
+  : > "${ETC_DIR}/.tls-external"   # marker: suppress the TLS setup nag in the login banner
+fi
 
-# --- 10. Firewall — 22 + 443 only; port 80 is opened only during ACME renewals --------------
-log "Configuring ufw (22, 443; 80 opens only during cert renewal)…"
-ufw allow 22/tcp   >/dev/null
-ufw allow 443/tcp  >/dev/null
-ufw delete allow 80/tcp >/dev/null 2>&1 || true   # ensure 80 is not left open from a prior install
+# --- 10. Firewall (allow SSH first so we never lock ourselves out) --------------------------
+if [ "$SKIP_CERT" -eq 0 ]; then
+  log "Configuring ufw (22, 443; 80 opens only during cert renewal)…"
+  ufw allow 22/tcp   >/dev/null
+  ufw allow 443/tcp  >/dev/null
+  ufw delete allow 80/tcp >/dev/null 2>&1 || true   # ensure 80 is not left open from a prior install
+else
+  # Behind an upstream proxy/tunnel (cloudflared): it connects out and reaches nginx over loopback,
+  # which ufw never blocks — so only SSH needs an inbound rule. 443 stays allowed as a direct
+  # fallback; remove it manually (ufw delete allow 443/tcp) if you want the box fully tunnel-only.
+  log "Configuring ufw (22, 443; TLS upstream — no port 80)…"
+  ufw allow 22/tcp   >/dev/null
+  ufw allow 443/tcp  >/dev/null
+  ufw delete allow 80/tcp >/dev/null 2>&1 || true
+fi
 ufw --force enable >/dev/null
 
 # --- 11. Start & verify --------------------------------------------------------------------
@@ -213,11 +242,15 @@ $( [ -n "$ok" ] && echo "✓ RADAR is installed and running." || echo "⚠ RADAR
   Manage : radar status | radar logs -f | radar restart | radar upgrade [--version vX.Y.Z]
            (login banner shows this too; `radar help` for all commands)
 
-  TWO remaining manual steps:
+  Remaining manual steps:
+$( [ "$SKIP_CERT" -eq 0 ] && cat <<TLS
    1) TLS  — issue a Let's Encrypt certificate (opens port 80 only for the challenge, then
              closes it; auto-renews the same way):
                 sudo radar cert --domain radar.example.ie --email you@example.ie
              (until then a self-signed cert is in place, so HTTPS already works)
+TLS
+[ "$SKIP_CERT" -ne 0 ] && echo "   1) TLS  — skipped (terminated upstream, e.g. cloudflared). nginx serves 443 with a
+             self-signed cert for the origin; point your tunnel at https://localhost (noTLSVerify)." )
    2) AUTH — set OIDC_* in /etc/radar/radar.env (Entra app registration),
              then: sudo systemctl restart radar-api
              (until configured, protected API routes correctly return 401)

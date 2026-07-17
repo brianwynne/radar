@@ -14,7 +14,8 @@ health="n/a"; curl -fsS --max-time 1 http://127.0.0.1:3000/api/v1/health/live >/
 
 # Pending manual steps (self-signed TLS still in place / OIDC not yet configured).
 pending=()
-if openssl x509 -noout -subject -in "${ETC_DIR}/tls/fullchain.pem" 2>/dev/null | grep -q "CN *= *radar.local"; then
+# Skip the TLS nag when TLS is terminated upstream (installed with --skip-cert).
+if [ ! -e "${ETC_DIR}/.tls-external" ] && openssl x509 -noout -subject -in "${ETC_DIR}/tls/fullchain.pem" 2>/dev/null | grep -q "CN *= *radar.local"; then
   pending+=("TLS: issue a Let's Encrypt cert — sudo radar cert --domain <fqdn> --email <addr>")
 fi
 if [ -f "${ETC_DIR}/radar.env" ] && ! grep -Eq '^\s*OIDC_ISSUER_URL=..' "${ETC_DIR}/radar.env" 2>/dev/null; then
