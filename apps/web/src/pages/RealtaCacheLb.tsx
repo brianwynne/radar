@@ -40,6 +40,12 @@ function rttTitle(o: CloudflareOrigin): string {
 
 const PINNED_KEY = 'radar.cacheLb.pinnedLoadBalancers';
 const POOLS_PINNED_KEY = 'radar.cacheLb.pinnedPools';
+// One-time default focused view (matched by name, case-insensitive) — the primary live/VOD delivery
+// load balancers and their key origin pools, so the page is useful on first open. Seeded once (see
+// SEEDED_KEY); never overrides a later manual change.
+const SEEDED_KEY = 'radar.cacheLb.defaultsSeeded.v1';
+const DEFAULT_PINNED_LBS = new Set(['live.rte.host', 'liveaudio-edge.rte.ie', 'liveedge.rte.ie', 'vod-edge.rte.ie', 'vod-origin.rte.host']);
+const DEFAULT_PINNED_POOLS = new Set(['live-dad', 'live-mam', 'live-realta-citywest', 'live-realta-parkwest', 'vod-cdn-origin', 'vod-edge-caches']);
 
 export function RealtaCacheLb() {
   const t = useCloudflare(10_000);
@@ -63,6 +69,18 @@ export function RealtaCacheLb() {
   useEffect(() => { try { localStorage.setItem(POOLS_PINNED_KEY, JSON.stringify([...pinnedPools])); } catch { /* storage unavailable */ } }, [pinnedPools]);
   const togglePinPool = (id: string) => setPinnedPools((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const clearPinnedPools = () => setPinnedPools(new Set());
+
+  // Seed the default focused view once (first visit), after the snapshot loads. Matches the default
+  // LBs/pools by name → id and merges them in; a seeded flag prevents re-applying over user edits.
+  useEffect(() => {
+    try { if (localStorage.getItem(SEEDED_KEY)) return; } catch { return; }
+    if (t.loadBalancers.length === 0 && t.pools.length === 0) return; // wait for data
+    const lbIds = t.loadBalancers.filter((lb) => DEFAULT_PINNED_LBS.has((lb.name ?? '').toLowerCase())).map((lb) => lb.id);
+    const poolIds = t.pools.filter((p) => DEFAULT_PINNED_POOLS.has((p.name ?? '').toLowerCase())).map((p) => p.id);
+    if (lbIds.length) setPinned((prev) => new Set([...prev, ...lbIds]));
+    if (poolIds.length) setPinnedPools((prev) => new Set([...prev, ...poolIds]));
+    try { localStorage.setItem(SEEDED_KEY, '1'); } catch { /* storage unavailable — seed each load */ }
+  }, [t.loadBalancers, t.pools]);
 
   const q = search.trim().toLowerCase();
 

@@ -1,9 +1,13 @@
 // Réalta Cache Load Balancing page: renders the summary, the load-balancer steering (pools
 // resolved to names) and the origin pools with their caches + health, from the mock API.
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
 import { NOC, renderAt, stubApi } from './helpers';
 
+const SEEDED_KEY = 'radar.cacheLb.defaultsSeeded.v1';
+// The default focused view auto-pins the primary delivery LBs/pools on first visit; mark it seeded
+// so the toggle tests start from an empty focused view (one test below opts back in).
+beforeEach(() => localStorage.setItem(SEEDED_KEY, '1'));
 afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); });
 
 describe('Réalta Cache Load Balancing page', () => {
@@ -29,6 +33,15 @@ describe('Réalta Cache Load Balancing page', () => {
     // Summary reflects the connector snapshot.
     const tile = screen.getByText('Unhealthy origins').closest('.card')! as HTMLElement;
     expect(within(tile).getByText('1')).toBeInTheDocument();
+  });
+
+  it('seeds a default focused view on first visit (auto-pins the primary delivery LBs)', async () => {
+    localStorage.removeItem(SEEDED_KEY); // first visit
+    stubApi(NOC);
+    renderAt('/realta-cache');
+    // liveedge.rte.ie is a default → it pins into the focused view with no user action.
+    const focused = (await screen.findByText(/Focused load balancers/)).closest('.focused-lbs') as HTMLElement;
+    expect(within(focused).getByText('liveedge.rte.ie')).toBeInTheDocument();
   });
 
   it('pins a load balancer into a focused view at the top, and unpins it', async () => {
