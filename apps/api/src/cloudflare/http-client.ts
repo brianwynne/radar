@@ -73,6 +73,13 @@ export class HttpCloudflareReadClient implements CloudflareClient {
     const pools = rawPools.map((p) => buildPool(p, monitors));
     const poolNameById = new Map(pools.map((p) => [p.id, p.name]));
 
+    // 1b. Per-origin RTT + per-region health from the pool health endpoint (best-effort — a failure
+    //     leaves origins with their configured health only, never fabricated latency).
+    await mapLimit(pools, FETCH_CONCURRENCY, async (pool) => {
+      const health = await this.fetchPoolHealth(pool.id, correlationId);
+      if (health) mergePoolHealth(pool, health);
+    });
+
     // 2. Zones that carry load balancers (configured, or auto-discovered).
     const zones = await this.resolveLbZones(correlationId);
     // 3. Per zone: load balancers (steering policy + weights) + observed traffic (LB analytics).
@@ -141,12 +148,26 @@ export class HttpCloudflareReadClient implements CloudflareClient {
           type: String(m.type ?? ''), method: str(m.method), path: str(m.path),
           expectedCodes: str(m.expected_codes), expectedBody: str(m.expected_body),
           intervalSeconds: numN(m.interval), timeoutSeconds: numN(m.timeout), retries: numN(m.retries),
+          port: numN(m.port), consecutiveUp: numN(m.consecutive_up), consecutiveDown: numN(m.consecutive_down),
+          followRedirects: boolN(m.follow_redirects), allowInsecure: boolN(m.allow_insecure),
         });
       }
     } catch (err) {
       this.opts.logger?.warn({ code: err instanceof CloudflareError ? err.code : 'error' }, 'cloudflare: monitors fetch failed');
     }
     return out;
+  }
+
+  /** Per-region `pop_health` from the pool health endpoint, or null when unavailable (best-effort). */
+  private async fetchPoolHealth(poolId: string, correlationId?: string): Promise<Record<string, unknown> | null> {
+    try {
+      const body = await this.getJson(`/accounts/${enc(this.opts.accountId)}/load_balancers/pools/${enc(poolId)}/health`, correlationId);
+      const result = isObj(body) && isObj(body.result) ? body.result : null;
+      return result && isObj(result.pop_health) ? (result.pop_health as Record<string, unknown>) : null;
+    } catch (err) {
+      this.opts.logger?.warn({ code: err instanceof CloudflareError ? err.code : 'error', poolId }, 'cloudflare: pool health fetch failed');
+      return null;
+    }
   }
 
   /** Observed traffic per load balancer (name → observed) from LB analytics over a recent window.
@@ -159,7 +180,7 @@ export class HttpCloudflareReadClient implements CloudflareClient {
     const query =
       'query($z:String!,$s:Time!,$e:Time!){viewer{zones(filter:{zoneTag:$z}){loadBalancingRequestsAdaptiveGroups' +
       '(limit:500,filter:{datetime_geq:$s,datetime_leq:$e},orderBy:[count_DESC])' +
-      '{count dimensions{lbName selectedPoolName region coloCode}}}}}';
+      '{count dimensions{lbName selectedPoolName selectedOriginName region coloCode}}}}}';
     let groups: Array<{ count?: unknown; dimensions?: Record<string, unknown> }> = [];
     try {
       const data = await this.graphql(query, { z: zoneId, s: start, e: end }, correlationId);
@@ -169,21 +190,22 @@ export class HttpCloudflareReadClient implements CloudflareClient {
     } catch {
       return out; // analytics is best-effort
     }
-    const agg = new Map<string, { total: number; pool: Map<string, number>; region: Map<string, number>; colo: Map<string, number> }>();
+    const agg = new Map<string, { total: number; pool: Map<string, number>; region: Map<string, number>; colo: Map<string, number>; origin: Map<string, number> }>();
     for (const g of groups) {
       const dm = g.dimensions ?? {};
       const lb = String(dm.lbName ?? '');
       if (!lb) continue;
       const count = typeof g.count === 'number' ? g.count : 0;
       let a = agg.get(lb);
-      if (!a) { a = { total: 0, pool: new Map(), region: new Map(), colo: new Map() }; agg.set(lb, a); }
+      if (!a) { a = { total: 0, pool: new Map(), region: new Map(), colo: new Map(), origin: new Map() }; agg.set(lb, a); }
       a.total += count;
       addTo(a.pool, String(dm.selectedPoolName || '—'), count);
       addTo(a.region, String(dm.region || '—'), count);
       addTo(a.colo, String(dm.coloCode || '—'), count);
+      addTo(a.origin, String(dm.selectedOriginName || '—'), count);
     }
     for (const [lb, a] of agg) {
-      out.set(lb, { windowHours, totalRequests: a.total, byPool: buckets(a.pool, a.total), byRegion: buckets(a.region, a.total), byColo: buckets(a.colo, a.total) });
+      out.set(lb, { windowHours, totalRequests: a.total, byPool: buckets(a.pool, a.total), byRegion: buckets(a.region, a.total), byColo: buckets(a.colo, a.total), byOrigin: buckets(a.origin, a.total) });
     }
     return out;
   }
@@ -278,7 +300,11 @@ function buildPool(p: Record<string, unknown>, monitors: Map<string, CloudflareH
     enabled: o.enabled !== false,
     healthy: boolN(o.healthy),
     failureReason: str(o.failure_reason),
+    hostHeader: isObj(o.header) && Array.isArray(o.header.Host) ? (str(o.header.Host[0]) ?? null) : null,
+    rttMs: null, // filled by the pool health endpoint (mergePoolHealth)
+    regionHealth: [],
   }));
+  const ls = isObj(p.load_shedding) ? p.load_shedding : null;
   return {
     id: String(p.id ?? ''),
     name: String(p.name ?? ''),
@@ -291,7 +317,46 @@ function buildPool(p: Record<string, unknown>, monitors: Map<string, CloudflareH
     origins,
     healthyOrigins: origins.filter((o) => o.enabled && o.healthy === true).length,
     totalOrigins: origins.length,
+    originSteeringPolicy: isObj(p.origin_steering) ? str(p.origin_steering.policy) : null,
+    loadShedding: ls ? { defaultPercent: numN(ls.default_percent), defaultPolicy: str(ls.default_policy), sessionPercent: numN(ls.session_percent), sessionPolicy: str(ls.session_policy) } : null,
+    checkRegions: Array.isArray(p.check_regions) ? p.check_regions.map((r) => String(r)) : [],
+    notificationEmail: str(p.notification_email),
   };
+}
+
+/** Merge per-region health + RTT from the pool health endpoint into a pool's origins (by address). */
+function mergePoolHealth(pool: CloudflarePool, popHealth: Record<string, unknown>): void {
+  const byAddress = new Map<string, { region: string; healthy: boolean | null; rttMs: number | null; failureReason: string | null }[]>();
+  for (const [region, rv] of Object.entries(popHealth)) {
+    if (!isObj(rv) || !Array.isArray(rv.origins)) continue;
+    for (const entry of rv.origins) {
+      if (!isObj(entry)) continue;
+      for (const [address, ov] of Object.entries(entry)) {
+        if (!isObj(ov)) continue;
+        const list = byAddress.get(address) ?? [];
+        list.push({ region, healthy: boolN(ov.healthy), rttMs: parseRtt(ov.rtt), failureReason: str(ov.failure_reason) });
+        byAddress.set(address, list);
+      }
+    }
+  }
+  for (const o of pool.origins) {
+    const rh = byAddress.get(o.address);
+    if (!rh || rh.length === 0) continue;
+    o.regionHealth = rh;
+    const rtts = rh.map((r) => r.rttMs).filter((n): n is number => n !== null && n > 0);
+    o.rttMs = rtts.length > 0 ? Math.round((rtts.reduce((a, b) => a + b, 0) / rtts.length) * 10) / 10 : null;
+  }
+}
+
+/** Parse a Cloudflare RTT string like "12.5ms" / "1.2s" / 12.5 into milliseconds. */
+function parseRtt(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v !== 'string') return null;
+  const m = /^([\d.]+)\s*(ms|s)?$/i.exec(v.trim());
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  return m[2]?.toLowerCase() === 's' ? n * 1000 : n;
 }
 
 function buildLoadBalancer(lb: Record<string, unknown>, zoneName: string | null, poolNames: Map<string, string>, observed: Map<string, CloudflareObserved>): CloudflareLoadBalancer {
@@ -304,6 +369,7 @@ function buildLoadBalancer(lb: Record<string, unknown>, zoneName: string | null,
     return out;
   };
   const name = String(lb.name ?? '');
+  const saa = isObj(lb.session_affinity_attributes) ? lb.session_affinity_attributes : null;
   return {
     id: String(lb.id ?? ''),
     name,
@@ -315,8 +381,14 @@ function buildLoadBalancer(lb: Record<string, unknown>, zoneName: string | null,
     fallbackPool: lb.fallback_pool ? resolve(lb.fallback_pool) : null,
     regionPools: resolveMap(lb.region_pools),
     popPools: resolveMap(lb.pop_pools),
+    countryPools: resolveMap(lb.country_pools),
     sessionAffinity: str(lb.session_affinity),
+    sessionAffinityTtl: numN(lb.session_affinity_ttl),
+    sessionAffinityAttributes: saa ? { samesite: str(saa.samesite), secure: str(saa.secure), drainDuration: numN(saa.drain_duration), zeroDowntimeFailover: str(saa.zero_downtime_failover) } : null,
     locationStrategy: isObj(lb.location_strategy) ? str(lb.location_strategy.mode) : null,
+    adaptiveRoutingFailoverAcrossPools: isObj(lb.adaptive_routing) ? boolN(lb.adaptive_routing.failover_across_pools) : null,
+    randomSteeringDefaultWeight: isObj(lb.random_steering) ? numN(lb.random_steering.default_weight) : null,
+    ttlSeconds: numN(lb.ttl),
     observed: observed.get(name) ?? null,
   };
 }

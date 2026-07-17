@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useCloudflare } from '../telemetry/use-cloudflare';
 import { formatFreshness } from '../telemetry/format';
+import type { CloudflareOrigin, CloudflarePool } from '../api/types';
 
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : String(n));
 
@@ -15,7 +16,26 @@ function health(ok: boolean | null): { badge: string; label: string } {
   return { badge: 'neutral', label: 'unknown' };
 }
 
+/** Pool config summary line: origin steering, load shedding, check regions, monitor interval. */
+function poolDetail(p: CloudflarePool): string {
+  const bits: string[] = [];
+  if (p.originSteeringPolicy) bits.push(`origins: ${p.originSteeringPolicy}`);
+  if (p.loadShedding && (p.loadShedding.defaultPercent ?? 0) > 0) bits.push(`shedding ${p.loadShedding.defaultPercent}%`);
+  if (p.checkRegions.length) bits.push(`checks: ${p.checkRegions.join(',')}`);
+  if (p.healthCheck?.intervalSeconds) bits.push(`every ${p.healthCheck.intervalSeconds}s`);
+  return bits.join(' · ') || '—';
+}
+
+/** Tooltip for an origin: Host header + per-region health & RTT. */
+function rttTitle(o: CloudflareOrigin): string {
+  const head = o.hostHeader ? `Host: ${o.hostHeader}` : '';
+  if (o.regionHealth.length === 0) return head;
+  const rh = o.regionHealth.map((r) => `${r.region}: ${r.healthy === false ? 'down' : 'up'}${r.rttMs !== null ? ` ${r.rttMs}ms` : ''}${r.healthy === false && r.failureReason ? ` (${r.failureReason})` : ''}`).join('\n');
+  return head ? `${head}\n${rh}` : rh;
+}
+
 const PINNED_KEY = 'radar.cacheLb.pinnedLoadBalancers';
+const POOLS_PINNED_KEY = 'radar.cacheLb.pinnedPools';
 
 export function RealtaCacheLb() {
   const t = useCloudflare(30_000);
@@ -32,10 +52,19 @@ export function RealtaCacheLb() {
   const togglePin = (id: string) => setPinned((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const clearPinned = () => setPinned(new Set());
 
+  // Pinned origin pools — a second focused view, so specific pools stay in sight.
+  const [pinnedPools, setPinnedPools] = useState<Set<string>>(() => {
+    try { const raw = localStorage.getItem(POOLS_PINNED_KEY); return new Set<string>(raw ? JSON.parse(raw) : []); } catch { return new Set(); }
+  });
+  useEffect(() => { try { localStorage.setItem(POOLS_PINNED_KEY, JSON.stringify([...pinnedPools])); } catch { /* storage unavailable */ } }, [pinnedPools]);
+  const togglePinPool = (id: string) => setPinnedPools((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  const clearPinnedPools = () => setPinnedPools(new Set());
+
   const q = search.trim().toLowerCase();
 
-  // The pinned focused view always shows the selected LBs, independent of the search filter.
+  // The pinned focused views always show the selected LBs/pools, independent of the search filter.
   const pinnedLbs = useMemo(() => t.loadBalancers.filter((lb) => pinned.has(lb.id)), [t.loadBalancers, pinned]);
+  const pinnedPoolList = useMemo(() => t.pools.filter((p) => pinnedPools.has(p.id)), [t.pools, pinnedPools]);
 
   /** Pool chips with configured weight + observed share, shared by the focused cards and the table. */
   const poolChips = (lb: (typeof t.loadBalancers)[number]) => {
@@ -123,6 +152,47 @@ export function RealtaCacheLb() {
         </div>
       )}
 
+      {/* Focused view — pinned origin pools, with per-origin RTT + region health. */}
+      {pinnedPoolList.length > 0 && (
+        <div className="focused-lbs">
+          <div className="section-head" style={{ alignItems: 'center' }}>
+            <h2 style={{ margin: 0 }}>Focused pools <span className="muted">({pinnedPoolList.length})</span></h2>
+            <button className="btn btn-sm" onClick={clearPinnedPools}>Clear all</button>
+          </div>
+          <div className="grid cols-2">
+            {pinnedPoolList.map((p) => {
+              const ph = health(p.healthy);
+              return (
+                <div key={p.id} className="card focused-lb">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                    <div><strong>{p.name}</strong><div className="muted" style={{ fontSize: '0.72rem' }}>{p.healthyOrigins}/{p.totalOrigins} origins healthy</div></div>
+                    <div style={{ display: 'flex', gap: '0.35rem', alignItems: 'center' }}>
+                      <span className={`badge ${ph.badge} badge-sm`}>{ph.label}</span>
+                      <button className="btn btn-sm" title="Unpin" aria-label={`Unpin ${p.name}`} onClick={() => togglePinPool(p.id)}>✕</button>
+                    </div>
+                  </div>
+                  <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.35rem' }}>{poolDetail(p)}</div>
+                  <div className="matrix-wrap" style={{ marginTop: '0.4rem' }}>
+                    <table className="matrix"><tbody>
+                      {p.origins.map((o) => {
+                        const oh = health(o.healthy);
+                        return (
+                          <tr key={o.name}>
+                            <td>{o.name}<div className="muted" style={{ fontSize: '0.68rem' }}>{o.address}</div></td>
+                            <td title={rttTitle(o)}>{o.rttMs !== null ? `${o.rttMs} ms` : '—'}</td>
+                            <td><span className={`badge ${oh.badge} badge-sm`}>{oh.label}</span></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody></table>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Summary */}
       <div className="grid cols-4">
         <div className="card"><div className="muted">Load balancers</div><div className="stat">{num(t.summary?.loadBalancerCount)}</div></div>
@@ -147,13 +217,17 @@ export function RealtaCacheLb() {
             {loadBalancers.length === 0 && <tr><td colSpan={7} className="center-note">No load balancers.</td></tr>}
             {loadBalancers.map((lb) => {
               const obsTitle = lb.observed
-                ? `by region: ${lb.observed.byRegion.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}\nby PoP: ${lb.observed.byColo.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}`
+                ? `by region: ${lb.observed.byRegion.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}\nby PoP: ${lb.observed.byColo.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}\nby origin: ${lb.observed.byOrigin.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}`
                 : undefined;
+              const affinity = lb.sessionAffinity && lb.sessionAffinity !== 'none' ? `affinity: ${lb.sessionAffinity}${lb.sessionAffinityTtl ? ` ${lb.sessionAffinityTtl}s` : ''}` : '';
+              const policyDetail = [affinity, lb.adaptiveRoutingFailoverAcrossPools ? 'adaptive failover' : ''].filter(Boolean).join(' · ');
               return (
                 <tr key={lb.id} className={pinned.has(lb.id) ? 'row-selected' : ''}>
                   <td className="col-pin"><input type="checkbox" checked={pinned.has(lb.id)} onChange={() => togglePin(lb.id)} aria-label={`Pin ${lb.name}`} /></td>
                   <td>{lb.name}<div className="muted" style={{ fontSize: '0.72rem' }}>{lb.zoneName ?? ''}</div></td>
-                  <td><span className="chip">{lb.steeringPolicy}</span>{lb.locationStrategy && <span className="muted"> · {lb.locationStrategy}</span>}</td>
+                  <td><span className="chip">{lb.steeringPolicy}</span>{lb.locationStrategy && <span className="muted"> · {lb.locationStrategy}</span>}
+                    {policyDetail && <div className="muted" style={{ fontSize: '0.72rem' }}>{policyDetail}</div>}
+                  </td>
                   <td>
                     {poolChips(lb)}
                     {Object.keys(lb.regionPools).length > 0 && <span className="muted"> · +region overrides</span>}
@@ -176,28 +250,33 @@ export function RealtaCacheLb() {
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
-            <tr><th>Pool / origin</th><th>Address</th><th>Weight</th><th>Health</th></tr>
+            <tr><th className="col-pin" title="Pin pool to the focused view"></th><th>Pool / origin</th><th>Address</th><th>Weight</th><th>RTT</th><th>Health</th></tr>
           </thead>
           <tbody>
-            {pools.length === 0 && <tr><td colSpan={4} className="center-note">No pools.</td></tr>}
+            {pools.length === 0 && <tr><td colSpan={6} className="center-note">No pools.</td></tr>}
             {pools.map((p) => {
               const ph = health(p.healthy);
               return [
-                <tr key={p.id} className="lag-parent">
+                <tr key={p.id} className={`lag-parent ${pinnedPools.has(p.id) ? 'row-selected' : ''}`}>
+                  <td className="col-pin"><input type="checkbox" checked={pinnedPools.has(p.id)} onChange={() => togglePinPool(p.id)} aria-label={`Pin ${p.name}`} /></td>
                   <td>{p.name} <span className="muted">· {p.healthyOrigins}/{p.totalOrigins} origins healthy</span>
-                    {p.healthCheck && <div className="muted" style={{ fontSize: '0.72rem' }}>check: {p.healthCheck.method ?? p.healthCheck.type} {p.healthCheck.path ?? ''} → {p.healthCheck.expectedCodes ?? ''}{p.healthCheck.expectedBody ? ` "${p.healthCheck.expectedBody}"` : ''} · every {p.healthCheck.intervalSeconds}s</div>}
+                    {p.healthCheck && <div className="muted" style={{ fontSize: '0.72rem' }}>check: {p.healthCheck.method ?? p.healthCheck.type} {p.healthCheck.path ?? ''} → {p.healthCheck.expectedCodes ?? ''}{p.healthCheck.expectedBody ? ` "${p.healthCheck.expectedBody}"` : ''}{p.healthCheck.port ? ` :${p.healthCheck.port}` : ''}</div>}
+                    <div className="muted" style={{ fontSize: '0.72rem' }}>{poolDetail(p)}</div>
                   </td>
                   <td className="muted">{p.description ?? '—'}</td>
                   <td>{!p.enabled && <span className="badge neutral badge-sm">disabled</span>}</td>
+                  <td></td>
                   <td><span className={`badge ${ph.badge}`}>{ph.label}</span></td>
                 </tr>,
                 ...p.origins.map((o) => {
                   const oh = health(o.healthy);
                   return (
                     <tr key={`${p.id}::${o.name}`} className="lag-member">
-                      <td className="itf-member"><span className="tree-branch">└─ </span>{o.name}</td>
+                      <td className="col-pin"></td>
+                      <td className="itf-member" title={o.hostHeader ? `Host: ${o.hostHeader}` : undefined}><span className="tree-branch">└─ </span>{o.name}</td>
                       <td className="muted">{o.address}</td>
                       <td>{o.weight}</td>
+                      <td title={rttTitle(o)}>{o.rttMs !== null ? `${o.rttMs} ms` : '—'}</td>
                       <td><span className={`badge ${oh.badge} badge-sm`}>{oh.label}</span>{o.failureReason && <span className="muted" title={o.failureReason}> ⓘ</span>}</td>
                     </tr>
                   );

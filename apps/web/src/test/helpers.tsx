@@ -251,22 +251,26 @@ export const NETWORK_HISTORY_BODY = {
 };
 
 const cfProv = { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, notice: 'MOCK / SYNTHETIC Cloudflare Load Balancing.', retrievedAt: '2026-07-16T12:00:00Z' };
-const cfCheck = { type: 'https', method: 'GET', path: '/player/monitoring/alive', expectedCodes: '200', expectedBody: 'OK', intervalSeconds: 60, timeoutSeconds: 5, retries: 2 };
+const cfCheck = { type: 'https', method: 'GET', path: '/player/monitoring/alive', expectedCodes: '200', expectedBody: 'OK', intervalSeconds: 60, timeoutSeconds: 5, retries: 2, port: 443, consecutiveUp: 2, consecutiveDown: 3, followRedirects: false, allowInsecure: false };
+const cfRegion = (region: string, healthy: boolean, rttMs: number | null) => ({ region, healthy, rttMs, failureReason: healthy ? null : 'connection refused' });
+const cfOrigin = (name: string, address: string, healthy: boolean, rttMs: number | null) => ({ name, address, weight: 1, enabled: true, healthy, failureReason: healthy ? null : 'monitor: connection refused', hostHeader: 'origin.rte.ie', rttMs, regionHealth: [cfRegion('WEU', healthy, rttMs), cfRegion('ENAM', healthy, rttMs === null ? null : rttMs + 66)] });
+const cfPoolExtra = { originSteeringPolicy: 'least_outstanding_requests', loadShedding: { defaultPercent: 0, defaultPolicy: 'hash', sessionPercent: 0, sessionPolicy: 'hash' }, checkRegions: ['WEU', 'ENAM'], notificationEmail: 'noc@rte.ie' };
 export const CLOUDFLARE_POOLS_BODY = {
   provenance: cfProv, count: 2,
   items: [
-    { id: 'p-ctw', name: 'live-realta-citywest', description: null, enabled: true, healthy: true, monitorId: 'm1', healthCheck: cfCheck, minimumOrigins: 1, healthyOrigins: 1, totalOrigins: 2, origins: [
-      { name: 'cdn-mem-ctw-1', address: '185.54.105.0', weight: 1, enabled: true, healthy: true, failureReason: null },
-      { name: 'cdn-mem-ctw-2', address: '185.54.105.4', weight: 1, enabled: true, healthy: false, failureReason: 'monitor: connection refused' }] },
-    { id: 'p-vod', name: 'vod-edge-caches', description: null, enabled: true, healthy: true, monitorId: 'm2', healthCheck: cfCheck, minimumOrigins: 1, healthyOrigins: 1, totalOrigins: 1, origins: [
-      { name: 'vod-1', address: '185.54.107.1', weight: 1, enabled: true, healthy: true, failureReason: null }] },
+    { id: 'p-ctw', name: 'live-realta-citywest', description: null, enabled: true, healthy: true, monitorId: 'm1', healthCheck: cfCheck, minimumOrigins: 1, healthyOrigins: 1, totalOrigins: 2, ...cfPoolExtra, origins: [
+      cfOrigin('cdn-mem-ctw-1', '185.54.105.0', true, 12),
+      cfOrigin('cdn-mem-ctw-2', '185.54.105.4', false, null)] },
+    { id: 'p-vod', name: 'vod-edge-caches', description: null, enabled: true, healthy: true, monitorId: 'm2', healthCheck: cfCheck, minimumOrigins: 1, healthyOrigins: 1, totalOrigins: 1, ...cfPoolExtra, origins: [
+      cfOrigin('vod-1', '185.54.107.1', true, 9)] },
   ],
 };
 export const CLOUDFLARE_LBS_BODY = {
   provenance: cfProv, count: 1,
   items: [{ id: 'lb-live', name: 'liveedge.rte.ie', zoneName: 'rte.ie', enabled: true, proxied: false, steeringPolicy: 'random', locationStrategy: 'pop',
-    defaultPools: [{ poolId: 'p-ctw', poolName: 'live-realta-citywest', weight: 0.5 }, { poolId: 'p-vod', poolName: 'vod-edge-caches', weight: 0.5 }], fallbackPool: { poolId: 'p-ctw', poolName: 'live-realta-citywest', weight: null }, regionPools: {}, popPools: {}, sessionAffinity: 'none',
-    observed: { windowHours: 1, totalRequests: 10480, byPool: [{ key: 'live-realta-citywest', requests: 5281, sharePercent: 50.4 }, { key: 'vod-edge-caches', requests: 5199, sharePercent: 49.6 }], byRegion: [{ key: 'WEU', requests: 10480, sharePercent: 100 }], byColo: [{ key: 'DUB', requests: 10480, sharePercent: 100 }] } }],
+    defaultPools: [{ poolId: 'p-ctw', poolName: 'live-realta-citywest', weight: 0.5 }, { poolId: 'p-vod', poolName: 'vod-edge-caches', weight: 0.5 }], fallbackPool: { poolId: 'p-ctw', poolName: 'live-realta-citywest', weight: null }, regionPools: {}, popPools: {}, countryPools: { IE: [{ poolId: 'p-ctw', poolName: 'live-realta-citywest', weight: 0.5 }] },
+    sessionAffinity: 'cookie', sessionAffinityTtl: 1800, sessionAffinityAttributes: { samesite: 'Auto', secure: 'Auto', drainDuration: 60, zeroDowntimeFailover: 'sticky' }, adaptiveRoutingFailoverAcrossPools: true, randomSteeringDefaultWeight: 1, ttlSeconds: 30,
+    observed: { windowHours: 1, totalRequests: 10480, byPool: [{ key: 'live-realta-citywest', requests: 5281, sharePercent: 50.4 }, { key: 'vod-edge-caches', requests: 5199, sharePercent: 49.6 }], byRegion: [{ key: 'WEU', requests: 10480, sharePercent: 100 }], byColo: [{ key: 'DUB', requests: 10480, sharePercent: 100 }], byOrigin: [{ key: 'cdn-mem-ctw-1', requests: 5281, sharePercent: 50.4 }, { key: 'vod-1', requests: 5199, sharePercent: 49.6 }] } }],
 };
 export const CLOUDFLARE_STATUS_BODY = {
   status: { enabled: true, running: true, source: 'mock', intervalMs: 60000, lastPollAt: '2026-07-16T12:00:00Z', lastSuccessAt: '2026-07-16T12:00:00Z', lastDurationMs: 5, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: 3, loadBalancerCount: 1, poolCount: 2 },

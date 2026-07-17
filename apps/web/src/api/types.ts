@@ -952,25 +952,33 @@ export type CloudflareSource = 'cloudflare' | 'mock' | 'disabled';
 export interface CloudflareProvenance {
   source: CloudflareSource; synthetic: boolean; readOnly: boolean; informationalOnly: boolean; notice: string; retrievedAt: string;
 }
+export interface CloudflareOriginRegionHealth { region: string; healthy: boolean | null; rttMs: number | null; failureReason: string | null }
 export interface CloudflareOrigin {
   name: string; address: string; weight: number; enabled: boolean; healthy: boolean | null; failureReason: string | null;
+  hostHeader: string | null; rttMs: number | null; regionHealth: CloudflareOriginRegionHealth[];
 }
 export interface CloudflareHealthCheck {
   type: string; method: string | null; path: string | null; expectedCodes: string | null; expectedBody: string | null;
   intervalSeconds: number | null; timeoutSeconds: number | null; retries: number | null;
+  port: number | null; consecutiveUp: number | null; consecutiveDown: number | null; followRedirects: boolean | null; allowInsecure: boolean | null;
 }
+export interface CloudflareLoadShedding { defaultPercent: number | null; defaultPolicy: string | null; sessionPercent: number | null; sessionPolicy: string | null }
 export interface CloudflarePool {
   id: string; name: string; description: string | null; enabled: boolean; healthy: boolean | null; monitorId: string | null;
   healthCheck: CloudflareHealthCheck | null; minimumOrigins: number | null; origins: CloudflareOrigin[]; healthyOrigins: number; totalOrigins: number;
+  originSteeringPolicy: string | null; loadShedding: CloudflareLoadShedding | null; checkRegions: string[]; notificationEmail: string | null;
 }
 export interface CloudflareSteeredPool { poolId: string; poolName: string | null; weight: number | null }
 export interface CloudflareObservedBucket { key: string; requests: number; sharePercent: number }
-export interface CloudflareObserved { windowHours: number; totalRequests: number; byPool: CloudflareObservedBucket[]; byRegion: CloudflareObservedBucket[]; byColo: CloudflareObservedBucket[] }
+export interface CloudflareObserved { windowHours: number; totalRequests: number; byPool: CloudflareObservedBucket[]; byRegion: CloudflareObservedBucket[]; byColo: CloudflareObservedBucket[]; byOrigin: CloudflareObservedBucket[] }
+export interface CloudflareSessionAffinityAttributes { samesite: string | null; secure: string | null; drainDuration: number | null; zeroDowntimeFailover: string | null }
 export interface CloudflareLoadBalancer {
   id: string; name: string; zoneName: string | null; enabled: boolean; proxied: boolean; steeringPolicy: string;
   defaultPools: CloudflareSteeredPool[]; fallbackPool: CloudflareSteeredPool | null;
-  regionPools: Record<string, CloudflareSteeredPool[]>; popPools: Record<string, CloudflareSteeredPool[]>; sessionAffinity: string | null;
-  locationStrategy: string | null; observed: CloudflareObserved | null;
+  regionPools: Record<string, CloudflareSteeredPool[]>; popPools: Record<string, CloudflareSteeredPool[]>; countryPools: Record<string, CloudflareSteeredPool[]>;
+  sessionAffinity: string | null; sessionAffinityTtl: number | null; sessionAffinityAttributes: CloudflareSessionAffinityAttributes | null;
+  locationStrategy: string | null; adaptiveRoutingFailoverAcrossPools: boolean | null; randomSteeringDefaultWeight: number | null; ttlSeconds: number | null;
+  observed: CloudflareObserved | null;
 }
 export interface CloudflareSummary {
   loadBalancerCount: number; poolCount: number; originCount: number; unhealthyPools: number; unhealthyOrigins: number;

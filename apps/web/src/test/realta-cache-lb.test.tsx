@@ -49,4 +49,26 @@ describe('Réalta Cache Load Balancing page', () => {
     fireEvent.click(within(focused).getByLabelText('Unpin liveedge.rte.ie'));
     expect(screen.queryByText(/Focused load balancers/)).not.toBeInTheDocument();
   });
+
+  it('surfaces richer data: per-origin RTT, pool origin-steering, session affinity, adaptive routing', async () => {
+    stubApi(NOC);
+    renderAt('/load-balancing');
+    await screen.findByText('cdn-mem-ctw-1');
+
+    expect(screen.getByText('12 ms')).toBeInTheDocument(); // per-origin RTT from the pool health endpoint
+    expect(screen.getAllByText(/origins: least_outstanding_requests/).length).toBeGreaterThan(0); // pool origin steering
+    expect(screen.getByText(/affinity: cookie 1800s · adaptive failover/)).toBeInTheDocument(); // LB session affinity + adaptive routing
+  });
+
+  it('pins an origin pool into a focused pools view', async () => {
+    stubApi(NOC);
+    renderAt('/load-balancing');
+    await screen.findByText('cdn-mem-ctw-1');
+    expect(screen.queryByText(/Focused pools/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Pin live-realta-citywest'));
+    const focused = screen.getByText(/Focused pools/).closest('.focused-lbs') as HTMLElement;
+    expect(within(focused).getByText('cdn-mem-ctw-1')).toBeInTheDocument();
+    expect(within(focused).getAllByText('12 ms').length).toBeGreaterThan(0); // RTT shown in the focused card
+  });
 });

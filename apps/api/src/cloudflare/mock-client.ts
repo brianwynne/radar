@@ -1,15 +1,31 @@
 // Deterministic, clearly-labelled MOCK Cloudflare client (no credentials) and a DISABLED client
-// (honest "not connected"). The mock mirrors the real RTÉ shape: origin pools of Réalta caches
-// and a load balancer steering live-edge traffic across them.
+// (honest "not connected"). The mock mirrors the real RTÉ shape: origin pools of Réalta caches and
+// load balancers steering across them, including the richer fields (origin steering, load shedding,
+// session affinity, adaptive routing, per-origin RTT + region health, observed by-origin traffic).
 import { summarise } from './http-client.js';
-import type { CloudflareClient, CloudflareLoadBalancer, CloudflarePool, CloudflareSnapshot } from './types.js';
+import type { CloudflareClient, CloudflareLoadBalancer, CloudflareOrigin, CloudflarePool, CloudflareSnapshot } from './types.js';
+
+function origin(name: string, address: string, ok: boolean): CloudflareOrigin {
+  const base = 9 + (address.charCodeAt(address.length - 1) % 9);
+  return {
+    name, address, weight: 1, enabled: true, healthy: ok, failureReason: ok ? null : 'monitor: connection refused',
+    hostHeader: 'origin.rte.ie', rttMs: ok ? base : null,
+    regionHealth: [
+      { region: 'WEU', healthy: ok, rttMs: ok ? base : null, failureReason: ok ? null : 'connection refused' },
+      { region: 'ENAM', healthy: ok, rttMs: ok ? base + 66 : null, failureReason: ok ? null : 'connection refused' },
+    ],
+  };
+}
 
 function pool(id: string, name: string, origins: [string, string, boolean][], healthy: boolean): CloudflarePool {
-  const os = origins.map(([oname, address, ok]) => ({ name: oname, address, weight: 1, enabled: true, healthy: ok, failureReason: ok ? null : 'monitor: connection refused' }));
+  const os = origins.map(([oname, address, ok]) => origin(oname, address, ok));
   return {
     id, name, description: null, enabled: true, healthy, monitorId: 'mon-' + id, minimumOrigins: 1,
-    healthCheck: { type: 'https', method: 'GET', path: '/player/monitoring/alive', expectedCodes: '200', expectedBody: 'OK', intervalSeconds: 60, timeoutSeconds: 5, retries: 2 },
+    healthCheck: { type: 'https', method: 'GET', path: '/player/monitoring/alive', expectedCodes: '200', expectedBody: 'OK', intervalSeconds: 60, timeoutSeconds: 5, retries: 2, port: 443, consecutiveUp: 2, consecutiveDown: 3, followRedirects: false, allowInsecure: false },
     origins: os, healthyOrigins: os.filter((o) => o.enabled && o.healthy === true).length, totalOrigins: os.length,
+    originSteeringPolicy: 'least_outstanding_requests',
+    loadShedding: { defaultPercent: 0, defaultPolicy: 'hash', sessionPercent: 0, sessionPolicy: 'hash' },
+    checkRegions: ['WEU', 'ENAM'], notificationEmail: 'noc@rte.ie',
   };
 }
 
@@ -34,18 +50,27 @@ const LOAD_BALANCERS: CloudflareLoadBalancer[] = [
   {
     id: 'lb-liveedge', name: 'liveedge.rte.ie', zoneName: 'rte.ie', enabled: true, proxied: false,
     steeringPolicy: 'random', defaultPools: [steer('citywest', 0.5), steer('parkwest', 0.5)], fallbackPool: steer('parkwest'),
-    regionPools: {}, popPools: {}, sessionAffinity: 'none', locationStrategy: 'pop',
+    regionPools: {}, popPools: {}, countryPools: { IE: [steer('citywest', 0.5), steer('parkwest', 0.5)] },
+    sessionAffinity: 'cookie', sessionAffinityTtl: 1800,
+    sessionAffinityAttributes: { samesite: 'Auto', secure: 'Auto', drainDuration: 60, zeroDowntimeFailover: 'sticky' },
+    locationStrategy: 'pop', adaptiveRoutingFailoverAcrossPools: true, randomSteeringDefaultWeight: 1, ttlSeconds: 30,
     observed: {
       windowHours: 1, totalRequests: 10480,
       byPool: [{ key: 'live-realta-citywest', requests: 5281, sharePercent: 50.4 }, { key: 'live-realta-parkwest', requests: 5199, sharePercent: 49.6 }],
       byRegion: [{ key: 'WEU', requests: 10480, sharePercent: 100 }],
       byColo: [{ key: 'DUB', requests: 10480, sharePercent: 100 }],
+      byOrigin: [
+        { key: 'cdn-mem-ctw-1.rte.host', requests: 2661, sharePercent: 25.4 }, { key: 'cdn-mem-ctw-2.rte.host', requests: 2620, sharePercent: 25.0 },
+        { key: 'cdn-mem-pw-1.rte.host', requests: 2640, sharePercent: 25.2 }, { key: 'cdn-mem-pw-2.rte.host', requests: 2559, sharePercent: 24.4 },
+      ],
     },
   },
   {
     id: 'lb-vod', name: 'vod.rte.ie', zoneName: 'rte.ie', enabled: true, proxied: true,
     steeringPolicy: 'off', defaultPools: [steer('vod')], fallbackPool: steer('vod'),
-    regionPools: {}, popPools: {}, sessionAffinity: 'none', locationStrategy: 'pop', observed: null,
+    regionPools: {}, popPools: {}, countryPools: {}, sessionAffinity: 'none', sessionAffinityTtl: null,
+    sessionAffinityAttributes: null, locationStrategy: 'pop', adaptiveRoutingFailoverAcrossPools: false,
+    randomSteeringDefaultWeight: null, ttlSeconds: 30, observed: null,
   },
 ];
 
