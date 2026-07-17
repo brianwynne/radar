@@ -84,6 +84,7 @@ restrictive **outbound** policy, allow HTTPS (443) to the hosts for the features
 | `api.cloudflare.com` | Cloudflare Load Balancing | Cloudflare connector |
 | `api.fastly.com`, `rt.fastly.com` | Fastly commercial-CDN telemetry | Fastly connector |
 | `*.amazonaws.com` (S3) | Akamai DataStream 2 logs | Akamai connector |
+| `acme-v02.api.letsencrypt.org` | TLS certificate issuance/renewal (certbot) | `radar cert` + auto-renew (also needs inbound 80 open during the challenge — handled automatically) |
 
 Authoritative-DNS observation (Tier-2) additionally needs outbound UDP/TCP 53 to the NS1
 nameservers. All of these fail soft — a blocked host disables its feature, it never crashes the API.
@@ -100,9 +101,26 @@ radar restart | start | stop          # control the API service
 radar version                         # installed version
 radar upgrade [--version vX.Y.Z]      # download, verify (sha256) and apply a release (latest if omitted)
 radar rollback                        # reinstall the previously-installed version
+radar cert --domain <fqdn> [--email <addr>]   # issue a Let's Encrypt cert (see TLS below)
 radar set-token [<token>]             # store a GitHub token for a private-repo release download
 radar help
 ```
+
+### TLS (Let's Encrypt / certbot)
+
+Port 80 is **closed at the firewall** in normal operation; it is opened **only for the duration of
+an ACME challenge**. Issue the first certificate with:
+
+```bash
+sudo radar cert --domain radar.example.ie --email you@example.ie   # add --staging to dry-run
+```
+
+This opens port 80, runs `certbot certonly --webroot` (nginx serves the `.well-known/acme-challenge`
+from `/var/www/certbot`), then closes port 80 again. The cert is installed to `/etc/radar/tls/` and
+nginx reloads. **Renewals are automatic** via `certbot.timer`, and certbot's renewal hooks repeat
+the same open-80 → renew → close-80 dance and reload nginx — installed to
+`/etc/letsencrypt/renewal-hooks/{pre,post,deploy}/`. Until you issue a real cert, the seeded
+self-signed pair keeps HTTPS working (with a browser warning).
 
 ### Upgrading
 

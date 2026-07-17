@@ -15,7 +15,7 @@ health="n/a"; curl -fsS --max-time 1 http://127.0.0.1:3000/api/v1/health/live >/
 # Pending manual steps (self-signed TLS still in place / OIDC not yet configured).
 pending=()
 if openssl x509 -noout -subject -in "${ETC_DIR}/tls/fullchain.pem" 2>/dev/null | grep -q "CN *= *radar.local"; then
-  pending+=("TLS: replace the self-signed cert in ${ETC_DIR}/tls/, then: sudo systemctl reload nginx")
+  pending+=("TLS: issue a Let's Encrypt cert — sudo radar cert --domain <fqdn> --email <addr>")
 fi
 if [ -f "${ETC_DIR}/radar.env" ] && ! grep -Eq '^\s*OIDC_ISSUER_URL=..' "${ETC_DIR}/radar.env" 2>/dev/null; then
   pending+=("AUTH: set OIDC_* in ${ETC_DIR}/radar.env, then: sudo systemctl restart radar-api")

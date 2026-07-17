@@ -48,7 +48,7 @@ export DEBIAN_FRONTEND=noninteractive
 # --- 1. System packages (Node 22 via NodeSource; PostgreSQL, nginx from Ubuntu) -------------
 log "Installing system packages…"
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl gnupg openssl ufw postgresql nginx >/dev/null
+apt-get install -y -qq ca-certificates curl gnupg openssl ufw postgresql nginx certbot >/dev/null
 if ! command -v node >/dev/null || [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -lt "$NODE_MAJOR" ]; then
   log "Installing Node.js ${NODE_MAJOR} (NodeSource)…"
   curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" | bash - >/dev/null
@@ -162,7 +162,7 @@ else
   node -p "require('${OPT_DIR}/apps/api/package.json').version" 2>/dev/null > "${OPT_DIR}/VERSION" || true
 fi
 
-# --- 9. nginx site -------------------------------------------------------------------------
+# --- 9. nginx site + Let's Encrypt (certbot) -----------------------------------------------
 log "Configuring nginx…"
 install -o root -g root -m 0644 "${OPT_DIR}/deploy/nginx/radar.conf" /etc/nginx/sites-available/radar.conf
 ln -sf /etc/nginx/sites-available/radar.conf /etc/nginx/sites-enabled/radar.conf
@@ -170,11 +170,23 @@ rm -f /etc/nginx/sites-enabled/default
 nginx -t
 systemctl enable nginx >/dev/null 2>&1 || true
 
-# --- 10. Firewall (allow SSH first so we never lock ourselves out) --------------------------
-log "Configuring ufw (22, 80, 443)…"
+# ACME webroot (nginx serves the HTTP-01 challenge from here on port 80) + renewal hooks that
+# open port 80 only for the duration of a renewal and install the renewed cert for nginx.
+log "Setting up Let's Encrypt (certbot) renewal hooks…"
+install -d -o root -g root -m 0755 /var/www/certbot
+for phase in pre post deploy; do
+  install -d -o root -g root -m 0755 "/etc/letsencrypt/renewal-hooks/${phase}"
+  for hook in "${OPT_DIR}/deploy/letsencrypt/renewal-hooks/${phase}"/*.sh; do
+    [ -e "$hook" ] && install -o root -g root -m 0755 "$hook" "/etc/letsencrypt/renewal-hooks/${phase}/$(basename "$hook")"
+  done
+done
+systemctl enable certbot.timer >/dev/null 2>&1 || true   # twice-daily `certbot renew`
+
+# --- 10. Firewall — 22 + 443 only; port 80 is opened only during ACME renewals --------------
+log "Configuring ufw (22, 443; 80 opens only during cert renewal)…"
 ufw allow 22/tcp   >/dev/null
-ufw allow 80/tcp   >/dev/null
 ufw allow 443/tcp  >/dev/null
+ufw delete allow 80/tcp >/dev/null 2>&1 || true   # ensure 80 is not left open from a prior install
 ufw --force enable >/dev/null
 
 # --- 11. Start & verify --------------------------------------------------------------------
@@ -202,8 +214,10 @@ $( [ -n "$ok" ] && echo "✓ RADAR is installed and running." || echo "⚠ RADAR
            (login banner shows this too; `radar help` for all commands)
 
   TWO remaining manual steps:
-   1) TLS  — replace /etc/radar/tls/{fullchain.pem,privkey.pem} with your certificate,
-             then: sudo systemctl reload nginx
+   1) TLS  — issue a Let's Encrypt certificate (opens port 80 only for the challenge, then
+             closes it; auto-renews the same way):
+                sudo radar cert --domain radar.example.ie --email you@example.ie
+             (until then a self-signed cert is in place, so HTTPS already works)
    2) AUTH — set OIDC_* in /etc/radar/radar.env (Entra app registration),
              then: sudo systemctl restart radar-api
              (until configured, protected API routes correctly return 401)
