@@ -1,6 +1,6 @@
 # RADAR
 
-**Réalta Adaptive Delivery Analysis and Routing** — RTÉ's delivery traffic intelligence
+**Réalta Delivery Analysis & Routing** — RTÉ's delivery traffic intelligence
 and NS1 steering **explainability** platform.
 
 RADAR reads IBM NS1 Connect configuration and explains, filter by filter, how a

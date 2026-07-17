@@ -35,7 +35,7 @@ export function AppShell() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          RADAR<small>Réalta Adaptive Delivery Analysis &amp; Routing</small>
+          RADAR<small>Réalta Delivery Analysis &amp; Routing</small>
         </div>
         <nav className="nav">
           {NAV.filter((n) => hasPermission(n.perm)).map((n) => (

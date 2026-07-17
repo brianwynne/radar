@@ -155,7 +155,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
         title: 'RADAR API',
         version: '0.1.0',
         description:
-          'RADAR — Réalta Adaptive Delivery Analysis and Routing. RTÉ NS1 steering explainability (read-only v1).',
+          'RADAR — Réalta Delivery Analysis & Routing. RTÉ NS1 steering explainability (read-only v1).',
       },
       tags: [
         { name: 'health', description: 'Liveness and readiness' },
