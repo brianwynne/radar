@@ -56,6 +56,7 @@ describe('Réalta Cache Load Balancing page', () => {
     await screen.findByText('cdn-mem-ctw-1');
 
     expect(screen.getByText('12 ms')).toBeInTheDocument(); // per-origin RTT from the pool health endpoint
+    expect(screen.getByText('10.5 ms')).toBeInTheDocument(); // load-balancer RTT (weighted mean of its pools: 0.5·12 + 0.5·9)
     expect(screen.getAllByText(/origins: least_outstanding_requests/).length).toBeGreaterThan(0); // pool origin steering
     expect(screen.getByText(/affinity: cookie 1800s · adaptive failover/)).toBeInTheDocument(); // LB session affinity + adaptive routing
   });

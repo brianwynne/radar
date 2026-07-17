@@ -66,13 +66,34 @@ export function RealtaCacheLb() {
   const pinnedLbs = useMemo(() => t.loadBalancers.filter((lb) => pinned.has(lb.id)), [t.loadBalancers, pinned]);
   const pinnedPoolList = useMemo(() => t.pools.filter((p) => pinnedPools.has(p.id)), [t.pools, pinnedPools]);
 
+  // Pool-level RTT = mean response time of the pool's enabled origins (from the pool health endpoint).
+  const poolRtt = useMemo(() => {
+    const m = new Map<string, number | null>();
+    for (const p of t.pools) {
+      const rtts = p.origins.filter((o) => o.enabled && o.rttMs !== null).map((o) => o.rttMs as number);
+      m.set(p.id, rtts.length > 0 ? Math.round((rtts.reduce((a, b) => a + b, 0) / rtts.length) * 10) / 10 : null);
+    }
+    return m;
+  }, [t.pools]);
+
+  /** A load balancer's representative RTT: its default pools' RTT, weighted by steering weight. */
+  const lbRtt = (lb: (typeof t.loadBalancers)[number]): number | null => {
+    const parts = lb.defaultPools.map((p) => ({ rtt: poolRtt.get(p.poolId) ?? null, w: p.weight ?? 1 })).filter((x): x is { rtt: number; w: number } => x.rtt !== null);
+    if (parts.length === 0) return null;
+    const wSum = parts.reduce((a, x) => a + x.w, 0) || parts.length;
+    return Math.round((parts.reduce((a, x) => a + x.rtt * x.w, 0) / wSum) * 10) / 10;
+  };
+  const lbRttTitle = (lb: (typeof t.loadBalancers)[number]): string =>
+    lb.defaultPools.map((p) => `${p.poolName ?? p.poolId.slice(0, 8)}: ${poolRtt.get(p.poolId) !== null && poolRtt.get(p.poolId) !== undefined ? `${poolRtt.get(p.poolId)} ms` : '—'}`).join('\n');
+
   /** Pool chips with configured weight + observed share, shared by the focused cards and the table. */
   const poolChips = (lb: (typeof t.loadBalancers)[number]) => {
     if (lb.defaultPools.length === 0) return '—';
     const obsBy = new Map((lb.observed?.byPool ?? []).map((b) => [b.key, b.sharePercent]));
     return lb.defaultPools.map((p) => {
       const share = p.poolName ? obsBy.get(p.poolName) : undefined;
-      const bits = [p.weight !== null ? `w${p.weight}` : null, share !== undefined ? `${share}%` : null].filter(Boolean).join(' · ');
+      const rtt = poolRtt.get(p.poolId);
+      const bits = [p.weight !== null ? `w${p.weight}` : null, share !== undefined ? `${share}%` : null, rtt !== null && rtt !== undefined ? `${rtt}ms` : null].filter(Boolean).join(' · ');
       return <span key={p.poolId} className="chip selected" title={p.poolName ? undefined : p.poolId}>{p.poolName ?? p.poolId.slice(0, 8)}{bits && <span className="muted"> · {bits}</span>}</span>;
     });
   };
@@ -144,7 +165,7 @@ export function RealtaCacheLb() {
                 <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>Steers across</div>
                 <div>{poolChips(lb)}</div>
                 <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>
-                  {lb.observed ? `${lb.observed.totalRequests.toLocaleString()} reqs (1h)` : 'no observed traffic'} · fallback {lb.fallbackPool?.poolName ?? lb.fallbackPool?.poolId.slice(0, 8) ?? '—'}
+                  {lb.observed ? `${lb.observed.totalRequests.toLocaleString()} reqs (1h)` : 'no observed traffic'} · fallback {lb.fallbackPool?.poolName ?? lb.fallbackPool?.poolId.slice(0, 8) ?? '—'}{lbRtt(lb) !== null ? ` · ${lbRtt(lb)} ms` : ''}
                 </div>
               </div>
             ))}
@@ -211,10 +232,10 @@ export function RealtaCacheLb() {
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
-            <tr><th className="col-pin" title="Pin to the focused view"></th><th>Hostname</th><th>Policy · location</th><th>Steers across (pool · weight · observed)</th><th>Fallback</th><th>Observed 1h</th><th>State</th></tr>
+            <tr><th className="col-pin" title="Pin to the focused view"></th><th>Hostname</th><th>Policy · location</th><th>Steers across (pool · weight · observed · rtt)</th><th>Fallback</th><th>RTT</th><th>Observed 1h</th><th>State</th></tr>
           </thead>
           <tbody>
-            {loadBalancers.length === 0 && <tr><td colSpan={7} className="center-note">No load balancers.</td></tr>}
+            {loadBalancers.length === 0 && <tr><td colSpan={8} className="center-note">No load balancers.</td></tr>}
             {loadBalancers.map((lb) => {
               const obsTitle = lb.observed
                 ? `by region: ${lb.observed.byRegion.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}\nby PoP: ${lb.observed.byColo.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}\nby origin: ${lb.observed.byOrigin.map((b) => `${b.key} ${b.sharePercent}%`).join(', ')}`
@@ -233,6 +254,7 @@ export function RealtaCacheLb() {
                     {Object.keys(lb.regionPools).length > 0 && <span className="muted"> · +region overrides</span>}
                   </td>
                   <td className="muted">{lb.fallbackPool?.poolName ?? lb.fallbackPool?.poolId.slice(0, 8) ?? '—'}</td>
+                  <td title={lbRttTitle(lb)}>{lbRtt(lb) !== null ? `${lbRtt(lb)} ms` : '—'}</td>
                   <td className="muted" title={obsTitle}>{lb.observed ? `${lb.observed.totalRequests.toLocaleString()} reqs` : '—'}</td>
                   <td>
                     <span className={`badge ${lb.enabled ? 'ok' : 'neutral'} badge-sm`}>{lb.enabled ? 'enabled' : 'disabled'}</span>
