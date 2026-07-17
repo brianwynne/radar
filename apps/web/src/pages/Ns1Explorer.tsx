@@ -25,6 +25,11 @@ interface RecordSummary {
 const DEFAULT_ZONE = 'nsone.rte.ie';
 const DEFAULT_RECORD = { domain: 'live.nsone.rte.ie', type: 'CNAME' };
 
+// How many filters the record's Filter Chain has — a record with a chain is actively steering
+// traffic (vs a plain static record). Works on both the normalised and raw record body.
+const filterChainLength = (body: Record<string, unknown> | null | undefined): number =>
+  body && Array.isArray(body.filters) ? body.filters.length : 0;
+
 function zoneName(z: unknown, i: number): string {
   return (z as { zone?: string }).zone ?? `zone-${i}`;
 }
@@ -245,6 +250,21 @@ export function Ns1Explorer() {
               <span className="muted">Loading record…</span>
             ) : (
               <>
+                {(() => {
+                  const live = payload.provenance.mode === 'live' && !payload.provenance.synthetic;
+                  const filters = filterChainLength(payload.body);
+                  return (
+                    <div className={`notice ${live ? 'info' : 'warn'}`} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+                      <span className={`badge ${live ? 'ok' : 'warn'}`}>{live ? 'LIVE RECORD' : 'MOCK / SYNTHETIC'}</span>
+                      <span>{live ? 'Reading the production NS1 configuration (read-only).' : 'Synthetic sample — not production data.'}</span>
+                      {filters > 0 && (
+                        <span className="badge neutral" style={{ marginLeft: 'auto' }} title="This record has an NS1 Filter Chain — it actively steers traffic.">
+                          actively steering · {filters}-filter chain
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
                 <ProvenanceLine p={payload.provenance} />
                 <pre className="raw-json">{JSON.stringify(payload.body, null, 2)}</pre>
               </>
