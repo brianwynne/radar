@@ -84,7 +84,7 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
     { preHandler: requirePermission('topology.summary.read'), schema: schema('CloudVision connector status + snapshot summary', 'Read-only connector status (running, last poll, failures, snapshot age) and the latest snapshot summary/freshness/completeness.') },
     async () => {
       const snap = latest();
-      const status = opts.poller?.status() ?? { enabled: false, running: false, source: currentMode(), intervalMs: 0, lastPollAt: null, lastSuccessAt: null, lastDurationMs: null, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: null, historyLength: 0, deviceCount: 0, interfaceCount: 0, unknownInterfaceCount: 0 };
+      const status = opts.poller?.status() ?? { enabled: false, running: false, source: currentMode(), intervalMs: 0, lastPollAt: null, lastSuccessAt: null, lastDurationMs: null, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: null, historyLength: 0, deviceCount: 0, interfaceCount: 0, unknownInterfaceCount: 0, edgeDeviceIdCount: 0 };
       return {
         provenance: envelope(now()),
         status,

@@ -114,7 +114,7 @@ export class CloudVisionConnectorManager {
     // Build the initial poller from the environment base config (persisted settings, if any,
     // are loaded in init()).
     const built = this.buildClient();
-    this.poller = new CloudVisionPoller({ client: built.client, source: built.source, intervalMs: this.base.pollIntervalSeconds * 1000, enabled: built.source !== 'disabled', now: this.now, logger: this.logger });
+    this.poller = new CloudVisionPoller({ client: built.client, source: built.source, intervalMs: this.base.pollIntervalSeconds * 1000, enabled: built.source !== 'disabled', edgeDeviceIdCount: this.base.edgeDeviceIds.length, now: this.now, logger: this.logger });
   }
 
   /** Load persisted settings (if a repository is configured) and reconfigure the poller. */
@@ -189,7 +189,7 @@ export class CloudVisionConnectorManager {
 
   private applyToPoller(): void {
     const built = this.buildClient();
-    this.poller.reconfigure({ client: built.client, source: built.source, intervalMs: this.base.pollIntervalSeconds * 1000, enabled: built.source !== 'disabled' });
+    this.poller.reconfigure({ client: built.client, source: built.source, intervalMs: this.base.pollIntervalSeconds * 1000, enabled: built.source !== 'disabled', edgeDeviceIdCount: this.resolveFields().edgeDeviceIds.length });
     if (built.degraded) this.logger?.warn({ reason: built.degraded }, 'cloudvision: connector degraded');
   }
 

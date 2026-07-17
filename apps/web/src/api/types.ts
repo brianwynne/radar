@@ -919,6 +919,8 @@ export interface ConnectorStatus {
   deviceCount: number;
   interfaceCount: number;
   unknownInterfaceCount: number;
+  /** Edge-device IDs the connector is filtered to; 0 = no filter (all devices shown). */
+  edgeDeviceIdCount: number;
 }
 
 export interface HistoryPoint {

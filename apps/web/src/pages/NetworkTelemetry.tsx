@@ -234,6 +234,12 @@ export function NetworkTelemetry() {
 
       {t.notice && t.mode !== 'disabled' && <div className="notice info">{t.notice}</div>}
       {t.mode === 'disabled' && <div className="notice info">Telemetry not connected — the CloudVision connector is disabled. Enable it to see live edge-router state.</div>}
+      {t.mode !== 'disabled' && t.status && t.status.edgeDeviceIdCount === 0 && t.status.deviceCount > 0 && (
+        <div className="notice info">
+          Showing all <b>{t.status.deviceCount}</b> devices CloudVision discovered (routers and switches). To limit this to the
+          edge routers, set the <b>edge device IDs</b> in <b>Integrations → CloudVision</b>.
+        </div>
+      )}
       {stale && <div className="notice warn">Telemetry is stale or degraded — values may not reflect the current network state.</div>}
       {t.error && <div className="notice danger">{t.error}</div>}
       {t.warnings.length > 0 && (

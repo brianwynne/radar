@@ -185,6 +185,13 @@ log "Configuring nginx…"
 install -o root -g root -m 0644 "${OPT_DIR}/deploy/nginx/radar.conf" /etc/nginx/sites-available/radar.conf
 ln -sf /etc/nginx/sites-available/radar.conf /etc/nginx/sites-enabled/radar.conf
 rm -f /etc/nginx/sites-enabled/default
+# When TLS is terminated upstream (--skip-cert), also serve a plain-HTTP loopback origin on
+# 127.0.0.1:8080 for the tunnel/proxy to dial (no self-signed-cert dance). Loopback only.
+if [ "$SKIP_CERT" -ne 0 ]; then
+  install -o root -g root -m 0644 "${OPT_DIR}/deploy/nginx/radar-loopback.conf" /etc/nginx/conf.d/radar-loopback.conf
+else
+  rm -f /etc/nginx/conf.d/radar-loopback.conf
+fi
 nginx -t
 systemctl enable nginx >/dev/null 2>&1 || true
 
@@ -254,8 +261,9 @@ $( [ "$SKIP_CERT" -eq 0 ] && cat <<TLS
                 sudo radar cert --domain radar.example.ie --email you@example.ie
              (until then a self-signed cert is in place, so HTTPS already works)
 TLS
-[ "$SKIP_CERT" -ne 0 ] && echo "   1) TLS  — skipped (terminated upstream, e.g. cloudflared). nginx serves 443 with a
-             self-signed cert for the origin; point your tunnel at https://localhost (noTLSVerify)." )
+[ "$SKIP_CERT" -ne 0 ] && echo "   1) TLS  — skipped (terminated upstream, e.g. cloudflared). Point your tunnel/proxy origin at
+             http://localhost:8080 (plain-HTTP loopback; no cert needed). 443 also serves a
+             self-signed cert if you prefer https://localhost with noTLSVerify." )
    2) AUTH — set OIDC_* in /etc/radar/radar.env (Entra app registration),
              then: sudo systemctl restart radar-api
              (until configured, protected API routes correctly return 401)

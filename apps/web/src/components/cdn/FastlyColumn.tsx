@@ -61,6 +61,15 @@ export function FastlyColumn() {
         </select>
       </label>
 
+      {/* Live but no realtime stream for this service → the service IDs aren't configured. The
+          per-second live-tail + status-code panel only run for explicitly-set Fastly service IDs. */}
+      {mode === 'fastly' && !series && services.length > 0 && (
+        <div className="notice info" style={{ marginTop: '0.5rem' }}>
+          Live-tail and the 2xx/3xx/4xx/5xx panel need the Fastly <b>service IDs</b> set in <b>Integrations → Fastly</b>
+          {selected ? <> (e.g. <span className="mono">{selected}</span>)</> : null}. The table above is the finalised-minute stats.
+        </div>
+      )}
+
       {/* Selected-service live-tail + realtime status codes */}
       {series && (
         <div className="cdn-selected">

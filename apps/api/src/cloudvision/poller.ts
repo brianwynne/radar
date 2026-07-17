@@ -43,6 +43,9 @@ export interface CloudVisionConnectorStatus {
   deviceCount: number;
   interfaceCount: number;
   unknownInterfaceCount: number;
+  /** How many edge-device IDs the connector is filtered to. 0 = no filter → ALL discovered
+   *  devices are shown (routers AND switches); set edge device IDs to limit to edge routers. */
+  edgeDeviceIdCount: number;
 }
 
 export interface CloudVisionPollerDeps {
@@ -55,6 +58,8 @@ export interface CloudVisionPollerDeps {
   historyLimit?: number;
   /** Whether the connector is enabled at all (a disabled connector still answers status). */
   enabled?: boolean;
+  /** Number of edge-device IDs the connector is filtered to (0 = show all discovered devices). */
+  edgeDeviceIdCount?: number;
   now?: () => number;
   logger?: Logger;
 }
@@ -68,6 +73,7 @@ export class CloudVisionPoller {
   private enabled: boolean;
   private readonly maxBackoffMs: number;
   private readonly historyLimit: number;
+  private edgeDeviceIdCount: number;
   private readonly now: () => number;
   private readonly logger: Logger;
 
@@ -89,6 +95,7 @@ export class CloudVisionPoller {
     this.maxBackoffMs = deps.maxBackoffMs ?? 5 * 60_000;
     this.historyLimit = deps.historyLimit ?? 720;
     this.enabled = deps.enabled ?? true;
+    this.edgeDeviceIdCount = deps.edgeDeviceIdCount ?? 0;
     this.now = deps.now ?? (() => Date.now());
     this.logger = deps.logger ?? noopLogger;
   }
@@ -175,12 +182,13 @@ export class CloudVisionPoller {
   /** Swap the client/source/interval/enabled at runtime (Engineer changed the connection).
    *  Stale data from the previous connection is discarded — a different connection must not
    *  inherit the old snapshot/history. Restarts polling when enabled. */
-  reconfigure(deps: { client: CloudVisionClient; source: CloudVisionSource; intervalMs: number; enabled: boolean }): void {
+  reconfigure(deps: { client: CloudVisionClient; source: CloudVisionSource; intervalMs: number; enabled: boolean; edgeDeviceIdCount?: number }): void {
     this.stop();
     this.client = deps.client;
     this.source = deps.source;
     this.intervalMs = deps.intervalMs;
     this.enabled = deps.enabled;
+    this.edgeDeviceIdCount = deps.edgeDeviceIdCount ?? 0;
     this.latest = null;
     this.history = [];
     this.consecutiveFailures = 0;
@@ -209,6 +217,7 @@ export class CloudVisionPoller {
       deviceCount: this.latest?.summary.deviceCount ?? 0,
       interfaceCount: this.latest?.summary.interfaceCount ?? 0,
       unknownInterfaceCount: this.latest?.summary.unknownInterfaceCount ?? 0,
+      edgeDeviceIdCount: this.edgeDeviceIdCount,
     };
   }
 }
