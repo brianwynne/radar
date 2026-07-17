@@ -13,7 +13,7 @@ describe('Réalta Cache Load Balancing page', () => {
 
     // Wait for the page + data (AuthProvider resolves asynchronously) before synchronous asserts.
     const lbRow = within((await screen.findByText('liveedge.rte.ie')).closest('tr')!);
-    expect(screen.getByRole('heading', { name: /Cache Load Balancing/, level: 1 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^Load Balancing$/, level: 1 })).toBeInTheDocument();
     expect(lbRow.getByText('random')).toBeInTheDocument(); // steering policy
     expect(lbRow.getAllByText('live-realta-citywest').length).toBeGreaterThan(0); // pool resolved to name (chip + fallback)
 

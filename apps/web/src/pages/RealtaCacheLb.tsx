@@ -71,7 +71,7 @@ export function RealtaCacheLb() {
   return (
     <section className="page">
       <header className="page-head">
-        <h1>Réalta Cache Load Balancing</h1>
+        <h1>Load Balancing</h1>
         <div className="head-meta">
           <span className={`badge ${modeBadge}`}>{modeLabel}</span>
           {secondsToRefresh !== null && (

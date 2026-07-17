@@ -44,6 +44,7 @@ export function App() {
         <Route path="steering" element={<Steering />} />
         <Route path="topology" element={<Topology />} />
         <Route path="network" element={<NetworkTelemetry />} />
+        <Route path="load-balancing" element={<RealtaCacheLb />} />
         <Route path="realta-cache" element={<RealtaCacheLb />} />
         <Route path="cdn" element={<CommercialCdn />} />
         <Route path="cdn/fastly" element={<CommercialCdn />} />

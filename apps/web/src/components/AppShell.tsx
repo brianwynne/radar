@@ -14,7 +14,7 @@ const NAV = [
   { to: '/steering', label: 'Steering', perm: 'steering.summary.read', end: false },
   { to: '/topology', label: 'Topology', perm: 'topology.summary.read', end: false },
   { to: '/network', label: 'Network Telemetry', perm: 'topology.summary.read', end: true },
-  { to: '/realta-cache', label: 'Réalta Cache LB', perm: 'topology.summary.read', end: false },
+  { to: '/load-balancing', label: 'Load Balancing', perm: 'topology.summary.read', end: false },
   { to: '/cdn', label: 'Commercial CDN', perm: 'topology.summary.read', end: false },
   { to: '/network/connection', label: 'Integrations', perm: 'connector.manage', end: false },
   { to: '/explorer', label: 'NS1 Explorer', perm: 'ns1.detail.read', end: false },
