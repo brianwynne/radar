@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import type { ExplainRequest, ExplainResponse } from '../api/types';
 import { EvaluationView } from './EvaluationView';
+import { ISPS, ispToScenario, matchIsp } from '../steering/isps';
 
 export interface ExplainScenario {
   resolverIp: string;
@@ -16,27 +17,14 @@ export interface ExplainScenario {
   realtaDown: boolean;
 }
 
-export const DEFAULT_SCENARIO: ExplainScenario = {
-  resolverIp: '9.9.9.9',
-  ecsPresent: true,
-  ecsPrefix: '185.2.100.0/24',
-  country: 'IE',
-  asn: '5466',
-  realtaDown: false,
-};
+// Default subscriber = Eir (the first ISP preset), no health overrides.
+export const DEFAULT_SCENARIO: ExplainScenario = { ...ispToScenario(ISPS[0]), realtaDown: false };
 
 // Callers (Steering, Dashboard) may hand us a prefill that also carries zone/domain/type; we take
 // only the scenario fields — the record itself is fixed by the Explorer selection.
 export function toScenario(prefill?: Partial<ExplainScenario> | null): ExplainScenario {
   return { ...DEFAULT_SCENARIO, ...(prefill ?? {}) };
 }
-
-const PRESETS: { name: string; patch: Partial<ExplainScenario> }[] = [
-  { name: 'Ireland · ECS · AS5466', patch: { resolverIp: '9.9.9.9', ecsPresent: true, ecsPrefix: '185.2.100.0/24', country: 'IE', asn: '5466', realtaDown: false } },
-  { name: 'Ireland · public resolver (no ECS)', patch: { resolverIp: '8.8.8.8', ecsPresent: false, ecsPrefix: '', country: 'IE', asn: '', realtaDown: false } },
-  { name: 'Germany · ECS · AS3320', patch: { resolverIp: '9.9.9.9', ecsPresent: true, ecsPrefix: '91.0.0.0/24', country: 'DE', asn: '3320', realtaDown: false } },
-  { name: 'Réalta down', patch: { realtaDown: true } },
-];
 
 function toRequest(zone: string, domain: string, type: string, s: ExplainScenario): ExplainRequest {
   const asn = s.asn.trim() ? Number(s.asn.trim()) : undefined;
@@ -72,6 +60,12 @@ export function ExplainPanel({ zone, domain, type, prefill, autoRun }: Props) {
 
   const set = <K extends keyof ExplainScenario>(k: K, v: ExplainScenario[K]) => setForm((f) => ({ ...f, [k]: v }));
 
+  const currentIsp = matchIsp(form);
+  const selectIsp = (id: string) => {
+    const isp = ISPS.find((i) => i.id === id);
+    if (isp) setForm((f) => ({ ...f, ...ispToScenario(isp) }));
+  };
+
   async function runExplain(s: ExplainScenario): Promise<void> {
     setLoading(true);
     setError(null);
@@ -102,12 +96,26 @@ export function ExplainPanel({ zone, domain, type, prefill, autoRun }: Props) {
   return (
     <div>
       <form onSubmit={submit}>
-        <div style={{ marginBottom: '0.75rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
-          {PRESETS.map((p) => (
-            <button type="button" key={p.name} className="ghost" onClick={() => setForm((f) => ({ ...f, ...p.patch }))}>
-              {p.name}
-            </button>
-          ))}
+        <div style={{ marginBottom: '0.85rem' }}>
+          <div className="muted" style={{ marginBottom: '0.35rem', fontSize: '0.8rem' }}>Subscriber ISP</div>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {ISPS.map((isp) => (
+              <button
+                type="button"
+                key={isp.id}
+                className={`ghost ${currentIsp?.id === isp.id ? 'active' : ''}`}
+                onClick={() => selectIsp(isp.id)}
+                title={`AS${isp.asn} · ${isp.country}`}
+              >
+                {isp.name}
+              </button>
+            ))}
+          </div>
+          <div className="muted" style={{ marginTop: '0.4rem', fontSize: '0.8rem' }}>
+            {currentIsp
+              ? <>Modelling a user on <b>{currentIsp.name}</b> (AS{currentIsp.asn}, {currentIsp.country}) — run to see which delivery platform NS1 serves them, and why.</>
+              : <>Custom identity — not one of the modelled ISPs.</>}
+          </div>
         </div>
         <div className="form-grid">
           <label className="field">Resolver IP<input value={form.resolverIp} onChange={(e) => set('resolverIp', e.target.value)} /></label>

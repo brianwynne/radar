@@ -50,7 +50,7 @@ describe('Steering Matrix', () => {
     expect(screen.getAllByText(/AS5466/).length).toBeGreaterThan(0); // Eir / AS5466
     expect(screen.getByText('weighted_shuffle')).toBeInTheDocument(); // Filter Chain
     expect(screen.getByText('78%')).toBeInTheDocument(); // expected distribution bar
-    expect(screen.getByText('Eir PNI')).toBeInTheDocument(); // network path
+    expect(screen.getAllByText('Eir PNI').length).toBeGreaterThan(0); // network path (also echoed in the ISP hint)
     expect(screen.getAllByText(/Cloudflare/).length).toBeGreaterThan(0); // downstream component
   });
 });
