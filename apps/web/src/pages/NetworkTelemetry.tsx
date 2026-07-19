@@ -7,7 +7,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCloudVision } from '../telemetry/use-cloudvision';
 import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
-import type { LinkType, NetworkHealth } from '../api/types';
+import type { LinkType, NetworkHealth, NetworkInterface } from '../api/types';
 
 const LINK_TYPES: LinkType[] = ['PRIVATE_PEERING', 'IX_PEERING', 'TRANSIT', 'INTERNAL', 'UNKNOWN'];
 const HEALTHS: NetworkHealth[] = ['healthy', 'warning', 'critical', 'down', 'unavailable', 'unknown'];
@@ -22,6 +22,44 @@ function formatUptime(seconds: number | null): string {
 }
 
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : String(n));
+
+// Link-type groups matching the summary's Peering / Transit totals.
+const PEERING_TYPES: LinkType[] = ['PRIVATE_PEERING', 'IX_PEERING'];
+const TRANSIT_TYPES: LinkType[] = ['TRANSIT'];
+// Short interface label for the cramped tile list: Port-Channel1 → Po1, Ethernet3/1 → Et3/1.
+const shortIf = (name: string): string => name.replace(/^Port-Channel/, 'Po').replace(/^Ethernet/, 'Et');
+
+// Configured-capacity breakdown for one link-type group: one row per link (LAG members excluded,
+// so it matches the corresponding throughput total, whose bundle already stands for its members),
+// biggest first, plus the summed capacity. Speeds are CONFIGURED, not live traffic.
+const linksOfTypes = (interfaces: NetworkInterface[], types: LinkType[]): NetworkInterface[] =>
+  interfaces
+    .filter((i) => types.includes(i.linkType) && i.memberOf === null)
+    .sort((a, b) => (b.speedBps ?? 0) - (a.speedBps ?? 0));
+const sumCapacityBps = (links: NetworkInterface[]): number | null => {
+  const speeds = links.map((i) => i.speedBps).filter((s): s is number => s !== null);
+  return speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) : null;
+};
+
+// The list rendered inside a summary tile (Peering, Transit) under its live throughput number.
+function CapacityBreakdown({ links, totalBps }: { links: NetworkInterface[]; totalBps: number | null }) {
+  if (links.length === 0) return null;
+  return (
+    <div className="tile-list">
+      <div className="tile-list-head" title="Configured capacity of each link — not live traffic">Configured capacity by link</div>
+      {links.map((i) => (
+        <div className="tile-list-row" key={`${i.deviceId}::${i.name}`} title={`${i.deviceHostname} · ${i.name}${i.description ? ` · ${i.description}` : ''}`}>
+          <span className="tile-list-label">{i.provider ?? i.name}{i.provider && <span className="muted"> {shortIf(i.name)}</span>}</span>
+          <span className="tile-list-val">{formatBps(i.speedBps)}</span>
+        </div>
+      ))}
+      <div className="tile-list-row total">
+        <span className="tile-list-label">Total capacity</span>
+        <span className="tile-list-val">{formatBps(totalBps)}</span>
+      </div>
+    </div>
+  );
+}
 
 // Utilisation colour level with hysteresis. A link turns amber at 60% of capacity and red at
 // 80%, but only clears back once it drops a few points below (55% / 75%) — so the colour does
@@ -74,6 +112,13 @@ export function NetworkTelemetry() {
         .slice(0, 10),
     [t.interfaces, device],
   );
+
+  // Configured capacity per link for the Peering and Transit tiles. Global (not scoped to the
+  // Router filter) to mirror the summary tiles these lists sit under.
+  const peeringLinks = useMemo(() => linksOfTypes(t.interfaces, PEERING_TYPES), [t.interfaces]);
+  const transitLinks = useMemo(() => linksOfTypes(t.interfaces, TRANSIT_TYPES), [t.interfaces]);
+  const peeringCapacityBps = useMemo(() => sumCapacityBps(peeringLinks), [peeringLinks]);
+  const transitCapacityBps = useMemo(() => sumCapacityBps(transitLinks), [transitLinks]);
 
   // Hysteretic utilisation colour level per interface. Advanced once per poll (keyed on the
   // interface array identity) and remembered across polls in a ref, so a link hovering at a
@@ -253,8 +298,16 @@ export function NetworkTelemetry() {
       {/* Summary */}
       <div className="grid cols-4">
         <div className="card"><div className="muted">Total edge</div><div className="stat">{formatBps(t.summary?.totalEdgeThroughputBps)}</div></div>
-        <div className="card"><div className="muted">Peering</div><div className="stat">{formatBps(t.summary?.totalPeeringThroughputBps)}</div></div>
-        <div className="card"><div className="muted">Transit</div><div className="stat">{formatBps(t.summary?.totalTransitThroughputBps)}</div></div>
+        <div className="card">
+          <div className="muted">Peering</div>
+          <div className="stat">{formatBps(t.summary?.totalPeeringThroughputBps)}</div>
+          <CapacityBreakdown links={peeringLinks} totalBps={peeringCapacityBps} />
+        </div>
+        <div className="card">
+          <div className="muted">Transit</div>
+          <div className="stat">{formatBps(t.summary?.totalTransitThroughputBps)}</div>
+          <CapacityBreakdown links={transitLinks} totalBps={transitCapacityBps} />
+        </div>
         <div className="card"><div className="muted">Operational headroom</div><div className="stat">{formatBps(t.summary?.operationalHeadroomBps)}</div></div>
         <div className="card"><div className="muted">Operational capacity</div><div className="stat">{formatBps(t.summary?.operationalCapacityBps)}</div></div>
         <div className="card"><div className="muted">Unhealthy links</div><div className="stat">{num(t.summary?.unhealthyLinks)}</div></div>

@@ -206,6 +206,13 @@ ul.notes li { margin: 0.15rem 0; }
 .head-meta { display: flex; align-items: center; gap: 0.6rem; }
 .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.4rem; }
 .stat-sm { font-size: 1.05rem; font-weight: 600; margin-top: 0.3rem; }
+/* Compact per-item breakdown inside a summary tile (e.g. peering capacity by link). */
+.tile-list { margin-top: 0.6rem; border-top: 1px solid var(--line); padding-top: 0.5rem; font-size: 0.78rem; }
+.tile-list-head { color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.62rem; margin-bottom: 0.35rem; }
+.tile-list-row { display: flex; justify-content: space-between; gap: 0.5rem; padding: 0.1rem 0; }
+.tile-list-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-list-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile-list-row.total { border-top: 1px solid var(--line); margin-top: 0.3rem; padding-top: 0.35rem; font-weight: 600; }
 .badge.badge-sm { font-size: 0.62rem; padding: 0.02rem 0.4rem; }
 .sparkline { display: block; width: 100%; height: auto; color: var(--info); }
 .sparkline .sparkline-empty { fill: var(--ink-soft); font-size: 11px; }

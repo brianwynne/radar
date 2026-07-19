@@ -185,6 +185,43 @@ describe('Network Telemetry page', () => {
     expect(within(bgpTable()).queryByText('154.54.1.1')).not.toBeInTheDocument();
   });
 
+  it('lists configured peering capacity per link inside the Peering tile (LAG members excluded)', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    const tile = within(screen.getByText('Peering').closest('.card')! as HTMLElement);
+    // Marked as configured capacity — not the live throughput shown above it.
+    expect(tile.getByText(/Configured capacity by link/i)).toBeInTheDocument();
+    // Two peering links, LAG members excluded: Port-Channel7 (200 Gb/s) + Ethernet2 (100 Gb/s).
+    expect(tile.getByText('Po7')).toBeInTheDocument();
+    expect(tile.getByText('Et2')).toBeInTheDocument();
+    expect(tile.getByText('200 Gb/s')).toBeInTheDocument();
+    // The Eir member (Ethernet1 in Port-Channel7) is excluded — no member row.
+    expect(tile.queryByText('Et1')).not.toBeInTheDocument();
+    // Total configured capacity = 200 + 100 = 300 Gb/s, distinct from the 110 Gb/s live stat above.
+    expect(tile.getByText('Total capacity')).toBeInTheDocument();
+    expect(tile.getByText('300 Gb/s')).toBeInTheDocument();
+    expect(tile.getByText('110 Gb/s')).toBeInTheDocument(); // the live peering throughput
+  });
+
+  it('lists configured transit capacity per link inside the Transit tile (LAG members excluded)', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    // "Transit" also appears as a provider/description, so anchor on the tile label (.muted div).
+    const tile = within(screen.getByText('Transit', { selector: '.muted' }).closest('.card')! as HTMLElement);
+    expect(tile.getByText(/Configured capacity by link/i)).toBeInTheDocument();
+    // Two transit links, LAG members excluded: edge1 Ethernet4 (100 Gb/s) + edge2 Port-Channel7 (100 Gb/s).
+    expect(tile.getByText('Et4')).toBeInTheDocument();
+    expect(tile.getByText('Po7')).toBeInTheDocument();
+    // The transit member (Ethernet9 in edge2 Port-Channel7) is excluded — no member row.
+    expect(tile.queryByText('Et9')).not.toBeInTheDocument();
+    // Total configured capacity = 100 + 100 = 200 Gb/s, distinct from the 20 Gb/s live stat above.
+    expect(tile.getByText('Total capacity')).toBeInTheDocument();
+    expect(tile.getByText('200 Gb/s')).toBeInTheDocument();
+    expect(tile.getByText('20 Gb/s')).toBeInTheDocument(); // the live transit throughput
+  });
+
   it('summary tiles reflect the connector snapshot', async () => {
     stubApi(NOC);
     renderAt('/network');
