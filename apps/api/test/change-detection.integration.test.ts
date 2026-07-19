@@ -16,7 +16,7 @@ if (!URL && process.env.REQUIRE_REAL_PG === '1') {
 }
 
 const older: ActivityItem = { id: 'a-old', occurredAt: '2026-07-06T00:00:00Z', action: 'view', resourceType: 'zone', resourceKey: 'rte.ie', raw: {} };
-const change: ActivityItem = { id: 'a-new', occurredAt: '2026-07-07T00:00:00Z', action: 'update', resourceType: 'record', resourceKey: 'live.rte.ie/A', actor: 'ops', raw: {} };
+const change: ActivityItem = { id: 'a-new', occurredAt: '2026-07-07T00:00:00Z', action: 'update', resourceType: 'record', resourceKey: 'live.rte.ie/CNAME', actor: 'ops', raw: {} };
 
 describe.skipIf(!URL)('change detection against real PostgreSQL', () => {
   let pool: pg.Pool;
@@ -52,6 +52,6 @@ describe.skipIf(!URL)('change detection against real PostgreSQL', () => {
     expect((await pool.query("SELECT count(*)::int n FROM audit_events WHERE action='snapshot.create'")).rows[0].n).toBe(1);
     const snap = (await pool.query('SELECT created_by_subject, resource_key FROM configuration_snapshots')).rows[0];
     expect(snap.created_by_subject).toBe('system:change-detection');
-    expect(snap.resource_key).toBe('rte.ie/live.rte.ie/A');
+    expect(snap.resource_key).toBe('rte.ie/live.rte.ie/CNAME');
   });
 });

@@ -4,11 +4,14 @@
 // as the live client for unknown resources.
 import type { ActivityQuery, Ns1ReadClient } from './client.js';
 import { Ns1Error } from './errors.js';
-import { ACTIVITY, RECORD_LIVE_RTE_IE_A, RECORD_VOD_RTE_IE_A, ZONE_RTE_IE, ZONES_LIST } from './fixtures.js';
+import { ACTIVITY, RECORD_LIVE_RTE_IE_A, RECORD_LIVE_RTE_IE_CNAME, RECORD_VOD_RTE_IE_A, ZONE_RTE_IE, ZONES_LIST } from './fixtures.js';
 
 const clone = <T>(value: T): T => structuredClone(value);
 
 const RECORDS: Record<string, unknown> = {
+  // live.rte.ie is really a CNAME (the default watched record); the A record is retained for
+  // fixtures/tests that predate the CNAME switch.
+  'rte.ie/live.rte.ie/CNAME': RECORD_LIVE_RTE_IE_CNAME,
   'rte.ie/live.rte.ie/A': RECORD_LIVE_RTE_IE_A,
   'rte.ie/vod.rte.ie/A': RECORD_VOD_RTE_IE_A,
 };

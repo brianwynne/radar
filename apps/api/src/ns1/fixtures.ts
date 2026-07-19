@@ -70,6 +70,39 @@ export const RECORD_LIVE_RTE_IE_A: unknown = {
   regions: {},
 };
 
+/** GET /v1/zones/rte.ie/live.rte.ie/CNAME — the live steering record as it really is: a
+ *  CNAME whose answers are delivery-platform hostnames (Réalta/Fastly/Akamai/CloudFront),
+ *  steered by the fence-based Filter Chain. Synthetic values; platform is derived from the
+ *  answer RDATA, not the note. Mirrors the CNAME default watched record. */
+export const RECORD_LIVE_RTE_IE_CNAME: unknown = {
+  _radar_note: SYNTHETIC,
+  id: 'demo-live-rte-ie-cname',
+  zone: 'rte.ie',
+  domain: 'live.rte.ie',
+  type: 'CNAME',
+  ttl: 180,
+  use_client_subnet: true, // ECS honoured for this record (guide §9)
+  answers: [
+    {
+      id: 'ans-realta',
+      answer: ['liveedge.rte.ie'], // Réalta (RTÉ CDN)
+      meta: { up: true, note: 'Réalta', weight: 70, country: ['IE'], asn: [5466, 15502, 25441] },
+    },
+    { id: 'ans-fastly', answer: ['t.sni.global.fastly.net'], meta: { up: { feed: 'feed-fastly-health' }, note: 'Fastly', weight: 15 } },
+    { id: 'ans-akamai', answer: ['live.rte.ie.akamaized.net'], meta: { up: true, note: 'Akamai', weight: 15 } },
+    { id: 'ans-cloudfront', answer: ['d3k5dscs9b55g6.cloudfront.net'], meta: { up: true, note: 'CloudFront standby', weight: 0 } },
+  ],
+  // Ordered Filter Chain (order is significant and must be preserved — guide §2.7).
+  filters: [
+    { filter: 'geofence_country', config: { remove_no_location: '1' } },
+    { filter: 'netfence_asn', config: { remove_no_asn: '1' } },
+    { filter: 'netfence_prefix', config: { remove_no_ip_prefixes: '1' } },
+    { filter: 'weighted_shuffle' },
+    { filter: 'select_first_n', config: { N: 1 } },
+  ],
+  regions: {},
+};
+
 /** GET /v1/zones/rte.ie/vod.rte.ie/A — a second synthetic record whose Filter Chain
  *  contains an UNSUPPORTED filter (shed_load), so RADAR reports a PARTIAL evaluation
  *  rather than inventing behaviour (guide §17). Used by the Steering Matrix. */
