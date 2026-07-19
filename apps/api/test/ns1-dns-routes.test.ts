@@ -155,7 +155,11 @@ describe('NS1 routes — safe upstream error mapping', () => {
     const res = await app.inject({ method: 'GET', url: '/api/v1/ns1/zones' });
     expect(res.statusCode).toBe(502);
     expect(res.json().code).toBe('NS1_AUTH');
-    expect(res.payload).not.toContain('401');
+    // The upstream 401 must not be surfaced. Assert on the structured fields — NOT the whole
+    // payload, whose correlationId is a random UUID that can itself contain the substring "401".
+    expect(res.json().message).not.toContain('401');
+    expect(res.json()).not.toHaveProperty('status');
+    expect(res.json()).not.toHaveProperty('upstreamStatus');
     await app.close();
   });
 
