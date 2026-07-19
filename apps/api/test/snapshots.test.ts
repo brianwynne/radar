@@ -24,6 +24,12 @@ function fakeDatabase() {
     async list(q = {}) {
       return snaps.filter((s) => (!q.resourceKind || s.resourceKind === q.resourceKind) && (!q.resourceKey || s.resourceKey === q.resourceKey)).slice().reverse();
     },
+    async updateLabel(id, label) {
+      const s = snaps.find((x) => x.id === id);
+      if (!s) return null;
+      s.label = label && label.trim() ? label.trim() : undefined;
+      return s;
+    },
   };
   const audit: AuditRepository = {
     async record(input) {
@@ -109,6 +115,52 @@ describe('snapshots — capture, history, detail', () => {
 
     expect((await app.inject({ method: 'GET', url: '/api/v1/snapshots/not-a-uuid' })).statusCode).toBe(404);
     expect((await app.inject({ method: 'GET', url: '/api/v1/snapshots/00000000-0000-0000-0000-0000000000ff' })).statusCode).toBe(404);
+  });
+});
+
+describe('snapshots — rename', () => {
+  it('renames a snapshot (label only) and audits it, and clears on blank', async () => {
+    const { db, snaps, audits } = fakeDatabase();
+    const app = await makeApp('ENGINEER', db);
+    const id = (await app.inject({ method: 'POST', url: CAP })).json().snapshot.id;
+
+    const res = await app.inject({ method: 'PATCH', url: `/api/v1/snapshots/${id}`, payload: { label: '  before failover  ' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().snapshot.label).toBe('before failover'); // trimmed
+    expect(snaps[0].label).toBe('before failover');
+    expect(audits.some((a) => a.action === 'snapshot.relabel' && (a.details as { snapshotId: string }).snapshotId === id)).toBe(true);
+    // The captured payload/checksum is untouched by a rename.
+    expect(res.json().snapshot.rawChecksum).toMatch(/^sha256:/);
+
+    const cleared = await app.inject({ method: 'PATCH', url: `/api/v1/snapshots/${id}`, payload: { label: '' } });
+    expect(cleared.json().snapshot.label ?? null).toBeNull();
+  });
+
+  it('rename requires snapshot.create; unknown id 404s', async () => {
+    const ve = await makeApp('VIEWING_ENGINEER', fakeDatabase().db);
+    expect((await ve.inject({ method: 'PATCH', url: '/api/v1/snapshots/00000000-0000-0000-0000-000000000001', payload: { label: 'x' } })).statusCode).toBe(403);
+    const eng = await makeApp('ENGINEER', fakeDatabase().db);
+    expect((await eng.inject({ method: 'PATCH', url: '/api/v1/snapshots/00000000-0000-0000-0000-0000000000ee', payload: { label: 'x' } })).statusCode).toBe(404);
+  });
+});
+
+describe('snapshots — provenance follows the effective connector mode', () => {
+  it('labels a snapshot live when the connector manager is effectively live (not the startup mode)', async () => {
+    const { db } = fakeDatabase();
+    // Startup config is mock, but the connector manager reports effectively-live — the snapshot
+    // must be labelled by how it was actually fetched, not the startup RADAR_MODE.
+    const ns1Manager = { effectiveConnection: () => ({ mode: 'live' as const, baseUrl: 'https://api.nsone.net/v1' }) };
+    const app = await buildApp(
+      loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', RADAR_DEV_AUTH: 'true', RADAR_DEV_ROLE: 'ENGINEER' }),
+      { database: db, ns1Manager } as unknown as Parameters<typeof buildApp>[1],
+    );
+    await app.ready();
+    const res = await app.inject({ method: 'POST', url: CAP });
+    expect(res.statusCode).toBe(201);
+    const body = res.json();
+    expect(body.provenance).toMatchObject({ mode: 'live', synthetic: false });
+    expect(body.snapshot.metadata).toMatchObject({ mode: 'live', synthetic: false });
+    expect(body.snapshot.metadata.warnings).toHaveLength(0); // no "captured in mock mode" warning
   });
 });
 

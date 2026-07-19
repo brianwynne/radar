@@ -6,4 +6,8 @@ export interface SnapshotRepository {
   create(input: NewSnapshot): Promise<ConfigurationSnapshot>;
   getById(id: string): Promise<ConfigurationSnapshot | null>;
   list(query?: SnapshotQuery): Promise<ConfigurationSnapshot[]>;
+  /** Rename a snapshot's human label. Only mutates the label (the captured payload,
+   *  checksums and provenance are immutable). Returns null when the id is unknown.
+   *  A null/blank label clears it. */
+  updateLabel(id: string, label: string | null): Promise<ConfigurationSnapshot | null>;
 }

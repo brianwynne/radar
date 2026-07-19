@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { screen, within } from '@testing-library/react';
+import { screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { ENGINEER, VE, renderAt, stubApi } from './helpers';
+
+const rowOf = (label: string) => screen.getByText(label).closest('tr') as HTMLElement;
+const fetchCalls = () => (globalThis.fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls;
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -23,6 +26,34 @@ describe('Snapshots (in NS1 Explorer)', () => {
     await userEvent.click(capture);
     // History reloads and remains rendered from the API.
     expect(await screen.findByText('before change')).toBeInTheDocument();
+  });
+
+  it('lets an Engineer rename a snapshot (PATCH with the new label)', async () => {
+    stubApi(ENGINEER);
+    renderAt(RECORD);
+    await screen.findByText('before change');
+    // Capture the row node up front — its label turns into an input during edit (so it's no
+    // longer findable by text), but the <tr> persists by key across the reload.
+    const row = rowOf('before change');
+    await userEvent.click(within(row).getByRole('button', { name: /rename snapshot/i }));
+    const input = within(row).getByRole('textbox', { name: /rename/i });
+    expect(input).toHaveValue('before change'); // prefilled with current label
+    await userEvent.clear(input);
+    await userEvent.type(input, 'checkpoint A');
+    await userEvent.click(within(row).getByRole('button', { name: /^Save$/ }));
+
+    const patch = fetchCalls().find((c) => /\/api\/v1\/snapshots\/[^/]+$/.test(String(c[0])) && c[1]?.method === 'PATCH');
+    expect(patch).toBeTruthy();
+    expect(JSON.parse(String(patch![1]!.body))).toEqual({ label: 'checkpoint A' });
+    // Edit mode closes after saving.
+    await waitFor(() => expect(within(row).queryByRole('textbox')).toBeNull());
+  });
+
+  it('does not show rename controls to a read-only Viewing Engineer', async () => {
+    stubApi(VE);
+    renderAt(RECORD);
+    await screen.findByText('before change');
+    expect(screen.queryByRole('button', { name: /rename snapshot/i })).toBeNull();
   });
 
   it('compares two selected snapshots and shows the diff', async () => {

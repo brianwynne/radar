@@ -98,6 +98,17 @@ describe('PostgresSnapshotRepository (pg-mem)', () => {
     expect(await repo.list({ sourceSystem: 'ns1' })).toHaveLength(3);
     expect(await repo.list({ limit: 1 })).toHaveLength(1);
   });
+
+  it('updateLabel renames the label only (trims, clears on blank) and 404s unknown ids', async () => {
+    const repo = new PostgresSnapshotRepository(db);
+    const created = await repo.create({ ...sampleSnapshot, label: undefined });
+    const renamed = await repo.updateLabel(created.id, '  before failover  ');
+    expect(renamed?.label).toBe('before failover'); // trimmed
+    expect(renamed?.rawChecksum).toBe(created.rawChecksum); // payload/checksum untouched
+    expect((await repo.getById(created.id))?.label).toBe('before failover');
+    expect((await repo.updateLabel(created.id, '   '))?.label).toBeUndefined(); // blank clears
+    expect(await repo.updateLabel('00000000-0000-0000-0000-000000000000', 'x')).toBeNull();
+  });
 });
 
 describe('PostgresAuditRepository (pg-mem)', () => {

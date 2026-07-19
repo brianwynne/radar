@@ -38,6 +38,7 @@ function fakeDb() {
     async create(input) { const s = { ...input, id: `s-${++n}`, createdAt: new Date(), metadata: input.metadata ?? {} } as ConfigurationSnapshot; snaps.push(s); return s; },
     async getById(id) { return snaps.find((s) => s.id === id) ?? null; },
     async list() { return snaps.slice(); },
+    async updateLabel(id, label) { const s = snaps.find((x) => x.id === id); if (!s) return null; s.label = label ?? undefined; return s; },
   };
   const audit: AuditRepository = {
     async record(input) { const e = { ...input, id: `a-${audits.length}`, occurredAt: new Date(), actorRoles: input.actorRoles ?? [], details: input.details ?? {} } as AuditEvent; audits.push(e); return e; },

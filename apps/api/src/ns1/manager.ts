@@ -81,6 +81,13 @@ export class Ns1ConnectorManager {
 
   getClient(): ReconfigurableNs1ReadClient { return this.client; }
 
+  /** Effective connector state for provenance and snapshot labels — reflects the live⇄mock
+   *  swaps the manager applies at runtime, unlike the startup config. No key exposed. */
+  effectiveConnection(): { mode: RadarMode; baseUrl: string } {
+    const e = this.resolveEffective();
+    return { mode: e.mode, baseUrl: e.baseUrl };
+  }
+
   /** The ONE place the NS1 key is decrypted. Fails closed to mock when the key can't be resolved. */
   private resolveEffective(): { mode: RadarMode; baseUrl: string; apiKey?: string; source: 'ns1' | 'mock'; degraded: string | null } {
     const s = this.persisted;

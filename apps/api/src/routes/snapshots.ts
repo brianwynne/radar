@@ -6,7 +6,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { ConfigurationSnapshot } from '@radar/data';
 import type { Ns1ReadClient } from '../ns1/client.js';
-import type { Ns1Config } from '../ns1/config.js';
+import type { Ns1Config, RadarMode } from '../ns1/config.js';
 import type { Database } from '../database/repositories.js';
 import { Ns1Error } from '../ns1/errors.js';
 import { canonicalise, diffJson, rawChecksum, structuralChecksum, summariseRecordDiff } from '../ns1/snapshot.js';
@@ -18,6 +18,10 @@ export interface SnapshotRouteOptions {
   client: Ns1ReadClient;
   ns1: Ns1Config;
   database?: Database;
+  /** When present, the effective (live⇄mock) connector mode is read from it per-request so a
+   *  snapshot captured after an Engineer switches NS1 to live is labelled live, not the startup
+   *  mode. Falls back to the static `ns1` config when absent. */
+  ns1Connection?: { effectiveConnection(): { mode: RadarMode; baseUrl: string } };
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -49,7 +53,13 @@ function requireDb(database: Database | undefined, req: FastifyRequest, reply: F
 }
 
 export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (app, opts) => {
-  const { client, ns1, database } = opts;
+  const { client, ns1, database, ns1Connection } = opts;
+  // The connector's effective mode/base — reflects runtime live⇄mock swaps (a snapshot must be
+  // labelled by how it was ACTUALLY fetched, not the startup config).
+  const effectiveNs1 = (): Ns1Config => {
+    const e = ns1Connection?.effectiveConnection();
+    return e ? { ...ns1, mode: e.mode, baseUrl: e.baseUrl } : ns1;
+  };
 
   // Capture — fetch, preserve raw, canonicalise, checksum, persist snapshot + audit atomically.
   app.post('/ns1/zones/:zone/:domain/:type/snapshots', { preHandler: requirePermission('snapshot.create'), schema: doc('Capture an NS1 record snapshot') }, async (req, reply) => {
@@ -72,7 +82,8 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
     }
 
     const principal = req.principal!;
-    const snapshot = await captureRecordSnapshot(database, { zone, domain, type }, raw, ns1.mode, {
+    const eff = effectiveNs1();
+    const snapshot = await captureRecordSnapshot(database, { zone, domain, type }, raw, eff.mode, {
       createdBySubject: principal.subject,
       label,
       auditActorRoles: principal.roles,
@@ -80,7 +91,7 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
       correlationId: req.id,
     });
 
-    return reply.code(201).send({ provenance: buildProvenance(ns1, sourceEndpoint, retrievedAt.toISOString()), snapshot: detail(snapshot) });
+    return reply.code(201).send({ provenance: buildProvenance(eff, sourceEndpoint, retrievedAt.toISOString()), snapshot: detail(snapshot) });
   });
 
   // History — snapshots for a record, newest first.
@@ -99,6 +110,32 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
     const s = await database.snapshots.getById(snapshotId);
     if (!s) return reply.code(404).send({ code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found.', correlationId: req.id });
     return { snapshot: detail(s) };
+  });
+
+  // Rename — change a snapshot's human label only. The captured payload, checksums and
+  // provenance are immutable; this touches the label alone. snapshot.create (Engineer).
+  app.patch('/snapshots/:snapshotId', { preHandler: requirePermission('snapshot.create'), schema: doc('Rename a snapshot') }, async (req, reply) => {
+    if (!requireDb(database, req, reply)) return reply;
+    const { snapshotId } = req.params as { snapshotId: string };
+    if (!UUID.test(snapshotId)) return reply.code(404).send({ code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found.', correlationId: req.id });
+    const parsed = z.object({ label: z.string().nullable() }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: 'Provide a label (string or null).', correlationId: req.id });
+    const label = parsed.data.label && parsed.data.label.trim() ? parsed.data.label.trim().slice(0, 200) : null;
+    const updated = await database.snapshots.updateLabel(snapshotId, label);
+    if (!updated) return reply.code(404).send({ code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found.', correlationId: req.id });
+    const principal = req.principal!;
+    await database.audit.record({
+      actorSubject: principal.subject,
+      actorRoles: principal.roles,
+      authenticationMethod: principal.authenticationMethod,
+      action: 'snapshot.relabel',
+      resourceType: 'record',
+      resourceKey: updated.resourceKey,
+      outcome: 'success',
+      correlationId: req.id,
+      details: { snapshotId: updated.id, label },
+    });
+    return { snapshot: detail(updated) };
   });
 
   // Compare — structural diff of two snapshots' canonical payloads.

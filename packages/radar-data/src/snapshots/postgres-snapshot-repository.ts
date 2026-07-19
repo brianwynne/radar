@@ -76,6 +76,14 @@ export class PostgresSnapshotRepository implements SnapshotRepository {
     return mapRow(rows[0] as Row);
   }
 
+  async updateLabel(id: string, label: string | null): Promise<ConfigurationSnapshot | null> {
+    const { rows } = await this.db.query<Row>(
+      `UPDATE configuration_snapshots SET label = $2 WHERE id = $1 RETURNING ${COLUMNS}`,
+      [id, label && label.trim() ? label.trim() : null],
+    );
+    return rows.length > 0 ? mapRow(rows[0] as Row) : null;
+  }
+
   async getById(id: string): Promise<ConfigurationSnapshot | null> {
     const { rows } = await this.db.query<Row>(
       `SELECT ${COLUMNS} FROM configuration_snapshots WHERE id = $1`,

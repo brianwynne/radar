@@ -57,6 +57,9 @@ export function SnapshotsPanel({ zone, domain, type }: { zone: string; domain: s
   const [selected, setSelected] = useState<string[]>([]);
   const [cmp, setCmp] = useState<CompareResponse | null>(null);
   const [cmpError, setCmpError] = useState<string | null>(null);
+  const [renameId, setRenameId] = useState<string | null>(null); // snapshot currently being renamed
+  const [draftLabel, setDraftLabel] = useState('');
+  const [savingLabel, setSavingLabel] = useState(false);
 
   const load = useCallback(() => {
     setError(null);
@@ -87,6 +90,30 @@ export function SnapshotsPanel({ zone, domain, type }: { zone: string; domain: s
   };
 
   const toggle = (id: string) => setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id].slice(-2)));
+
+  const startRename = (s: SnapshotSummary) => {
+    setRenameId(s.id);
+    setDraftLabel(s.label ?? '');
+    setError(null);
+  };
+  const cancelRename = () => {
+    setRenameId(null);
+    setDraftLabel('');
+  };
+  const saveRename = async (id: string) => {
+    setSavingLabel(true);
+    setError(null);
+    try {
+      const trimmed = draftLabel.trim();
+      await api.renameSnapshot(id, trimmed ? trimmed : null);
+      cancelRename();
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Rename failed.');
+    } finally {
+      setSavingLabel(false);
+    }
+  };
 
   const runCompare = async () => {
     if (selected.length !== 2) return;
@@ -144,7 +171,35 @@ export function SnapshotsPanel({ zone, domain, type }: { zone: string; domain: s
                     <Link to={`/snapshots/${s.id}`}>{new Date(s.retrievedAt).toLocaleString()}</Link>
                   </td>
                   <td>{s.createdBySubject ?? '—'}</td>
-                  <td>{s.label ?? '—'}</td>
+                  <td>
+                    {renameId === s.id ? (
+                      <span className="rename-inline">
+                        <input
+                          autoFocus
+                          aria-label={`rename ${s.id}`}
+                          value={draftLabel}
+                          maxLength={200}
+                          placeholder="Snapshot label"
+                          onChange={(e) => setDraftLabel(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') void saveRename(s.id);
+                            if (e.key === 'Escape') cancelRename();
+                          }}
+                        />
+                        <button className="linklike" disabled={savingLabel} onClick={() => void saveRename(s.id)}>Save</button>
+                        <button className="linklike muted" disabled={savingLabel} onClick={cancelRename}>Cancel</button>
+                      </span>
+                    ) : (
+                      <span className="rename-inline">
+                        <span>{s.label ?? '—'}</span>
+                        {canCreate && (
+                          <button className="linklike" aria-label={`rename snapshot ${s.id}`} title="Rename this snapshot" onClick={() => startRename(s)}>
+                            {s.label ? 'Rename' : 'Add label'}
+                          </button>
+                        )}
+                      </span>
+                    )}
+                  </td>
                   <td className="mono" title={s.rawChecksum}>
                     {short(s.rawChecksum)}
                   </td>

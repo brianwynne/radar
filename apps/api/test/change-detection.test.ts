@@ -40,6 +40,12 @@ function fakeDb() {
     async list() {
       return snaps.slice();
     },
+    async updateLabel(id, label) {
+      const s = snaps.find((x) => x.id === id);
+      if (!s) return null;
+      s.label = label ?? undefined;
+      return s;
+    },
   };
   const audit: AuditRepository = {
     async record(input) {

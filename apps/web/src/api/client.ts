@@ -129,6 +129,8 @@ export const api = {
       body: JSON.stringify(label ? { label } : {}),
     }),
   snapshot: (id: string) => request<{ snapshot: SnapshotDetail }>(`/api/v1/snapshots/${enc(id)}`),
+  renameSnapshot: (id: string, label: string | null) =>
+    request<{ snapshot: SnapshotDetail }>(`/api/v1/snapshots/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ label }) }),
   compareSnapshots: (a: string, b: string) =>
     request<CompareResponse>('/api/v1/snapshots/compare', { method: 'POST', body: JSON.stringify({ a, b }) }),
   compareCurrent: (id: string) =>
