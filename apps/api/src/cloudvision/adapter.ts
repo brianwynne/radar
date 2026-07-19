@@ -345,8 +345,8 @@ function buildSummary(devices: NetworkDevice[], interfaces: NetworkInterface[], 
   // Exclude LAG members from throughput aggregates — the Port-Channel already represents their
   // combined traffic, so counting both would double-count.
   const external = interfaces.filter((i) => EXTERNAL.includes(i.linkType) && i.memberOf === null);
-  const peering = interfaces.filter((i) => PEERING.includes(i.linkType));
-  const transit = interfaces.filter((i) => i.linkType === 'TRANSIT');
+  const peering = interfaces.filter((i) => PEERING.includes(i.linkType) && i.memberOf === null);
+  const transit = interfaces.filter((i) => i.linkType === 'TRANSIT' && i.memberOf === null);
   const totalEdge = sumOrNull(external.map((i) => i.primaryBps));
   const operationalCapacity = sumOrNull(external.filter((i) => i.operState === 'up').map((i) => i.speedBps));
   const operationalHeadroom = totalEdge !== null && operationalCapacity !== null ? Math.max(0, operationalCapacity - totalEdge) : null;

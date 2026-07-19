@@ -133,6 +133,50 @@ describe('unknown interfaces stay visible', () => {
   });
 });
 
+describe('LAG members are excluded from summary throughput (no double-count)', () => {
+  // A Port-Channel bundle plus its member ports. The bundle already carries the members' combined
+  // traffic, so the summary must count the bundle only — otherwise Peering/Transit inflate past
+  // Total edge and break the invariant Total edge = Peering + Transit.
+  const rules: ClassificationRule[] = [
+    { match: { kind: 'description_exact', description: 'INEX' }, linkType: 'IX_PEERING', provider: 'INEX' },
+    { match: { kind: 'description_exact', description: 'Cogent' }, linkType: 'TRANSIT', provider: 'Cogent' },
+  ];
+  const at = new Date(NOW);
+  const mk = (name: string, description: string, out: number, memberOf: string | null) => ({
+    deviceId: 'D1', name, description, adminState: 'up' as const, operState: 'up' as const, speedBps: 100e9,
+    reportedInBps: 0, reportedOutBps: out, inOctets: null, outOctets: null, inErrors: 0, outErrors: 0,
+    inDiscards: 0, outDiscards: 0, observedAt: at, memberOf,
+  });
+  const raw: RawSnapshot = {
+    devices: [{ id: 'D1', hostname: 'd1', modelName: null, softwareVersion: null, streaming: true, reachable: true, observedAt: at }],
+    interfaces: [
+      // Peering LAG: bundle carries 30G, its two members carry 20G + 10G (= the bundle).
+      mk('Port-Channel1', 'INEX', 30e9, null),
+      mk('Ethernet1', 'INEX', 20e9, 'Port-Channel1'),
+      mk('Ethernet2', 'INEX', 10e9, 'Port-Channel1'),
+      // Transit LAG: bundle carries 12G, its two members carry 8G + 4G (= the bundle).
+      mk('Port-Channel2', 'Cogent', 12e9, null),
+      mk('Ethernet3', 'Cogent', 8e9, 'Port-Channel2'),
+      mk('Ethernet4', 'Cogent', 4e9, 'Port-Channel2'),
+    ],
+    bgpPeers: [],
+  };
+  const snap = buildSnapshot(raw, cfg({ classificationRules: rules, expectedDeviceIds: ['D1'] }));
+
+  it('Peering counts the bundle only, not its members', () => {
+    expect(snap.summary.totalPeeringThroughputBps).toBe(30e9); // not 60G (30 + 20 + 10)
+  });
+  it('Transit counts the bundle only, not its members', () => {
+    expect(snap.summary.totalTransitThroughputBps).toBe(12e9); // not 24G (12 + 8 + 4)
+  });
+  it('holds the invariant Total edge = Peering + Transit', () => {
+    expect(snap.summary.totalEdgeThroughputBps).toBe(42e9);
+    expect(snap.summary.totalEdgeThroughputBps).toBe(
+      (snap.summary.totalPeeringThroughputBps ?? 0) + (snap.summary.totalTransitThroughputBps ?? 0),
+    );
+  });
+});
+
 describe('normaliseBgpState', () => {
   it('maps known + unknown states', () => {
     expect(normaliseBgpState('Established')).toBe('ESTABLISHED');
