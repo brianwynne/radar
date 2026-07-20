@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import { ProvenanceLine } from '../components/Provenance';
 import { RecordEditor } from '../components/RecordEditor';
 import { RecordConfigView } from '../features/RecordConfigView';
+import { RecordWalkthrough } from '../features/RecordWalkthrough';
 import { addRecent, getRecent, type RecordRef } from '../ns1/recent';
 import { SnapshotsPanel } from '../features/Snapshots';
 import { ExplainPanel, type ExplainScenario } from '../features/ExplainPanel';
@@ -16,7 +17,7 @@ import { AsnBreakdown } from '../features/AsnBreakdown';
 import { ispToScenario, type Isp } from '../steering/isps';
 import type { Ns1ActiveRecordResponse, Provenance } from '../api/types';
 
-type View = 'config' | 'normalised' | 'raw';
+type View = 'config' | 'walkthrough' | 'normalised' | 'raw';
 interface RecordSummary {
   domain: string;
   type: string;
@@ -274,6 +275,11 @@ export function Ns1Explorer() {
               <button className={`ghost ${view === 'config' ? 'active' : ''}`} onClick={() => { setView('config'); setEditing(false); }} title="Human-readable steering config — platforms, translated ASNs/countries, weights, filter chain">
                 Config
               </button>
+              {canExplain && (
+                <button className={`ghost ${view === 'walkthrough' ? 'active' : ''}`} onClick={() => { setView('walkthrough'); setEditing(false); }} title="Walk the filter chain top-down for a chosen requester — see each yes/no branch and how the weighting resolves">
+                  Walkthrough
+                </button>
+              )}
               <button className={`ghost ${view === 'normalised' ? 'active' : ''}`} onClick={() => { setView('normalised'); setEditing(false); }}>
                 Normalised
               </button>
@@ -300,7 +306,9 @@ export function Ns1Explorer() {
                 </button>
               )}
             </div>
-            {recordError ? (
+            {view === 'walkthrough' ? (
+              <RecordWalkthrough zone={zone} domain={domain} type={type} />
+            ) : recordError ? (
               <div className="notice danger">{recordError}</div>
             ) : payload === null ? (
               <span className="muted">Loading record…</span>
