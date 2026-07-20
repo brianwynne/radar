@@ -2,7 +2,7 @@
 // an average of percentages); classification, freshness, BGP normalisation, completeness and
 // warnings are all exercised through the shared scenario fixtures.
 import { describe, it, expect } from 'vitest';
-import { buildSnapshot, normaliseBgpState, bgpSessionRole, type AdapterConfig, type RawSnapshot } from '../src/cloudvision/adapter.js';
+import { buildSnapshot, normaliseBgpState, bgpSessionRole, connectionFromLinkType, type AdapterConfig, type RawSnapshot } from '../src/cloudvision/adapter.js';
 import { scenarioSnapshot, MOCK_EDGE_DEVICE_IDS, EDGE1, EDGE2 } from '../src/cloudvision/fixtures.js';
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_PROVIDER_FOR_ASN } from '../src/cloudvision/classification-rules.js';
 import type { ClassificationRule } from '../src/cloudvision/classification.js';
@@ -216,5 +216,74 @@ describe('bgpSessionRole', () => {
     const snap = buildSnapshot(raw, cfg);
     expect(snap.bgpPeers.find((p) => p.peerAsn === 5466)!.role).toBe('delivery');
     expect(snap.bgpPeers.find((p) => p.peerAsn === 43760)!.role).toBe('route-collector');
+  });
+});
+
+describe('connectionFromLinkType + interface-classification fallback', () => {
+  it('maps a classified link type to a human connection label', () => {
+    expect(connectionFromLinkType('PRIVATE_PEERING')).toBe('PNI');
+    expect(connectionFromLinkType('IX_PEERING')).toBe('INEX');
+    expect(connectionFromLinkType('TRANSIT')).toBe('Transit');
+    expect(connectionFromLinkType('INTERNAL')).toBe('iBGP');
+    expect(connectionFromLinkType('UNKNOWN')).toBeNull(); // never invent a type
+  });
+
+  it('a session with no description tag inherits its interface classification (connection + provider + role)', () => {
+    const at = new Date('2026-07-15T12:00:00Z');
+    const iface = (name: string, description: string) => ({
+      deviceId: 'D1', name, description, adminState: 'up' as const, operState: 'up' as const, speedBps: 100e9,
+      reportedInBps: 1e9, reportedOutBps: 1e9, inOctets: null, outOctets: null, inErrors: null, outErrors: null,
+      inDiscards: null, outDiscards: null, observedAt: at,
+    });
+    const rules: ClassificationRule[] = [
+      { match: { kind: 'device_interface', deviceId: 'D1', interface: 'Port-Channel4' }, linkType: 'PRIVATE_PEERING', provider: 'Sky' },
+      { match: { kind: 'device_interface', deviceId: 'D1', interface: 'Ethernet9' }, linkType: 'INTERNAL' },
+    ];
+    const raw: RawSnapshot = {
+      devices: [{ id: 'D1', hostname: 'edge1', modelName: null, softwareVersion: null, streaming: true, reachable: true, observedAt: at }],
+      interfaces: [iface('Port-Channel4', 'Sky PNI'), iface('Ethernet9', 'to spine')],
+      bgpPeers: [
+        // No connectionType / description → must be derived from the interface's classification.
+        { deviceId: 'D1', peerAddress: '89.207.56.253', peerAsn: 5607, state: 'Established', uptimeSeconds: 10, prefixesReceived: 1, prefixesAdvertised: 1, observedAt: at, interfaceId: 'Port-Channel4' },
+        { deviceId: 'D1', peerAddress: '10.0.0.9', peerAsn: 65001, state: 'Established', uptimeSeconds: 10, prefixesReceived: 1, prefixesAdvertised: 1, observedAt: at, interfaceId: 'Ethernet9' },
+      ],
+    };
+    const cfg: AdapterConfig = {
+      source: 'cloudvision', synthetic: false, now: Date.parse('2026-07-15T12:00:05Z'), staleAfterSeconds: 60,
+      expectedDeviceIds: [], classificationRules: rules, providerForAsn: {}, // deliberately no ASN map
+      warningPercent: 80, criticalPercent: 90, primaryDirection: 'outbound',
+    };
+    const snap = buildSnapshot(raw, cfg);
+    const sky = snap.bgpPeers.find((p) => p.peerAsn === 5607)!;
+    expect(sky.connectionType).toBe('PNI');
+    expect(sky.provider).toBe('Sky'); // provider inherited from the interface classification
+    expect(sky.role).toBe('delivery');
+    const internal = snap.bgpPeers.find((p) => p.peerAsn === 65001)!;
+    expect(internal.connectionType).toBe('iBGP');
+    expect(internal.role).toBe('internal'); // iBGP inferred → excluded from the delivery view
+  });
+
+  it('an explicit description tag still wins over the interface classification', () => {
+    const at = new Date('2026-07-15T12:00:00Z');
+    const rules: ClassificationRule[] = [
+      { match: { kind: 'device_interface', deviceId: 'D1', interface: 'Port-Channel4' }, linkType: 'IX_PEERING' },
+    ];
+    const raw: RawSnapshot = {
+      devices: [{ id: 'D1', hostname: 'edge1', modelName: null, softwareVersion: null, streaming: true, reachable: true, observedAt: at }],
+      interfaces: [{
+        deviceId: 'D1', name: 'Port-Channel4', description: 'x', adminState: 'up', operState: 'up', speedBps: 100e9,
+        reportedInBps: 1e9, reportedOutBps: 1e9, inOctets: null, outOctets: null, inErrors: null, outErrors: null,
+        inDiscards: null, outDiscards: null, observedAt: at,
+      }],
+      bgpPeers: [
+        { deviceId: 'D1', peerAddress: '89.207.56.253', peerAsn: 5607, state: 'Established', uptimeSeconds: 10, prefixesReceived: 1, prefixesAdvertised: 1, observedAt: at, interfaceId: 'Port-Channel4', connectionType: 'PNI' },
+      ],
+    };
+    const cfg: AdapterConfig = {
+      source: 'cloudvision', synthetic: false, now: Date.parse('2026-07-15T12:00:05Z'), staleAfterSeconds: 60,
+      expectedDeviceIds: [], classificationRules: rules, providerForAsn: {}, warningPercent: 80, criticalPercent: 90, primaryDirection: 'outbound',
+    };
+    const snap = buildSnapshot(raw, cfg);
+    expect(snap.bgpPeers[0].connectionType).toBe('PNI'); // description tag, not the interface's INEX
   });
 });

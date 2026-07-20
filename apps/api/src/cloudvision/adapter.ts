@@ -283,11 +283,31 @@ export function bgpSessionRole(connectionType: string | null): BgpSessionRole {
   return 'delivery';
 }
 
-function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, cfg: AdapterConfig): BgpPeer {
+/** Human connection label for a session inferred from the classified link type of the interface
+ *  it runs over — the fallback when the BGP description carries no explicit tag. RADAR already
+ *  classifies each interface (from its own description / device rules), so this is a derived
+ *  fact, not a guess. UNKNOWN → null (leave it blank rather than invent a type). */
+export function connectionFromLinkType(linkType: LinkType): string | null {
+  switch (linkType) {
+    case 'PRIVATE_PEERING': return 'PNI';
+    case 'IX_PEERING': return 'INEX';
+    case 'TRANSIT': return 'Transit';
+    case 'INTERNAL': return 'iBGP';
+    default: return null;
+  }
+}
+
+function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, intfByKey: Map<string, NetworkInterface>, cfg: AdapterConfig): BgpPeer {
   const state = normaliseBgpState(raw.state);
   const warnings = [...(raw.warnings ?? [])];
-  // A verified description hint wins over the ASN map; neither is fabricated.
-  const provider = raw.providerHint ?? (raw.peerAsn !== null ? cfg.providerForAsn?.[raw.peerAsn] ?? null : null);
+  // The interface this session runs over — its classification is the fallback for connection
+  // type and provider when the peer description doesn't carry them.
+  const intf = raw.interfaceId ? intfByKey.get(`${raw.deviceId}::${raw.interfaceId}`) : undefined;
+  // A verified description hint wins over the ASN map, which wins over the interface's provider;
+  // none is fabricated.
+  const provider = raw.providerHint ?? (raw.peerAsn !== null ? cfg.providerForAsn?.[raw.peerAsn] ?? null : null) ?? intf?.provider ?? null;
+  // Prefer the explicit description tag; else derive from the interface's classified link type.
+  const connectionType = (raw.connectionType ?? null) ?? (intf ? connectionFromLinkType(intf.linkType) : null);
   if (state === 'UNKNOWN') warnings.push(`Unrecognised BGP state "${raw.state}".`);
   return {
     deviceId: raw.deviceId,
@@ -295,8 +315,8 @@ function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, cfg: AdapterConfi
     peerAddress: raw.peerAddress,
     peerAsn: raw.peerAsn,
     provider,
-    connectionType: raw.connectionType ?? null,
-    role: bgpSessionRole(raw.connectionType ?? null),
+    connectionType,
+    role: bgpSessionRole(connectionType),
     description: raw.description ?? null,
     state,
     established: state === 'ESTABLISHED',
@@ -406,7 +426,9 @@ export function buildSnapshot(raw: RawSnapshot, cfg: AdapterConfig): NetworkStat
   const interfaces = raw.interfaces.map((i) =>
     buildInterface(i, raw.previousCounters?.get(counterKey(i.deviceId, i.name)), hostById.get(i.deviceId) ?? i.deviceId, cfg),
   );
-  const bgpPeers = raw.bgpPeers.map((p) => buildBgpPeer(p, hostById.get(p.deviceId) ?? p.deviceId, cfg));
+  // Index interfaces by device::name so a BGP session can inherit its interface's classification.
+  const intfByKey = new Map(interfaces.map((i) => [`${i.deviceId}::${i.name}`, i]));
+  const bgpPeers = raw.bgpPeers.map((p) => buildBgpPeer(p, hostById.get(p.deviceId) ?? p.deviceId, intfByKey, cfg));
   const linkGroups = buildLinkGroups(interfaces, cfg);
 
   const snapshotFreshness = aggregateFreshness(devices.map((d) => d.freshness), cfg.now, cfg.staleAfterSeconds);
