@@ -28,6 +28,8 @@ import { cloudflareRoutes } from './routes/cloudflare.js';
 import { cloudflareConnectionRoutes } from './routes/cloudflare-connection.js';
 import { fastlyRoutes } from './routes/fastly.js';
 import { fastlyConnectionRoutes } from './routes/fastly-connection.js';
+import { resolverRoutes } from './routes/resolvers.js';
+import { createAtlasManager, loadAtlasConfig, type ResolverManager } from './atlas/index.js';
 import { akamaiRoutes } from './routes/akamai.js';
 import { akamaiConnectionRoutes } from './routes/akamai-connection.js';
 import type { AkamaiConnector } from './akamai/index.js';
@@ -91,6 +93,7 @@ export interface BuildDeps extends AuthDeps {
   fastlyManager?: FastlyConnectorManager;
   akamaiConnector?: AkamaiConnector;
   akamaiManager?: AkamaiConnectorManager;
+  atlasManager?: ResolverManager;
 }
 
 export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<FastifyInstance> {
@@ -225,6 +228,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(akamaiConnectionRoutes, { prefix: '/api/v1', manager: deps.akamaiManager });
   await app.register(fastlyConnectionRoutes, { prefix: '/api/v1', manager: deps.fastlyManager });
   await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
+  await app.register(resolverRoutes, { prefix: '/api/v1', manager: deps.atlasManager ?? createAtlasManager(loadAtlasConfig()) });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
   app.get('/api/v1/openapi.json', { schema: { hide: true } }, async () => app.swagger());

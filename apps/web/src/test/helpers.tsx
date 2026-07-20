@@ -272,6 +272,14 @@ export const NETWORK_BGP_BODY = {
     { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', peerAddress: '185.6.36.8', peerAsn: 43760, provider: 'INEX', connectionType: 'Route collector', role: 'route-collector', description: '[RC] INEX route collector', state: 'ESTABLISHED', established: true, uptimeSeconds: 864000, prefixesReceived: 0, prefixesAdvertised: 0, interfaceId: 'Ethernet1', localAddress: '185.6.36.2', routerId: '185.6.36.8', adminShutdown: false, addressFamilies: ['IPv4'], status: 'healthy', freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
   ],
 };
+export const RESOLVERS_BODY = {
+  provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, notice: 'Synthetic', retrievedAt: '2026-07-20T22:00:00Z' },
+  target: 'live.rte.ie', observedAt: '2026-07-20T22:00:00Z', warnings: [], pollingEnabled: true,
+  isps: [
+    { isp: 'Eir', asn: 5466, measurementId: 192119190, covered: true, probeCount: 6, resolverCount: 9, platforms: { Réalta: 9 }, pools: { '185.54.104': 4, '185.54.105': 5 }, edgeTtl: { min: 26, max: 30 }, apexTtl: { min: 40, max: 300 }, honoursLowTtl: true, observedAt: '2026-07-20T22:00:00Z', samples: [{ probeId: 27252, resolver: '192.168.1.1', platform: 'Réalta', target: 'liveedge.rte.ie', vips: ['185.54.105.12'], apexTtl: 87, edgeTtl: 26, observedAt: '2026-07-20T22:00:00Z' }] },
+    { isp: 'Three', asn: 13280, measurementId: null, covered: false, note: 'No RIPE Atlas probe coverage for this ISP.', probeCount: 0, resolverCount: 0, platforms: {}, pools: {}, edgeTtl: null, apexTtl: null, honoursLowTtl: null, observedAt: null, samples: [] },
+  ],
+};
 export const NETWORK_HISTORY_BODY = {
   provenance: cvProv, count: 3,
   items: [
@@ -387,6 +395,10 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/network/devices')) body = NETWORK_DEVICES_BODY;
       else if (p.endsWith('/network/interfaces')) body = NETWORK_INTERFACES_BODY;
       else if (p.endsWith('/network/link-groups')) body = NETWORK_LINK_GROUPS_BODY;
+      else if (p.endsWith('/network/resolvers/check/results')) body = { snapshot: RESOLVERS_BODY, pending: false };
+      else if (p.endsWith('/network/resolvers/check')) body = { checks: [{ isp: 'Eir', asn: 5466, measurementId: 900001 }], startedAt: '2026-07-20T22:00:00Z' };
+      else if (p.endsWith('/network/resolvers/polling')) body = { pollingEnabled: JSON.parse(String(init?.body ?? '{}')).enabled ?? true };
+      else if (p.endsWith('/network/resolvers')) body = RESOLVERS_BODY;
       else if (p.endsWith('/network/bgp-peers')) body = overrides.bgpBody ?? NETWORK_BGP_BODY;
       else if (p.endsWith('/network/history')) body = NETWORK_HISTORY_BODY;
       else if (p.endsWith('/network/cloudflare/status')) body = CLOUDFLARE_STATUS_BODY;

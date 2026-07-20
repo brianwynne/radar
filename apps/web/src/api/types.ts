@@ -973,6 +973,47 @@ export interface NetworkStatusResponse {
   capturedAt: string | null;
 }
 export interface NetworkDevicesResponse { provenance: NetworkProvenance; count: number; items: NetworkDevice[] }
+
+// ---- Resolver reader (RIPE Atlas) ----
+export interface ResolverSample {
+  probeId: number;
+  resolver: string;
+  platform: string | null;
+  target: string | null;
+  vips: string[];
+  apexTtl: number | null;
+  edgeTtl: number | null;
+  observedAt: string | null;
+}
+export interface ResolverIspView {
+  isp: string;
+  asn: number;
+  measurementId: number | null;
+  covered: boolean;
+  note?: string;
+  probeCount: number;
+  resolverCount: number;
+  platforms: Record<string, number>;
+  pools: Record<string, number>;
+  edgeTtl: { min: number; max: number } | null;
+  apexTtl: { min: number; max: number } | null;
+  honoursLowTtl: boolean | null;
+  observedAt: string | null;
+  samples: ResolverSample[];
+}
+export interface ResolverSnapshot {
+  provenance: { source: 'ripe-atlas' | 'mock' | 'disabled'; synthetic: boolean; readOnly: true; informationalOnly: true; notice?: string; retrievedAt: string };
+  isps: ResolverIspView[];
+  observedAt: string | null;
+  target: string;
+  warnings: string[];
+  /** Whether the 6-hourly recurring baseline is currently running (credits) or paused. */
+  pollingEnabled?: boolean;
+}
+/** A handle for one on-demand "check now" run: the one-off measurement per ISP. */
+export interface ResolverCheck { isp: string; asn: number; measurementId: number }
+export interface ResolverCheckStart { checks: ResolverCheck[]; startedAt: string }
+export interface ResolverCheckResult { snapshot: ResolverSnapshot; pending: boolean }
 export interface NetworkInterfacesResponse { provenance: NetworkProvenance; count: number; items: NetworkInterface[] }
 export interface NetworkLinkGroupsResponse { provenance: NetworkProvenance; count: number; items: LinkGroup[] }
 export interface NetworkBgpPeersResponse { provenance: NetworkProvenance; count: number; items: BgpPeer[] }

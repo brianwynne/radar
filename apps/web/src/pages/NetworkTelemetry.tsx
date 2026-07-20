@@ -7,6 +7,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useCloudVision } from '../telemetry/use-cloudvision';
 import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
+import { ResolverView } from '../features/ResolverView';
 import type { LinkType, NetworkHealth, NetworkInterface } from '../api/types';
 
 const LINK_TYPES: LinkType[] = ['PRIVATE_PEERING', 'IX_PEERING', 'TRANSIT', 'INTERNAL', 'UNKNOWN'];
@@ -86,6 +87,7 @@ export function NetworkTelemetry() {
   // Poll on CloudVision's ~10-second publish grid — the interface `rates` node republishes
   // every ~10s, so this is the freshest the analytics API meaningfully offers.
   const t = useCloudVision(10_000);
+  const [tab, setTab] = useState<'telemetry' | 'resolvers'>('telemetry');
   const [provider, setProvider] = useState('');
   const [linkType, setLinkType] = useState('');
   const [status, setStatus] = useState('');
@@ -321,6 +323,13 @@ export function NetworkTelemetry() {
         </div>
       </header>
 
+      <nav className="subtabs">
+        <button className={`subtab ${tab === 'telemetry' ? 'active' : ''}`} onClick={() => setTab('telemetry')}>Telemetry</button>
+        <button className={`subtab ${tab === 'resolvers' ? 'active' : ''}`} onClick={() => setTab('resolvers')}>Resolvers</button>
+      </nav>
+
+      {tab === 'resolvers' && <ResolverView />}
+      {tab === 'telemetry' && (<>
       {t.notice && t.mode !== 'disabled' && <div className="notice info">{t.notice}</div>}
       {t.mode === 'disabled' && <div className="notice info">Telemetry not connected — the CloudVision connector is disabled. Enable it to see live edge-router state.</div>}
       {t.mode !== 'disabled' && t.status && t.status.edgeDeviceIdCount === 0 && t.status.deviceCount > 0 && (
@@ -588,6 +597,7 @@ export function NetworkTelemetry() {
           {bgpExcluded.routeCollector + bgpExcluded.internal === 1 ? 'session' : 'sessions'} hidden — they carry no audience traffic.
         </p>
       )}
+      </>)}
     </section>
   );
 }

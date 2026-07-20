@@ -1,0 +1,99 @@
+// RIPE Atlas resolver-reader configuration. READ-ONLY (the connector only READS measurement
+// results; the recurring measurements are created out-of-band). The API key is sourced from a
+// mounted secret first, then ATLAS_API_KEY, and is NEVER logged. Mock mode needs no credentials.
+import { existsSync, readFileSync } from 'node:fs';
+import { z } from 'zod';
+
+export type AtlasMode = 'mock' | 'live';
+
+/** One ISP → its ASN and the recurring RIPE Atlas measurement id (null = no probe coverage). */
+export interface AtlasIspMeasurement {
+  isp: string;
+  asn: number;
+  measurementId: number | null;
+}
+
+export interface AtlasConfig {
+  enabled: boolean;
+  mode: AtlasMode;
+  endpoint: string;
+  apiKey?: string;
+  /** The steering record the measurements query. */
+  target: string;
+  /** Edge (liveedge A) TTL at/below which a resolver is deemed to honour the low TTL. */
+  honourTtlThreshold: number;
+  measurements: AtlasIspMeasurement[];
+}
+
+const KEY_SECRET = '/run/secrets/atlas_api_key';
+
+// The measurements RADAR created (2026-07-20). Three (AS13280) has no Atlas probes → no coverage.
+const DEFAULT_MEASUREMENTS: AtlasIspMeasurement[] = [
+  { isp: 'Eir', asn: 5466, measurementId: 192119190 },
+  { isp: 'Sky', asn: 5607, measurementId: 192119191 },
+  { isp: 'Virgin/LG', asn: 6830, measurementId: 192119193 },
+  { isp: 'Vodafone', asn: 15502, measurementId: 192119194 },
+  { isp: 'Three', asn: 13280, measurementId: null },
+];
+
+const boolFrom = (def: boolean) =>
+  z.preprocess((v) => (v === undefined ? def : /^(1|true|yes|on)$/i.test(String(v))), z.boolean());
+
+const schema = z.object({
+  ATLAS_ENABLED: boolFrom(false),
+  ATLAS_MODE: z.enum(['mock', 'live']).default('mock'),
+  ATLAS_ENDPOINT: z.string().default('https://atlas.ripe.net/api/v2'),
+  ATLAS_API_KEY: z.string().optional(),
+  ATLAS_TARGET: z.string().default('live.rte.ie'),
+  ATLAS_HONOUR_TTL_THRESHOLD: z.coerce.number().int().positive().max(3600).default(60),
+  ATLAS_MEASUREMENTS: z.string().optional(),
+});
+
+function readSecretFile(path: string): string | undefined {
+  try {
+    if (existsSync(path)) {
+      const value = readFileSync(path, 'utf8').trim();
+      return value.length > 0 ? value : undefined;
+    }
+  } catch {
+    // Unreadable secret is treated as absent.
+  }
+  return undefined;
+}
+
+const measurementSchema = z.array(z.object({ isp: z.string(), asn: z.number().int(), measurementId: z.number().int().nullable() }));
+
+export function loadAtlasConfig(env: NodeJS.ProcessEnv = process.env): AtlasConfig {
+  const parsed = schema.safeParse(env);
+  if (!parsed.success) {
+    throw new Error(`Invalid RIPE Atlas configuration: ${parsed.error.issues.map((i) => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+  }
+  const p = parsed.data;
+  let measurements = DEFAULT_MEASUREMENTS;
+  if (p.ATLAS_MEASUREMENTS) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(p.ATLAS_MEASUREMENTS);
+    } catch (err) {
+      throw new Error(`RIPE Atlas configuration: ATLAS_MEASUREMENTS is not valid JSON: ${err instanceof Error ? err.message : 'parse error'}`);
+    }
+    const m = measurementSchema.safeParse(raw);
+    if (!m.success) throw new Error(`RIPE Atlas configuration: invalid ATLAS_MEASUREMENTS: ${m.error.issues.map((i) => i.message).join('; ')}`);
+    measurements = m.data;
+  }
+
+  const base: AtlasConfig = {
+    enabled: p.ATLAS_ENABLED,
+    mode: p.ATLAS_MODE,
+    endpoint: p.ATLAS_ENDPOINT.replace(/\/+$/, ''),
+    target: p.ATLAS_TARGET,
+    honourTtlThreshold: p.ATLAS_HONOUR_TTL_THRESHOLD,
+    measurements,
+  };
+
+  if (!p.ATLAS_ENABLED || p.ATLAS_MODE === 'mock') return base;
+
+  const apiKey = readSecretFile(KEY_SECRET) ?? p.ATLAS_API_KEY;
+  if (!apiKey) throw new Error('RIPE Atlas configuration: live mode requires an API key (/run/secrets/atlas_api_key or ATLAS_API_KEY).');
+  return { ...base, apiKey };
+}
