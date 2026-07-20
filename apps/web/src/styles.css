@@ -185,6 +185,8 @@ button.ghost.active { border-color: var(--brand); color: var(--brand-ink); backg
 .wt-outcomes li.dropped .mono { text-decoration: line-through; opacity: 0.7; }
 .wt-outcomes li.fallback .mono { color: var(--ok, #2f855a); font-weight: 600; }
 .chip.fallback { border-color: var(--ok, #2f855a); color: var(--ok, #2f855a); background: color-mix(in srgb, var(--ok, #2f855a) 10%, transparent); font-weight: 600; }
+/* Green highlight for the requester value that matched, inside a fence's asn/country list. */
+.match-hl { background: color-mix(in srgb, var(--ok, #2f855a) 28%, transparent); color: inherit; font-weight: 700; border-radius: 3px; padding: 0 2px; }
 .wt-compare-pick { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .matrix.wt-compare td, .matrix.wt-compare th { text-align: center; }
 .matrix.wt-compare td:first-child, .matrix.wt-compare th:first-child { text-align: left; }

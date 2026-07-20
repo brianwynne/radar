@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VE, renderAt, stubApi } from './helpers';
-import { question, branches, outcomesOf } from '../features/RecordWalkthrough';
+import { question, branches, outcomesOf, highlightMatches } from '../features/RecordWalkthrough';
 import type { FilterTrace } from '../api/types';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -31,6 +31,21 @@ describe('walkthrough branches()', () => {
     expect(branches(mkTrace('netfence_asn'))!.ifNo).toMatch(/only untagged/i);
     expect(branches(mkTrace('geofence_country'))!.ifNo).toMatch(/only answers with no country/i);
     expect(branches(mkTrace('weighted_shuffle'))).toBeNull(); // not a fence
+  });
+});
+
+describe('walkthrough highlightMatches()', () => {
+  it('highlights whole-token matches (the requester ASN/country) but not substrings', () => {
+    const { container } = render(<>{highlightMatches('ASN 5466 in answer set [112, 5466, 154660]', ['5466', undefined])}</>);
+    const marks = container.querySelectorAll('mark.match-hl');
+    expect(marks).toHaveLength(2); // the two standalone 5466s...
+    expect([...marks].every((m) => m.textContent === '5466')).toBe(true); // ...not the "5466" inside 154660
+  });
+
+  it('returns the text unchanged when there are no tokens', () => {
+    const { container } = render(<>{highlightMatches('country IE in [IE, GB]', [])}</>);
+    expect(container.querySelectorAll('mark').length).toBe(0);
+    expect(container.textContent).toBe('country IE in [IE, GB]');
   });
 });
 

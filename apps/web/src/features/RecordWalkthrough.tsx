@@ -4,7 +4,7 @@
 // RADAR reads and interprets, never assumes. Each step states the yes/no question the filter asks,
 // the rule for both branches, and what actually happened to EACH answer for this requester; the
 // final weighted step shows the probability split. A compare mode lines up several requesters.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api, ApiError } from '../api/client';
 import { ISPS, ispToScenario, matchIsp, type Isp } from '../steering/isps';
 import { filterMeta, removeFlagFor } from '../steering/record-config';
@@ -15,6 +15,26 @@ interface Form { asn: string; country: string; ecsPrefix: string; resolverIp: st
 const initialForm = (): Form => ({ ...ispToScenario(ISPS[0]), realtaDown: false });
 
 const pct = (s: number) => `${(s * 100).toFixed(s >= 0.1 ? 0 : 1)}%`;
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Render `text` with any whole-token occurrence of the requester's matched values (ASN, country)
+ *  wrapped in a green highlight, so the eye finds the match inside a long asn/country list fast. */
+export function highlightMatches(text: string, tokens: (string | undefined)[]): ReactNode {
+  const toks = tokens.filter((t): t is string => Boolean(t && t.trim()));
+  if (toks.length === 0) return text;
+  const re = new RegExp(`\\b(${toks.map(escapeRegExp).join('|')})\\b`, 'g');
+  const out: ReactNode[] = [];
+  let last = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    out.push(<mark key={m.index} className="match-hl">{m[0]}</mark>);
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
 
 function scenarioOf(f: Partial<Form>): ExplainRequest['scenario'] {
   const asn = f.asn && f.asn.trim() ? Number(f.asn.trim()) : undefined;
@@ -130,6 +150,8 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
   const platformOfId = (id: string) => answerById.get(id)?.deliveryPlatform ?? 'Unclassified';
   const labelOfId = (id: string) => { const a = answerById.get(id); return a ? (a.rdata[0] ?? a.label) : id; };
   const platformShares = useMemo(() => (ev ? platformSharesOf(ev) : []), [ev]);
+  // The requester's matched values (ASN, country) to highlight in fence reasons/lists.
+  const idTokens = useMemo(() => (ev ? [ev.identity.asn !== undefined ? String(ev.identity.asn) : undefined, ev.identity.country] : []), [ev]);
   const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }));
 
   return (
@@ -194,7 +216,7 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
                     {kept.map((o) => <span key={o.answerId} className={`chip kept ${o.fallback ? 'fallback' : ''}`} style={o.fallback ? undefined : { borderColor: colorFor(platformOfId(o.answerId)) }} title={o.reason || platformOfId(o.answerId)}>{labelOfId(o.answerId)}{o.fallback && ' · fallback'}</span>)}
                     {dropped.map((o) => <span key={o.answerId} className="chip dropped" title={o.reason || platformOfId(o.answerId)}>{labelOfId(o.answerId)}</span>)}
                   </div>
-                  <div className="wt-result muted">→ {t.reason}</div>
+                  <div className="wt-result muted">→ {highlightMatches(t.reason, idTokens)}</div>
                   {outcomes.some((o) => o.reason) && (
                     <>
                       <button className="linklike" onClick={() => toggle(t.index)}>{open.has(t.index) ? 'hide per-answer detail' : 'per-answer detail'}</button>
@@ -209,7 +231,7 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
                               ) : (
                                 <span className={`badge badge-sm ${o.disposition === 'removed' ? 'danger' : 'ok'}`}>{o.disposition === 'removed' ? 'dropped' : 'kept'}</span>
                               )}
-                              <span className="muted">{o.reason}</span>
+                              <span className="muted">{highlightMatches(o.reason, idTokens)}</span>
                             </li>
                           ))}
                         </ul>
