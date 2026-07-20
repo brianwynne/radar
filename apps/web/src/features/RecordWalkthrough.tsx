@@ -110,15 +110,20 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
 
   const activeIsp = matchIsp({ asn: form.asn, country: form.country });
 
+  // Re-evaluate every 5s so an NS1 edit to the record is reflected near-real-time; only the first
+  // run shows the "Evaluating…" state so polls don't flicker.
   useEffect(() => {
     let live = true;
-    setLoading(true);
-    setError(null);
-    api.explain({ zone, domain, type, scenario: scenarioOf(form) })
-      .then((r: ExplainResponse) => { if (live) setEv(r.evaluation); })
-      .catch((e: unknown) => { if (live) setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not evaluate the record.'); })
-      .finally(() => { if (live) setLoading(false); });
-    return () => { live = false; };
+    const run = (initial: boolean) => {
+      if (initial) setLoading(true);
+      api.explain({ zone, domain, type, scenario: scenarioOf(form) })
+        .then((r: ExplainResponse) => { if (live) { setEv(r.evaluation); setError(null); } })
+        .catch((e: unknown) => { if (live) setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not evaluate the record.'); })
+        .finally(() => { if (live && initial) setLoading(false); });
+    };
+    run(true);
+    const id = setInterval(() => run(false), 5000);
+    return () => { live = false; clearInterval(id); };
   }, [zone, domain, type, form]);
 
   const answerById = useMemo(() => new Map<string, TracedAnswer>((ev?.answers ?? []).map((a) => [a.id, a])), [ev]);

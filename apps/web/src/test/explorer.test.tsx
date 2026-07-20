@@ -34,6 +34,13 @@ describe('NS1 Explorer — discovery & selection', () => {
     expect(screen.getAllByText('TTL 30s').length).toBeGreaterThan(0); // vod.rte.ie list badge + selected-record header
   });
 
+  it('shows a live 5-second refresh indicator on the record', async () => {
+    stubApi(VE);
+    renderAt('/explorer/rte.ie/live.rte.ie/A');
+    await screen.findByText('192.0.2.10'); // record loaded
+    expect(screen.getByText(/live.*5s/i)).toBeInTheDocument();
+  });
+
   it('gates the raw NS1 view on ns1.raw.read', async () => {
     const detailOnly = { ...VE, permissions: VE.permissions.filter((p) => p !== 'ns1.raw.read') };
     stubApi(detailOnly);

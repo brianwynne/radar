@@ -315,6 +315,7 @@ table.matrix tbody tr.row-selected { background: var(--info-bg); cursor: pointer
 .linklike.muted { color: var(--ink-soft); }
 .linklike.danger { color: var(--danger, #c53030); }
 .ttl-badge { margin-left: 0.4rem; font-variant-numeric: tabular-nums; }
+.record-freshness { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 0.5rem; }
 .linklike:disabled { opacity: 0.5; cursor: default; }
 .rename-inline { display: inline-flex; align-items: center; gap: 0.5rem; }
 .rename-inline input { padding: 0.15rem 0.4rem; }

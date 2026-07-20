@@ -28,6 +28,7 @@ interface RecordSummary {
 // (resolved live from live.rte.ie's CNAME). DEFAULT_RECORD is only a fallback if the active record
 // can't be resolved.
 const DEFAULT_ZONE = 'nsone.rte.ie';
+const RECORD_POLL_MS = 5000; // near-real-time: re-read the selected record every 5s
 const DEFAULT_RECORD = { domain: 'live.nsone.rte.ie', type: 'CNAME' };
 
 function zoneName(z: unknown, i: number): string {
@@ -140,7 +141,11 @@ export function Ns1Explorer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [zone, domain, type, location.key]);
 
-  // The selected record (normalised or raw).
+  // The selected record (normalised or raw), polled every 5s so an NS1 edit shows up in near-real
+  // time. A checksum guard means the view only re-renders (and flags "config changed") when the
+  // config actually differs — unchanged polls just refresh the "read Ns ago" freshness.
+  const bodyRef = useRef<string | null>(null);
+  const [configChanged, setConfigChanged] = useState(false);
   useEffect(() => {
     if (!zone || !domain || !type) {
       setPayload(null);
@@ -149,17 +154,40 @@ export function Ns1Explorer() {
     let active = true;
     setPayload(null);
     setRecordError(null);
+    bodyRef.current = null;
+    setConfigChanged(false);
     const useRaw = view === 'raw' && canRaw;
-    const load = useRaw
-      ? api.rawRecord(zone, domain, type).then((r) => ({ provenance: r.provenance, body: r.raw }))
-      : api.record(zone, domain, type).then((r) => ({ provenance: r.provenance, body: r.record }));
-    load
-      .then((p) => active && setPayload(p))
-      .catch((e: unknown) => active && setRecordError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not load the record.'));
+    const fetchOnce = async () => {
+      try {
+        const r = useRaw
+          ? await api.rawRecord(zone, domain, type).then((x) => ({ provenance: x.provenance, body: x.raw as Record<string, unknown> }))
+          : await api.record(zone, domain, type).then((x) => ({ provenance: x.provenance, body: x.record as Record<string, unknown> }));
+        if (!active) return;
+        const str = JSON.stringify(r.body);
+        const first = bodyRef.current === null;
+        if (first || str !== bodyRef.current) {
+          if (!first) setConfigChanged(true); // the record changed in NS1 since the last read
+          bodyRef.current = str;
+          setPayload(r);
+        }
+        setRecordError(null);
+      } catch (e) {
+        if (active) setRecordError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not load the record.');
+      }
+    };
+    void fetchOnce();
+    const id = setInterval(() => void fetchOnce(), RECORD_POLL_MS);
     return () => {
       active = false;
+      clearInterval(id);
     };
   }, [zone, domain, type, view, canRaw]);
+  // Clear the "config changed" flash a few seconds after it fires.
+  useEffect(() => {
+    if (!configChanged) return;
+    const id = setTimeout(() => setConfigChanged(false), 8000);
+    return () => clearTimeout(id);
+  }, [configChanged]);
 
   const selectRecord = (r: RecordSummary) => navigate(`/explorer/${zone}/${r.domain}/${r.type}`);
 
@@ -325,7 +353,11 @@ export function Ns1Explorer() {
                     <span>This is the record <b>live.rte.ie</b> currently points to — it is steering live traffic.</span>
                   </div>
                 )}
-                <ProvenanceLine p={payload.provenance} />
+                <div className="record-freshness">
+                  <ProvenanceLine p={payload.provenance} />
+                  <span className="badge live-countdown badge-sm" title="RADAR re-reads this record from NS1 every 5 seconds"><span className="live-dot" /> live · 5s</span>
+                  {configChanged && <span className="badge warn badge-sm" title="The record changed in NS1 and the view was refreshed">config changed in NS1 — updated</span>}
+                </div>
                 {view === 'config' ? (
                   <RecordConfigView record={payload.body} zone={zone} domain={domain} type={type} />
                 ) : editing && view === 'raw' ? (
