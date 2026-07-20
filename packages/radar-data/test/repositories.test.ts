@@ -109,6 +109,16 @@ describe('PostgresSnapshotRepository (pg-mem)', () => {
     expect((await repo.updateLabel(created.id, '   '))?.label).toBeUndefined(); // blank clears
     expect(await repo.updateLabel('00000000-0000-0000-0000-000000000000', 'x')).toBeNull();
   });
+
+  it('delete removes a snapshot and returns it; 404s unknown ids', async () => {
+    const repo = new PostgresSnapshotRepository(db);
+    const created = await repo.create(sampleSnapshot);
+    const deleted = await repo.delete(created.id);
+    expect(deleted?.id).toBe(created.id);
+    expect(await repo.getById(created.id)).toBeNull(); // gone
+    expect(await repo.delete(created.id)).toBeNull(); // already deleted
+    expect(await repo.delete('00000000-0000-0000-0000-000000000000')).toBeNull();
+  });
 });
 
 describe('PostgresAuditRepository (pg-mem)', () => {

@@ -10,4 +10,6 @@ export interface SnapshotRepository {
    *  checksums and provenance are immutable). Returns null when the id is unknown.
    *  A null/blank label clears it. */
   updateLabel(id: string, label: string | null): Promise<ConfigurationSnapshot | null>;
+  /** Permanently delete a snapshot. Returns the deleted row (for auditing) or null if unknown. */
+  delete(id: string): Promise<ConfigurationSnapshot | null>;
 }

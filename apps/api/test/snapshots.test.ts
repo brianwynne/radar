@@ -30,6 +30,11 @@ function fakeDatabase() {
       s.label = label && label.trim() ? label.trim() : undefined;
       return s;
     },
+    async delete(id) {
+      const i = snaps.findIndex((x) => x.id === id);
+      if (i === -1) return null;
+      return snaps.splice(i, 1)[0];
+    },
   };
   const audit: AuditRepository = {
     async record(input) {
@@ -141,6 +146,27 @@ describe('snapshots — rename', () => {
     expect((await ve.inject({ method: 'PATCH', url: '/api/v1/snapshots/00000000-0000-0000-0000-000000000001', payload: { label: 'x' } })).statusCode).toBe(403);
     const eng = await makeApp('ENGINEER', fakeDatabase().db);
     expect((await eng.inject({ method: 'PATCH', url: '/api/v1/snapshots/00000000-0000-0000-0000-0000000000ee', payload: { label: 'x' } })).statusCode).toBe(404);
+  });
+});
+
+describe('snapshots — delete', () => {
+  it('deletes a snapshot (204), removes it, and audits it', async () => {
+    const { db, snaps, audits } = fakeDatabase();
+    const app = await makeApp('ENGINEER', db);
+    const id = (await app.inject({ method: 'POST', url: CAP })).json().snapshot.id;
+    expect(snaps).toHaveLength(1);
+    const res = await app.inject({ method: 'DELETE', url: `/api/v1/snapshots/${id}` });
+    expect(res.statusCode).toBe(204);
+    expect(snaps).toHaveLength(0); // gone
+    expect((await app.inject({ method: 'GET', url: `/api/v1/snapshots/${id}` })).statusCode).toBe(404);
+    expect(audits.some((a) => a.action === 'snapshot.delete' && (a.details as { snapshotId: string }).snapshotId === id)).toBe(true);
+  });
+
+  it('delete requires snapshot.create; unknown id 404s', async () => {
+    const ve = await makeApp('VIEWING_ENGINEER', fakeDatabase().db);
+    expect((await ve.inject({ method: 'DELETE', url: '/api/v1/snapshots/00000000-0000-0000-0000-000000000001' })).statusCode).toBe(403);
+    const eng = await makeApp('ENGINEER', fakeDatabase().db);
+    expect((await eng.inject({ method: 'DELETE', url: '/api/v1/snapshots/00000000-0000-0000-0000-0000000000ee' })).statusCode).toBe(404);
   });
 });
 

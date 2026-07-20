@@ -84,6 +84,14 @@ export class PostgresSnapshotRepository implements SnapshotRepository {
     return rows.length > 0 ? mapRow(rows[0] as Row) : null;
   }
 
+  async delete(id: string): Promise<ConfigurationSnapshot | null> {
+    const { rows } = await this.db.query<Row>(
+      `DELETE FROM configuration_snapshots WHERE id = $1 RETURNING ${COLUMNS}`,
+      [id],
+    );
+    return rows.length > 0 ? mapRow(rows[0] as Row) : null;
+  }
+
   async getById(id: string): Promise<ConfigurationSnapshot | null> {
     const { rows } = await this.db.query<Row>(
       `SELECT ${COLUMNS} FROM configuration_snapshots WHERE id = $1`,

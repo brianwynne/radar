@@ -19,7 +19,7 @@ function fakeDb() {
       return events.slice().reverse(); // newest first
     },
   };
-  const snapshots: SnapshotRepository = { async create() { throw new Error('n/a'); }, async getById() { return null; }, async list() { return []; }, async updateLabel() { return null; } };
+  const snapshots: SnapshotRepository = { async create() { throw new Error('n/a'); }, async getById() { return null; }, async list() { return []; }, async updateLabel() { return null; }, async delete() { return null; } };
   const db: Database = { snapshots, audit, async transaction(fn) { return fn({ snapshots, audit }); } };
   return { db, events, queries };
 }

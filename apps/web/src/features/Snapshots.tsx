@@ -69,6 +69,7 @@ export function SnapshotsPanel({ zone, domain, type }: { zone: string; domain: s
   const [renameId, setRenameId] = useState<string | null>(null); // snapshot currently being renamed
   const [draftLabel, setDraftLabel] = useState('');
   const [savingLabel, setSavingLabel] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   // Compare-with mode + the NS1 record chosen for record-mode ("domain|type").
   const [mode, setMode] = useState<CompareMode>('snapshot');
   const [recordChoice, setRecordChoice] = useState('');
@@ -160,6 +161,23 @@ export function SnapshotsPanel({ zone, domain, type }: { zone: string; domain: s
     }
   };
 
+  const removeSnapshot = async (s: SnapshotSummary) => {
+    const name = s.label ? `"${s.label}"` : new Date(s.retrievedAt).toLocaleString();
+    if (!window.confirm(`Delete snapshot ${name}? This cannot be undone.`)) return;
+    setDeletingId(s.id);
+    setError(null);
+    try {
+      await api.deleteSnapshot(s.id);
+      setSelected((sel) => sel.filter((x) => x !== s.id));
+      if (cmp) setCmp(null);
+      load();
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Delete failed.');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   const canCompare = mode === 'snapshot' ? selected.length === 2 : selected.length === 1 && recordChoice !== '';
   const runCompare = async () => {
     if (!canCompare) return;
@@ -211,6 +229,7 @@ export function SnapshotsPanel({ zone, domain, type }: { zone: string; domain: s
                   <th>Label</th>
                   <th>Checksum</th>
                   <th>Source</th>
+                  {canCreate && <th></th>}
                 </tr>
               </thead>
               <tbody>
@@ -258,6 +277,13 @@ export function SnapshotsPanel({ zone, domain, type }: { zone: string; domain: s
                     <td>
                       <SyntheticTag synthetic={Boolean(s.metadata?.synthetic)} />
                     </td>
+                    {canCreate && (
+                      <td>
+                        <button className="linklike danger" aria-label={`delete snapshot ${s.id}`} title="Delete this snapshot" disabled={deletingId === s.id} onClick={() => void removeSnapshot(s)}>
+                          {deletingId === s.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

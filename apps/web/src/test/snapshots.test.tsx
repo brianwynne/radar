@@ -6,7 +6,7 @@ import { ENGINEER, VE, renderAt, stubApi } from './helpers';
 const rowOf = (label: string) => screen.getByText(label).closest('tr') as HTMLElement;
 const fetchCalls = () => (globalThis.fetch as unknown as { mock: { calls: [string, RequestInit?][] } }).mock.calls;
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 const RECORD = '/explorer/rte.ie/live.rte.ie/A';
 
@@ -49,11 +49,32 @@ describe('Snapshots (in NS1 Explorer)', () => {
     await waitFor(() => expect(within(row).queryByRole('textbox')).toBeNull());
   });
 
-  it('does not show rename controls to a read-only Viewing Engineer', async () => {
+  it('does not show rename or delete controls to a read-only Viewing Engineer', async () => {
     stubApi(VE);
     renderAt(RECORD);
     await screen.findByText('before change');
     expect(screen.queryByRole('button', { name: /rename snapshot/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /delete snapshot/i })).toBeNull();
+  });
+
+  it('lets an Engineer delete a snapshot after confirming', async () => {
+    stubApi(ENGINEER);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderAt(RECORD);
+    await screen.findByText('before change');
+    await userEvent.click(within(rowOf('before change')).getByRole('button', { name: /delete snapshot/i }));
+    expect(confirmSpy).toHaveBeenCalled();
+    const del = fetchCalls().find((c) => /\/api\/v1\/snapshots\/[^/]+$/.test(String(c[0])) && c[1]?.method === 'DELETE');
+    expect(del).toBeTruthy();
+  });
+
+  it('cancelling the confirm does not delete', async () => {
+    stubApi(ENGINEER);
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderAt(RECORD);
+    await screen.findByText('before change');
+    await userEvent.click(within(rowOf('before change')).getByRole('button', { name: /delete snapshot/i }));
+    expect(fetchCalls().some((c) => /\/api\/v1\/snapshots\/[^/]+$/.test(String(c[0])) && c[1]?.method === 'DELETE')).toBe(false);
   });
 
   it('compares two selected snapshots and shows the diff', async () => {

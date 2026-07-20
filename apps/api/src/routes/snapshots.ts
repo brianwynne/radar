@@ -135,6 +135,28 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
     return { snapshot: detail(updated) };
   });
 
+  // Delete — permanently remove a snapshot. snapshot.create (Engineer), audited.
+  app.delete('/snapshots/:snapshotId', { preHandler: requirePermission('snapshot.create'), schema: doc('Delete a snapshot') }, async (req, reply) => {
+    if (!requireDb(database, req, reply)) return reply;
+    const { snapshotId } = req.params as { snapshotId: string };
+    if (!UUID.test(snapshotId)) return reply.code(404).send({ code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found.', correlationId: req.id });
+    const deleted = await database.snapshots.delete(snapshotId);
+    if (!deleted) return reply.code(404).send({ code: 'SNAPSHOT_NOT_FOUND', message: 'Snapshot not found.', correlationId: req.id });
+    const principal = req.principal!;
+    await database.audit.record({
+      actorSubject: principal.subject,
+      actorRoles: principal.roles,
+      authenticationMethod: principal.authenticationMethod,
+      action: 'snapshot.delete',
+      resourceType: 'record',
+      resourceKey: deleted.resourceKey,
+      outcome: 'success',
+      correlationId: req.id,
+      details: { snapshotId: deleted.id, label: deleted.label ?? null, rawChecksum: deleted.rawChecksum },
+    });
+    return reply.code(204).send();
+  });
+
   // Compare — structural diff of two snapshots' canonical payloads.
   app.post('/snapshots/compare', { preHandler: requirePermission('snapshot.read'), schema: doc('Compare two snapshots') }, async (req, reply) => {
     if (!requireDb(database, req, reply)) return reply;

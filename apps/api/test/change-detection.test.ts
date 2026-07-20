@@ -46,6 +46,7 @@ function fakeDb() {
       s.label = label ?? undefined;
       return s;
     },
+    async delete(id) { const i = snaps.findIndex((x) => x.id === id); return i === -1 ? null : snaps.splice(i, 1)[0]; },
   };
   const audit: AuditRepository = {
     async record(input) {
