@@ -6,6 +6,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { ProvenanceLine } from '../components/Provenance';
+import { RecordEditor } from '../components/RecordEditor';
 import { addRecent, getRecent, type RecordRef } from '../ns1/recent';
 import { SnapshotsPanel } from '../features/Snapshots';
 import { ExplainPanel, type ExplainScenario } from '../features/ExplainPanel';
@@ -57,6 +58,7 @@ export function Ns1Explorer() {
   const [records, setRecords] = useState<RecordSummary[] | null>(null);
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [view, setView] = useState<View>('normalised');
+  const [editing, setEditing] = useState(false); // raw-view record editor (edit + Copy for NS1)
   const [payload, setPayload] = useState<{ provenance: Provenance; body: Record<string, unknown> } | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
   const [recent, setRecent] = useState<RecordRef[]>(getRecent());
@@ -268,7 +270,7 @@ export function Ns1Explorer() {
               <h3 style={{ margin: 0 }}>
                 Record: <span className="mono">{domain}</span> {type}
               </h3>
-              <button className={`ghost ${view === 'normalised' ? 'active' : ''}`} onClick={() => setView('normalised')}>
+              <button className={`ghost ${view === 'normalised' ? 'active' : ''}`} onClick={() => { setView('normalised'); setEditing(false); }}>
                 Normalised
               </button>
               <button
@@ -279,6 +281,15 @@ export function Ns1Explorer() {
               >
                 Raw NS1
               </button>
+              {canRaw && view === 'raw' && payload !== null && (
+                <button
+                  className={`ghost ${editing ? 'active' : ''}`}
+                  onClick={() => setEditing((v) => !v)}
+                  title="Edit the record JSON and copy an NS1-ready payload"
+                >
+                  {editing ? 'Done editing' : 'Edit / Copy for NS1'}
+                </button>
+              )}
               {canExplain && (
                 <button className={`primary ${showExplain ? 'active' : ''}`} style={{ marginLeft: 'auto' }} onClick={() => setShowExplain((v) => !v)}>
                   {showExplain ? 'Hide explanation' : 'Explain this record'}
@@ -298,7 +309,11 @@ export function Ns1Explorer() {
                   </div>
                 )}
                 <ProvenanceLine p={payload.provenance} />
-                <pre className="raw-json">{JSON.stringify(payload.body, null, 2)}</pre>
+                {editing && view === 'raw' ? (
+                  <RecordEditor initial={payload.body} onClose={() => setEditing(false)} />
+                ) : (
+                  <pre className="raw-json">{JSON.stringify(payload.body, null, 2)}</pre>
+                )}
               </>
             )}
           </div>

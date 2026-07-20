@@ -6,6 +6,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { SyntheticTag } from '../components/Provenance';
+import { RecordEditor } from '../components/RecordEditor';
 import type { CompareCurrentResponse, JsonDiffEntry, SnapshotDetail as Detail } from '../api/types';
 
 type Tab = 'summary' | 'canonical' | 'raw';
@@ -74,6 +75,7 @@ export function SnapshotDetail() {
   const [tab, setTab] = useState<Tab>('summary');
   const [cmp, setCmp] = useState<CompareCurrentResponse | null>(null);
   const [cmpError, setCmpError] = useState<string | null>(null);
+  const [editingRaw, setEditingRaw] = useState(false); // raw-tab record editor (edit + Copy for NS1)
   const [comparing, setComparing] = useState(false);
 
   useEffect(() => {
@@ -158,7 +160,18 @@ export function SnapshotDetail() {
         {tab === 'canonical' && <pre className="raw-json">{JSON.stringify(snap.canonicalPayload, null, 2)}</pre>}
         {tab === 'raw' &&
           (canRaw ? (
-            <pre className="raw-json">{JSON.stringify(snap.rawPayload, null, 2)}</pre>
+            <>
+              <div className="step-head">
+                <button className={`ghost ${editingRaw ? 'active' : ''}`} onClick={() => setEditingRaw((v) => !v)} title="Edit this snapshot's JSON and copy an NS1-ready payload">
+                  {editingRaw ? 'Done editing' : 'Edit / Copy for NS1'}
+                </button>
+              </div>
+              {editingRaw ? (
+                <RecordEditor initial={snap.rawPayload} onClose={() => setEditingRaw(false)} />
+              ) : (
+                <pre className="raw-json">{JSON.stringify(snap.rawPayload, null, 2)}</pre>
+              )}
+            </>
           ) : (
             <div className="notice info">The raw payload requires the <code>ns1.raw.read</code> permission.</div>
           ))}

@@ -110,6 +110,11 @@ button.ghost.active { border-color: var(--brand); color: var(--brand-ink); backg
 .compare-controls legend { padding: 0 0.4rem; font-size: 0.75rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
 .compare-controls label.radio { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
 .compare-controls label.field { flex-direction: row; align-items: center; gap: 0.5rem; font-weight: 600; }
+/* Read-only record editor (edit JSON locally + Copy for NS1; RADAR never writes). */
+.record-editor { display: flex; flex-direction: column; gap: 0.5rem; }
+.record-editor-text { width: 100%; box-sizing: border-box; resize: vertical; min-height: 12rem; font-size: 0.8rem; padding: 0.6rem; }
+.record-editor-status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+.record-editor-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
 .step-idx { font-weight: 700; color: var(--ink-soft); }
 .step-type { font-weight: 700; }
 .step-reason { color: var(--ink-soft); margin-top: 0.35rem; }
