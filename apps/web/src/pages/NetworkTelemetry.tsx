@@ -238,16 +238,18 @@ export function NetworkTelemetry() {
     return out;
   }, [interfaces, sort, collapsed]);
 
-  // The delivery view shows only edge delivery sessions — route-collector and internal (iBGP)
-  // sessions carry no audience traffic and are excluded (their count is surfaced below).
+  // The delivery view hides only sessions EXPLICITLY classified as non-delivery (route-collector
+  // or internal iBGP). Fail open: an absent/unknown role is treated as delivery, so peers never
+  // vanish when the API predates the role field.
+  const isNonDelivery = (role: string | null | undefined) => role === 'route-collector' || role === 'internal';
   const bgpProviders = useMemo(
-    () => [...new Set(t.bgpPeers.filter((p) => p.role === 'delivery').map((p) => p.provider).filter((x): x is string => !!x))].sort(),
+    () => [...new Set(t.bgpPeers.filter((p) => !isNonDelivery(p.role)).map((p) => p.provider).filter((x): x is string => !!x))].sort(),
     [t.bgpPeers],
   );
   const bgpPeers = useMemo(
     () =>
       t.bgpPeers.filter((p) => {
-        if (p.role !== 'delivery') return false; // route-collector / iBGP are not delivery paths
+        if (isNonDelivery(p.role)) return false; // route-collector / iBGP are not delivery paths
         if (device && p.deviceId !== device) return false; // Router (shared with the rest of the page)
         if (bgpProvider && p.provider !== bgpProvider) return false;
         if (bgpAsn.trim() && !String(p.peerAsn ?? '').includes(bgpAsn.trim())) return false;
@@ -257,7 +259,7 @@ export function NetworkTelemetry() {
   );
   // Non-delivery sessions excluded from the delivery view (within the current router scope).
   const bgpExcluded = useMemo(() => {
-    const scoped = t.bgpPeers.filter((p) => (device ? p.deviceId === device : true) && p.role !== 'delivery');
+    const scoped = t.bgpPeers.filter((p) => (device ? p.deviceId === device : true) && isNonDelivery(p.role));
     return {
       routeCollector: scoped.filter((p) => p.role === 'route-collector').length,
       internal: scoped.filter((p) => p.role === 'internal').length,

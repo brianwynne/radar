@@ -2,7 +2,7 @@
 // tables from the mock API, shows the mock/informational provenance, and filters interfaces.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
-import { NOC, VE, renderAt, stubApi } from './helpers';
+import { NOC, VE, renderAt, stubApi, NETWORK_BGP_BODY } from './helpers';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -169,6 +169,18 @@ describe('Network Telemetry page', () => {
     // Expanded → the two sessions appear; the correlated interface load shows on the session row.
     const peerRow = within(within(bgpTable()).getByText('185.6.36.1').closest('tr')!);
     expect(peerRow.getByText(/Gb\/s · 40\.0%/)).toBeInTheDocument();
+  });
+
+  it('fails open: peers still show when the API response has no role field (legacy API)', async () => {
+    // Simulate an API that predates the `role` field — every peer's role is undefined.
+    const legacy = { ...NETWORK_BGP_BODY, items: NETWORK_BGP_BODY.items.map((it) => { const copy: Record<string, unknown> = { ...it }; delete copy.role; return copy; }) };
+    stubApi(NOC, { bgpBody: legacy });
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    // An unknown role must be treated as delivery — the provider groups must NOT vanish.
+    expect(within(bgpTable()).getByText('Eir')).toBeInTheDocument();
+    expect(within(bgpTable()).getByText('Cogent')).toBeInTheDocument();
+    expect(within(bgpTable()).queryByText('No BGP peers.')).not.toBeInTheDocument();
   });
 
   it('excludes route-collector sessions from the delivery view and notes the hidden count', async () => {

@@ -348,7 +348,7 @@ let akamaiConnectionState: Record<string, unknown> = { ...defaultAkamaiConnectio
 const defaultNs1Connection = { connector: 'ns1', mode: 'mock', apiBase: 'https://api.nsone.net/v1', keyConfigured: false, keySetAt: null, updatedBy: null, updatedAt: null, source: 'environment', live: false, masterKeyAvailable: true, degraded: null };
 let ns1ConnectionState: Record<string, unknown> = { ...defaultNs1Connection };
 
-export function stubApi(principal: Principal): void {
+export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } = {}): void {
   connectionState = { ...defaultConnection };
   cloudflareConnectionState = { ...defaultCloudflareConnection };
   fastlyConnectionState = { ...defaultFastlyConnection };
@@ -369,7 +369,7 @@ export function stubApi(principal: Principal): void {
       else if (p.endsWith('/network/devices')) body = NETWORK_DEVICES_BODY;
       else if (p.endsWith('/network/interfaces')) body = NETWORK_INTERFACES_BODY;
       else if (p.endsWith('/network/link-groups')) body = NETWORK_LINK_GROUPS_BODY;
-      else if (p.endsWith('/network/bgp-peers')) body = NETWORK_BGP_BODY;
+      else if (p.endsWith('/network/bgp-peers')) body = overrides.bgpBody ?? NETWORK_BGP_BODY;
       else if (p.endsWith('/network/history')) body = NETWORK_HISTORY_BODY;
       else if (p.endsWith('/network/cloudflare/status')) body = CLOUDFLARE_STATUS_BODY;
       else if (p.endsWith('/network/cloudflare/load-balancers')) body = CLOUDFLARE_LBS_BODY;
