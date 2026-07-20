@@ -3,7 +3,7 @@
 // is informational (RADAR issues no writes); configured facts (capacity, classification) are
 // shown distinctly from observed telemetry, and a missing/stale value is shown as such —
 // never invented. Auto-refreshes; clearly indicates stale data.
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useCloudVision } from '../telemetry/use-cloudvision';
 import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
@@ -22,6 +22,9 @@ function formatUptime(seconds: number | null): string {
 }
 
 const num = (n: number | null | undefined): string => (n === null || n === undefined ? '—' : String(n));
+
+// Colour a BGP connection type: PNI (dedicated) green, INEX (exchange) info, Transit amber.
+const connBadge = (t: string): string => (t === 'PNI' ? 'ok' : t === 'Transit' ? 'warn' : t === 'INEX' ? 'info' : 'neutral');
 
 // Link-type groups matching the summary's Peering / Transit totals.
 const PEERING_TYPES: LinkType[] = ['PRIVATE_PEERING', 'IX_PEERING'];
@@ -91,6 +94,8 @@ export function NetworkTelemetry() {
   const [hideIdle, setHideIdle] = useState(true); // default ON: hide ports carrying no traffic (0 b/s either direction)
   const [bgpProvider, setBgpProvider] = useState(''); // BGP-table filters
   const [bgpAsn, setBgpAsn] = useState('');
+  const [bgpOpen, setBgpOpen] = useState<Set<string>>(new Set()); // expanded provider groups
+  const toggleBgp = (k: string) => setBgpOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' });
   const sortBy = (col: 'name' | 'current' | 'util') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'name' ? 'asc' : 'desc' }));
   const arrow = (col: 'name' | 'current' | 'util') => (sort.col === col ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '');
@@ -244,6 +249,29 @@ export function NetworkTelemetry() {
       }),
     [t.bgpPeers, device, bgpProvider, bgpAsn],
   );
+
+  // Group BGP sessions by provider (fallback ASN / peer address) — one operator may hold several
+  // sessions (PNI + INEX, across both edge routers); the group summary expands to the sessions.
+  const bgpGroups = useMemo(() => {
+    const by = new Map<string, typeof bgpPeers>();
+    for (const p of bgpPeers) {
+      const key = p.provider ?? (p.peerAsn !== null ? `AS${p.peerAsn}` : p.peerAddress);
+      const arr = by.get(key);
+      if (arr) arr.push(p);
+      else by.set(key, [p]);
+    }
+    return [...by.entries()]
+      .map(([key, sessions]) => ({
+        key,
+        provider: sessions.find((s) => s.provider)?.provider ?? null,
+        asn: sessions.find((s) => s.peerAsn !== null)?.peerAsn ?? null,
+        types: [...new Set(sessions.map((s) => s.connectionType).filter((x): x is string => !!x))],
+        intfs: [...new Set(sessions.map((s) => s.interfaceId).filter((x): x is string => !!x))],
+        anyDown: sessions.some((s) => !s.established),
+        sessions,
+      }))
+      .sort((a, b) => (a.provider ?? a.key).localeCompare(b.provider ?? b.key, undefined, { numeric: true }));
+  }, [bgpPeers]);
 
   const stale = t.status !== null && (t.status.lastError !== null || (t.completeness?.level === 'empty' && t.status.enabled) || t.warnings.some((w) => /stale|unavailable/i.test(w)));
 
@@ -492,36 +520,43 @@ export function NetworkTelemetry() {
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
-            <tr><th>Router</th><th>Provider</th><th>Peer</th><th>ASN</th><th>State</th><th>Interface</th><th>Link load</th><th>Uptime</th><th>Families</th></tr>
+            <tr><th></th><th>Provider</th><th>ASN</th><th>Connection</th><th>Sessions</th><th>Interfaces</th><th>State</th></tr>
           </thead>
           <tbody>
-            {bgpPeers.length === 0 && <tr><td colSpan={9} className="center-note">No BGP peers.</td></tr>}
-            {bgpPeers.map((p) => {
-              const m = bgpMeta(p.state);
-              const itf = p.interfaceId ? itfByKey.get(`${p.deviceId}::${p.interfaceId}`) : undefined;
-              const peerTitle = [p.localAddress && `local ${p.localAddress}`, p.routerId && `router-id ${p.routerId}`].filter(Boolean).join(' · ');
+            {bgpGroups.length === 0 && <tr><td colSpan={7} className="center-note">No BGP peers.</td></tr>}
+            {bgpGroups.map((g) => {
+              const open = bgpOpen.has(g.key);
               return (
-                <tr key={`${p.deviceId}::${p.peerAddress}`}>
-                  <td>{p.deviceHostname}</td>
-                  <td>{p.provider ?? '—'}</td>
-                  <td title={peerTitle || undefined}>{p.peerAddress}</td>
-                  <td>{p.peerAsn ?? '—'}</td>
-                  <td>
-                    <span className={`badge ${m.badge}`}>{m.label}</span>
-                    {p.adminShutdown && <span className="badge warn badge-sm" title="Administratively shut down"> shut</span>}
-                  </td>
-                  <td>{p.interfaceId ?? '—'}</td>
-                  {/* The physical link's live load (from the correlated interface), colour-coded by utilisation. */}
-                  {itf ? (
-                    <td className={utilClass(levelByKey.get(`${p.deviceId}::${itf.name}`) ?? 'ok')}>
-                      {formatBps(itf.primaryBps)} · {formatPercent(itf.utilisationPercent)}
-                    </td>
-                  ) : (
-                    <td>—</td>
-                  )}
-                  <td>{formatUptime(p.uptimeSeconds)}</td>
-                  <td className="muted">{p.addressFamilies.length ? p.addressFamilies.join(', ') : '—'}</td>
-                </tr>
+                <Fragment key={g.key}>
+                  <tr className="row-click" onClick={() => toggleBgp(g.key)}>
+                    <td><button className="tree-toggle" aria-label={open ? 'collapse' : 'expand'}>{open ? '▾' : '▸'}</button></td>
+                    <td><strong>{g.provider ?? '—'}</strong></td>
+                    <td>{g.asn !== null ? `AS${g.asn}` : '—'}</td>
+                    <td>{g.types.length ? g.types.map((ty) => <span key={ty} className={`badge badge-sm ${connBadge(ty)}`} style={{ marginRight: '0.25rem' }}>{ty}</span>) : <span className="muted">—</span>}</td>
+                    <td>{g.sessions.length}</td>
+                    <td className="muted">{g.intfs.join(', ') || '—'}</td>
+                    <td>{g.anyDown ? <span className="badge danger badge-sm">degraded</span> : <span className="badge ok badge-sm">up</span>}</td>
+                  </tr>
+                  {open && g.sessions.map((p) => {
+                    const m = bgpMeta(p.state);
+                    const itf = p.interfaceId ? itfByKey.get(`${p.deviceId}::${p.interfaceId}`) : undefined;
+                    return (
+                      <tr key={`${p.deviceId}::${p.peerAddress}`} className="bgp-session">
+                        <td></td>
+                        <td className="muted" colSpan={2}>{p.deviceHostname} · <span className="mono">{p.peerAddress}</span></td>
+                        <td>
+                          {p.connectionType && <span className={`badge badge-sm ${connBadge(p.connectionType)}`}>{p.connectionType}</span>}
+                          {p.interfaceId && <span className="muted"> {p.interfaceId}</span>}
+                        </td>
+                        <td><span className={`badge ${m.badge} badge-sm`}>{m.label}</span>{p.adminShutdown && <span className="badge warn badge-sm" title="Administratively shut down"> shut</span>}</td>
+                        <td className={itf ? utilClass(levelByKey.get(`${p.deviceId}::${itf.name}`) ?? 'ok') : undefined}>
+                          {itf ? `${formatBps(itf.primaryBps)} · ${formatPercent(itf.utilisationPercent)}` : '—'}
+                        </td>
+                        <td className="muted">{formatUptime(p.uptimeSeconds)}{p.addressFamilies.length ? ` · ${p.addressFamilies.join(', ')}` : ''}</td>
+                      </tr>
+                    );
+                  })}
+                </Fragment>
               );
             })}
           </tbody>

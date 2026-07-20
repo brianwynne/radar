@@ -28,11 +28,9 @@ describe('Network Telemetry page', () => {
     // Top-interfaces-by-bandwidth section renders (replaced the provider cards).
     expect(screen.getByRole('heading', { name: 'Top interfaces by bandwidth' })).toBeInTheDocument();
 
-    // Interface + BGP content.
+    // Interface content + BGP grouped by provider (Eir, Cogent as distinct groups).
     expect(screen.getAllByText('down').length).toBeGreaterThan(0); // transit oper/status
-    expect(screen.getByText('185.6.36.1')).toBeInTheDocument();
-    expect(screen.getByText('established')).toBeInTheDocument();
-    expect(screen.getByText('idle')).toBeInTheDocument();
+    expect(within(bgpTable()).getByText('Cogent')).toBeInTheDocument(); // a BGP provider group
   });
 
   it('filters interfaces by link type', async () => {
@@ -156,33 +154,39 @@ describe('Network Telemetry page', () => {
     expect(eir).not.toHaveClass('util-crit');
   });
 
-  it('correlates each BGP peer with the interface it runs on and shows the link load', async () => {
+  const bgpTable = () => screen.getByRole('columnheader', { name: 'Connection' }).closest('table')! as HTMLElement;
+
+  it('groups BGP by provider and expands to show sessions with connection type + link load', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin');
-    // The Eir peer (185.6.36.1) runs on Ethernet1 — its row shows the interface and its load.
-    const peerRow = within(screen.getByText('185.6.36.1').closest('tr')!);
-    expect(peerRow.getByText('Ethernet1')).toBeInTheDocument(); // interfaceId
-    expect(peerRow.getByText(/Gb\/s · 40\.0%/)).toBeInTheDocument(); // correlated link load (current · util)
-    expect(peerRow.getByText('IPv4')).toBeInTheDocument(); // active address families
+    // Eir is one provider group showing its dedicated PNI (connection type).
+    expect(within(bgpTable()).getByText('Eir')).toBeInTheDocument();
+    expect(within(bgpTable()).getByText('PNI')).toBeInTheDocument();
+    // Individual sessions are hidden until the group is expanded.
+    expect(within(bgpTable()).queryByText('185.6.36.1')).not.toBeInTheDocument();
+    fireEvent.click(within(bgpTable()).getByText('Eir'));
+    // Expanded → the two sessions appear; the correlated interface load shows on the session row.
+    const peerRow = within(within(bgpTable()).getByText('185.6.36.1').closest('tr')!);
+    expect(peerRow.getByText(/Gb\/s · 40\.0%/)).toBeInTheDocument();
   });
 
-  it('filters BGP peers by provider and ASN', async () => {
+  it('filters BGP groups by provider and ASN', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin');
-    const bgpTable = () => screen.getByRole('columnheader', { name: 'Families' }).closest('table')! as HTMLElement;
-    // Both peers visible initially (Eir 185.6.36.1, AS174 154.54.1.1).
-    expect(within(bgpTable()).getByText('185.6.36.1')).toBeInTheDocument();
-    // Filter by ASN 174 → only the AS174 peer remains.
+    // Both provider groups initially (Eir, Cogent).
+    expect(within(bgpTable()).getByText('Eir')).toBeInTheDocument();
+    expect(within(bgpTable()).getByText('Cogent')).toBeInTheDocument();
+    // Filter by ASN 174 → only the Cogent (AS174) group remains.
     fireEvent.change(screen.getByLabelText('ASN'), { target: { value: '174' } });
-    expect(within(bgpTable()).queryByText('185.6.36.1')).not.toBeInTheDocument(); // Eir is AS5466
-    expect(within(bgpTable()).getByText('154.54.1.1')).toBeInTheDocument();
-    // Clear ASN, filter by provider Eir → only the Eir peer remains.
+    expect(within(bgpTable()).queryByText('Eir')).not.toBeInTheDocument();
+    expect(within(bgpTable()).getByText('Cogent')).toBeInTheDocument();
+    // Clear ASN, filter by provider Eir → only the Eir group.
     fireEvent.change(screen.getByLabelText('ASN'), { target: { value: '' } });
     fireEvent.change(screen.getAllByLabelText('Provider')[1], { target: { value: 'Eir' } }); // BGP Provider filter
-    expect(within(bgpTable()).getByText('185.6.36.1')).toBeInTheDocument();
-    expect(within(bgpTable()).queryByText('154.54.1.1')).not.toBeInTheDocument();
+    expect(within(bgpTable()).getByText('Eir')).toBeInTheDocument();
+    expect(within(bgpTable()).queryByText('Cogent')).not.toBeInTheDocument();
   });
 
   it('lists configured peering capacity per link inside the Peering tile (LAG members excluded)', async () => {

@@ -870,6 +870,8 @@ export interface BgpPeer {
   peerAddress: string;
   peerAsn: number | null;
   provider: string | null;
+  connectionType: string | null;
+  description: string | null;
   state: BgpState;
   established: boolean;
   uptimeSeconds: number | null;

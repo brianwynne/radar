@@ -71,6 +71,10 @@ export interface RawBgpPeer {
   /** Provider derived from a verified source (e.g. the peer description tag); preferred over
    *  the ASN map. Never a fabricated association. */
   providerHint?: string | null;
+  /** Human connection type from the description tag (PNI / INEX / Transit / Peer / …). */
+  connectionType?: string | null;
+  /** Raw peer description (e.g. "[PNI] Eir"), for the session drill-down. */
+  description?: string | null;
   /** Physical interface the session runs over (from the peer record's intfId). */
   interfaceId?: string | null;
   localAddress?: string | null;
@@ -279,6 +283,8 @@ function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, cfg: AdapterConfi
     peerAddress: raw.peerAddress,
     peerAsn: raw.peerAsn,
     provider,
+    connectionType: raw.connectionType ?? null,
+    description: raw.description ?? null,
     state,
     established: state === 'ESTABLISHED',
     uptimeSeconds: raw.uptimeSeconds,

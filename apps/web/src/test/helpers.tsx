@@ -244,10 +244,12 @@ export const NETWORK_LINK_GROUPS_BODY = {
   ],
 };
 export const NETWORK_BGP_BODY = {
-  provenance: cvProv, count: 2,
+  provenance: cvProv, count: 3,
   items: [
-    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', peerAddress: '185.6.36.1', peerAsn: 5466, provider: 'Eir', state: 'ESTABLISHED', established: true, uptimeSeconds: 864000, prefixesReceived: 850000, prefixesAdvertised: 40, interfaceId: 'Ethernet1', localAddress: '185.6.36.2', routerId: '89.207.56.211', adminShutdown: false, addressFamilies: ['IPv4'], status: 'healthy', freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
-    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', peerAddress: '154.54.1.1', peerAsn: 174, provider: null, state: 'IDLE', established: false, uptimeSeconds: 0, prefixesReceived: 0, prefixesAdvertised: 40, interfaceId: null, localAddress: null, routerId: null, adminShutdown: false, addressFamilies: [], status: 'critical', freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+    // Eir holds TWO sessions (a dedicated PNI + an INEX bilateral) — they group under one provider.
+    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', peerAddress: '185.6.36.1', peerAsn: 5466, provider: 'Eir', connectionType: 'Peer', description: '[Peer] Eir', state: 'ESTABLISHED', established: true, uptimeSeconds: 864000, prefixesReceived: 850000, prefixesAdvertised: 40, interfaceId: 'Ethernet1', localAddress: '185.6.36.2', routerId: '89.207.56.211', adminShutdown: false, addressFamilies: ['IPv4'], status: 'healthy', freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', peerAddress: '185.6.42.1', peerAsn: 5466, provider: 'Eir', connectionType: 'PNI', description: '[PNI] Eir', state: 'ESTABLISHED', established: true, uptimeSeconds: 864000, prefixesReceived: 850000, prefixesAdvertised: 40, interfaceId: 'Port-Channel7', localAddress: '185.6.42.2', routerId: '89.207.56.211', adminShutdown: false, addressFamilies: ['IPv4'], status: 'healthy', freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+    { deviceId: 'JPE00000001', deviceHostname: 'edge1.dub.rte.ie', peerAddress: '154.54.1.1', peerAsn: 174, provider: 'Cogent', connectionType: 'Transit', description: '[Transit] Cogent', state: 'IDLE', established: false, uptimeSeconds: 0, prefixesReceived: 0, prefixesAdvertised: 40, interfaceId: 'Ethernet8/1/1', localAddress: null, routerId: null, adminShutdown: false, addressFamilies: [], status: 'critical', freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
   ],
 };
 export const NETWORK_HISTORY_BODY = {

@@ -115,8 +115,11 @@ export interface BgpPeerFields {
   intfId: string | null;
   /** Provider parsed from the description (e.g. "Cogent" from "[Transit] Cogent 3-…"). */
   provider: string | null;
-  /** Link-type hint from a description tag like "[Transit]"/"[Peering]"/"[IX]". */
+  /** Link-type hint from a description tag like "[Transit]"/"[PNI]"/"[INEX]". */
   linkTypeHint: 'TRANSIT' | 'PRIVATE_PEERING' | 'IX_PEERING' | null;
+  /** Human connection type from the description tag: PNI / INEX / Transit / Peer / Route collector /
+   *  iBGP (verbatim-ish), for display + grouping. Null when the description carries no tag. */
+  connectionType: string | null;
   /** Epoch SECONDS of the last into/out-of-established transition (→ uptime when established). */
   establishedTime: number | null;
   /** Remote peer's BGP router-id. */
@@ -129,7 +132,7 @@ export interface BgpPeerFields {
 /** Parse a `bgpPeerInfoStatusEntry/<peer>` leaf updates map. */
 export function parseBgpPeer(updates: Record<string, unknown>): BgpPeerFields {
   const description = str(updates.bgpPeerDescription);
-  const { provider, linkTypeHint } = parseBgpDescription(description);
+  const { provider, linkTypeHint, connectionType } = parseBgpDescription(description);
   return {
     asn: num(updates.bgpPeerAs),
     state: bgpStateName(updates.bgpState),
@@ -138,6 +141,7 @@ export function parseBgpPeer(updates: Record<string, unknown>): BgpPeerFields {
     intfId: str(updates.intfId),
     provider,
     linkTypeHint,
+    connectionType,
     establishedTime: num(updates.bgpPeerIntoOrOutOfEstablishedTime),
     routerId: str(updates.bgpPeerRouterId),
     adminShutdown: bool(updates.bgpPeerAdminShutDown),
@@ -164,17 +168,27 @@ export function parseAfiSafiActive(v: unknown): string[] {
 
 /** Extract provider + link-type from a peer description like "[Transit] Cogent 3-002188930".
  *  Only associates a provider where the description supports it — never fabricated. */
-export function parseBgpDescription(description: string | null): { provider: string | null; linkTypeHint: BgpPeerFields['linkTypeHint'] } {
-  if (!description) return { provider: null, linkTypeHint: null };
+export function parseBgpDescription(description: string | null): { provider: string | null; linkTypeHint: BgpPeerFields['linkTypeHint']; connectionType: string | null } {
+  if (!description) return { provider: null, linkTypeHint: null, connectionType: null };
   const tag = /^\s*\[([^\]]+)\]\s*/.exec(description);
   let linkTypeHint: BgpPeerFields['linkTypeHint'] = null;
+  let connectionType: string | null = null;
   let rest = description;
   if (tag) {
     const t = tag[1].toLowerCase();
-    linkTypeHint = /transit/.test(t) ? 'TRANSIT' : /ix|inex|exchange/.test(t) ? 'IX_PEERING' : /peer/.test(t) ? 'PRIVATE_PEERING' : null;
+    // Human connection type (PNI is a private interconnect; INEX/IX is exchange peering).
+    connectionType = /pni/.test(t) ? 'PNI'
+      : /transit/.test(t) ? 'Transit'
+      : /inex|\bix\b|exchange/.test(t) ? 'INEX'
+      : /route\s*collector|^rc$/.test(t) ? 'Route collector'
+      : /ibgp/.test(t) ? 'iBGP'
+      : /peer/.test(t) ? 'Peer'
+      : tag[1];
+    linkTypeHint = /pni|peer/.test(t) ? 'PRIVATE_PEERING' : /inex|\bix\b|exchange/.test(t) ? 'IX_PEERING' : /transit/.test(t) ? 'TRANSIT' : null;
     rest = description.slice(tag[0].length);
   }
-  // Provider = the first token after the tag (e.g. "Cogent"), trimmed of trailing ref codes.
-  const provider = rest.trim().split(/[\s,]+/)[0] || null;
-  return { provider: provider && provider.length > 0 ? provider : null, linkTypeHint };
+  // Provider = the text after the tag, minus a trailing ref code like "3-002188930" (keeps
+  // multi-word names, e.g. "Liberty Global", "BT Ireland").
+  const provider = rest.trim().replace(/\s+\d+-\S+$/, '').trim() || null;
+  return { provider, linkTypeHint, connectionType };
 }

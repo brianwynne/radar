@@ -84,16 +84,20 @@ describe('parseUtilisation + speedFromUtilisation', () => {
 });
 
 describe('parseBgpDescription', () => {
-  it('extracts provider + link-type from a tagged description', () => {
-    expect(parseBgpDescription('[Transit] Cogent 3-002188930')).toEqual({ provider: 'Cogent', linkTypeHint: 'TRANSIT' });
-    expect(parseBgpDescription('[Peering] Eir')).toEqual({ provider: 'Eir', linkTypeHint: 'PRIVATE_PEERING' });
-    expect(parseBgpDescription('[IX] INEX route-server')).toEqual({ provider: 'INEX', linkTypeHint: 'IX_PEERING' });
+  it('extracts provider, link-type and connection type from a tagged description', () => {
+    expect(parseBgpDescription('[Transit] Cogent 3-002188930')).toEqual({ provider: 'Cogent', linkTypeHint: 'TRANSIT', connectionType: 'Transit' });
+    // PNI is a private interconnect (was previously mis-classified as no link type).
+    expect(parseBgpDescription('[PNI] Eir')).toEqual({ provider: 'Eir', linkTypeHint: 'PRIVATE_PEERING', connectionType: 'PNI' });
+    expect(parseBgpDescription('[Peer] Vodafone')).toEqual({ provider: 'Vodafone', linkTypeHint: 'PRIVATE_PEERING', connectionType: 'Peer' });
+    expect(parseBgpDescription('[INEX] Router Server 2')).toEqual({ provider: 'Router Server 2', linkTypeHint: 'IX_PEERING', connectionType: 'INEX' });
+    // Multi-word providers are kept (only trailing ref codes are stripped).
+    expect(parseBgpDescription('[PNI] Liberty Global')).toMatchObject({ provider: 'Liberty Global', connectionType: 'PNI' });
   });
-  it('untagged description → provider from first token, no link-type', () => {
-    expect(parseBgpDescription('Blacknight')).toEqual({ provider: 'Blacknight', linkTypeHint: null });
+  it('untagged description → provider from the text, no link-type / connection type', () => {
+    expect(parseBgpDescription('Blacknight')).toEqual({ provider: 'Blacknight', linkTypeHint: null, connectionType: null });
   });
   it('null description → nothing (never fabricated)', () => {
-    expect(parseBgpDescription(null)).toEqual({ provider: null, linkTypeHint: null });
+    expect(parseBgpDescription(null)).toEqual({ provider: null, linkTypeHint: null, connectionType: null });
   });
 });
 

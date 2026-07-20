@@ -123,6 +123,10 @@ export interface BgpPeer {
   peerAsn: number | null;
   /** Provider derived from classification (by ASN or peer address), when known. */
   provider: string | null;
+  /** Human connection type from the peer description tag (PNI / INEX / Transit / Peer / …). */
+  connectionType: string | null;
+  /** Raw peer description (e.g. "[PNI] Eir"). */
+  description: string | null;
   state: BgpState;
   established: boolean;
   uptimeSeconds: number | null;

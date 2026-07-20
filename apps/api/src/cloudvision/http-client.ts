@@ -401,6 +401,8 @@ export class HttpCloudVisionReadClient implements CloudVisionClient {
         observedAt: leaf.observedAt ?? new Date(now),
         // Provider is taken ONLY from the verified peer description tag, never fabricated.
         providerHint: p.provider,
+        connectionType: p.connectionType,
+        description: p.description,
         interfaceId: p.intfId,
         localAddress: p.localAddr,
         routerId: p.routerId,

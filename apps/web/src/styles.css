@@ -375,3 +375,5 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .col-pin input { cursor: pointer; }
 .focused-lbs { margin: 0.5rem 0 1rem; padding: 0.75rem; border: 1px solid var(--accent, var(--border)); border-radius: 10px; }
 .focused-lb { border: 1px solid var(--border); }
+/* Expanded BGP session sub-rows under a provider group. */
+.matrix tr.bgp-session > td { background: color-mix(in srgb, var(--line) 22%, transparent); font-size: 0.82rem; }
