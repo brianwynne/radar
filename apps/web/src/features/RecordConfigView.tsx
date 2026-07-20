@@ -6,7 +6,7 @@
 import { useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { colorFor, orderOf, platformOf } from '../steering/platforms';
-import { asnList, countryList, countryName, filterMeta, summariseCountries, weightShares } from '../steering/record-config';
+import { asnList, countryList, countryName, filterMeta, removeFlagFor, summariseCountries, weightShares } from '../steering/record-config';
 
 interface Ns1Answer { id?: string; answer?: unknown; meta?: Record<string, unknown>; region?: string }
 interface Ns1Filter { filter?: string; disabled?: boolean; config?: Record<string, unknown> }
@@ -120,14 +120,38 @@ export function RecordConfigView({ record, zone, domain, type }: { record: Recor
               const m = filterMeta(f.filter ?? '');
               const cfg = f.config ?? {};
               const n = num(cfg.N) ? cfg.N : num((cfg as { n?: unknown }).n) ? (cfg as { n: number }).n : null;
+              const rf = removeFlagFor(f.filter ?? '', cfg); // read from the actual filter config
+              const fkey = `f:${i}`;
+              const open = expanded.has(fkey);
+              const hasDetail = Boolean(m.ns1Description) || rf !== null;
               return (
                 <li key={i} className={`filter-step ${f.disabled ? 'disabled' : ''}`}>
                   <div className="filter-step-head">
                     <span className="filter-step-name">{m.label}{n !== null ? ` · N=${n}` : ''}</span>
+                    {m.category && <span className="badge neutral badge-sm" title="NS1 filter category">{m.category}</span>}
                     <span className={`badge badge-sm ${m.supported ? 'ok' : 'warn'}`} title={m.supported ? 'RADAR evaluates this filter' : 'Unsupported → partial evaluation'}>{m.supported ? m.behaviour : 'partial'}</span>
                     {f.disabled && <span className="badge neutral badge-sm">disabled</span>}
+                    {rf && <span className={`badge badge-sm ${rf.enabled ? 'info' : 'neutral'}`} title={rf.label}>remove untagged: {rf.enabled ? 'on' : 'off'}</span>}
+                    {hasDetail && <button className="linklike" onClick={() => toggle(fkey)}>{open ? 'less' : 'details'}</button>}
                   </div>
-                  <div className="filter-step-desc muted">{m.description}</div>
+                  <div className="filter-step-desc muted">{m.summary}</div>
+                  {open && (
+                    <div className="filter-step-detail">
+                      {m.ns1Description && (
+                        <>
+                          <div className="tag-key">NS1's description</div>
+                          <p>{m.ns1Description}</p>
+                        </>
+                      )}
+                      {rf && (
+                        <p className="muted">
+                          <strong>{rf.label}: {rf.enabled ? 'enabled' : 'disabled'}.</strong>{' '}
+                          {rf.explain}
+                          {rf.explainSource === 'ns1' && <span className="muted"> (NS1's own wording)</span>}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </li>
               );
             })}

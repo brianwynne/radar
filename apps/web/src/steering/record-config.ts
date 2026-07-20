@@ -63,34 +63,171 @@ export function summariseCountries(codes: string[]): CountrySummary {
   return { codes: norm, excluded: null, phrase: norm.length <= 3 ? shown : `${norm.length} countries` };
 }
 
-// --- Filter chain: NS1 filter type → label + plain-language behaviour + support in RADAR. ---
+// --- Filter chain: NS1 filter type → label, category, a short summary, and NS1's OWN
+// authoritative description (verbatim from IBM NS1 Connect) where captured. Categories +
+// behaviour icons come from NS1's "Create a Filter Chain" catalogue. ---
 export type FilterBehaviour = 'eliminate' | 'reorder' | 'select' | 'modify' | 'group' | 'unknown';
+// NS1's filter categories (from the filter-chain builder).
+export type FilterCategory = 'Geographic' | 'Fencing' | 'Health checks' | 'Traffic Management' | 'Other' | 'Pulsar';
 export interface FilterMeta {
   label: string;
+  category: FilterCategory | null;
   behaviour: FilterBehaviour;
-  description: string;
+  /** RADAR's own plain-language one-liner (always shown, clearly attributed to RADAR). */
+  summary: string;
+  /** NS1's OWN verbatim description — present ONLY for filters whose text we have captured from
+   *  NS1 directly. RADAR never fabricates NS1 wording; when this is absent, only the RADAR
+   *  summary is shown. */
+  ns1Description?: string;
   /** RADAR's engine evaluates this filter type; unsupported ones fall back to partial evaluation. */
   supported: boolean;
 }
 
+// `ns1Description` holds NS1's OWN verbatim text — set ONLY for filters captured directly from
+// NS1's UI. All other `summary` lines are RADAR's plain-language interpretation of the documented
+// filter type; the UI attributes them to RADAR and never presents them as NS1's wording.
 const FILTERS: Record<string, FilterMeta> = {
-  up: { label: 'Up', behaviour: 'eliminate', supported: true, description: 'Removes answers marked down (by health check or data feed).' },
-  geofence_country: { label: 'Geofence Country', behaviour: 'eliminate', supported: true, description: "Keeps answers tagged with the client's country; when any country matches, untagged/other-country answers are dropped." },
-  geofence_regional: { label: 'Geofence Regional', behaviour: 'eliminate', supported: true, description: "Keeps answers tagged with the client's region; drops non-matching when any region matches." },
-  netfence_asn: { label: 'Netfence ASN', behaviour: 'eliminate', supported: true, description: "Keeps answers tagged with the client's network (ASN); when any ASN matches, untagged answers are dropped." },
-  netfence_prefix: { label: 'Netfence Prefix', behaviour: 'eliminate', supported: true, description: "Keeps answers tagged with the client's IP prefix; drops non-matching when any prefix matches." },
-  geotarget_country: { label: 'Geotarget Country', behaviour: 'reorder', supported: true, description: "Sorts answers by proximity to the client's country (no elimination)." },
-  weighted_shuffle: { label: 'Weighted Shuffle', behaviour: 'reorder', supported: true, description: 'Randomly orders the remaining answers, biased by their weight — higher weight ⇒ more likely first.' },
-  shuffle: { label: 'Shuffle', behaviour: 'reorder', supported: false, description: 'Randomly orders the remaining answers (equal probability).' },
-  select_first_n: { label: 'Select First N', behaviour: 'select', supported: true, description: 'Keeps only the first N answers after the preceding filters (N=1 ⇒ a single served answer).' },
-  select_first_group: { label: 'Select First Group', behaviour: 'group', supported: false, description: 'Keeps only answers in the first surviving answer group.' },
-  priority: { label: 'Priority', behaviour: 'select', supported: false, description: 'Selects answers by ascending priority tier.' },
-  sticky: { label: 'Sticky', behaviour: 'reorder', supported: false, description: 'Consistently orders answers per client so repeat lookups are stable.' },
-  shed_load: { label: 'Shed Load', behaviour: 'eliminate', supported: false, description: 'Sheds answers by load watermark to protect overloaded targets.' },
+  // --- Health checks ---
+  up: {
+    label: 'Up', category: 'Health checks', behaviour: 'eliminate', supported: true,
+    summary: 'Removes answers marked down (by the up metadata field or a connected feed / monitor).',
+  },
+  shed_load: {
+    label: 'Shed Load', category: 'Health checks', behaviour: 'eliminate', supported: false,
+    summary: 'Sheds answers by a load watermark (from a connected feed) to protect overloaded targets.',
+  },
+  // --- Fencing ---
+  geofence_country: {
+    label: 'Geofence Country', category: 'Fencing', behaviour: 'eliminate', supported: true,
+    summary: "Keeps answers whose country metadata matches the requester's country; answers with no country are kept unless 'remove on match' is set.",
+  },
+  geofence_regional: {
+    label: 'Geofence Regional', category: 'Fencing', behaviour: 'eliminate', supported: true,
+    summary: "Keeps answers whose georegion matches the requester's region; answers with no georegion are kept unless 'remove on match' is set.",
+  },
+  netfence_asn: {
+    label: 'Netfence ASN', category: 'Fencing', behaviour: 'eliminate', supported: true,
+    summary: "Keeps answers whose asn list includes the requester's AS; answers with no asn are kept unless 'remove on match' is set.",
+    ns1Description:
+      "This filter eliminates answers where the Autonomous System (AS) of the requester's IP does not match the list of AS numbers associated with the answer. It examines the asn metadata field to get the allowed ASes for your answers, and the AS of the requester's IP is matched against the AS list to ensure IPs in their AS are allowed to receive the answer. Optionally, if no asn value is set for an answer, this filter will not eliminate the answer. For example, if your record has one answer with asn=[2914, 3257], and another answer with no value for asn, a request from an IP in AS2914 will receive both answers; a request from an IP in AS701 will receive only the second answer. If instead you want the request from AS2914 to receive only the first answer, enable the \"Remove answers without asn on match\" option. Do not rely on this filter for security purposes.",
+  },
+  netfence_prefix: {
+    label: 'Netfence Prefix', category: 'Fencing', behaviour: 'eliminate', supported: true,
+    summary: "Keeps answers whose ip_prefixes include the requester's IP; answers with no ip_prefixes are kept unless 'remove on match' is set.",
+    ns1Description:
+      "This filter eliminates answers where the requester's IP does not match the IP prefix list associated with the answer. It examines the ip_prefixes metadata field to get the allowed prefix(es) for your answers, and the requester's IP is matched against the prefix lists to ensure their IP is allowed to receive the answer. Optionally, if no ip_prefixes value is set for an answer, this filter will not eliminate the answer. For example, if your record has one answer with ip_prefixes=[1.2.3.0/24, 2.3.4.0/24], and another answer with no value for ip_prefixes, a request from 1.2.3.4 will receive both answers; a request from 5.6.7.8 will receive only the second answer. If instead you want the request from 1.2.3.4 to receive only the first answer, enable the \"Remove answers without ip_prefixes on match\" option. Do not rely on this filter for security purposes.",
+  },
+  // --- Geographic (reorder; ↕ in NS1's catalogue) ---
+  geotarget_country: {
+    label: 'Geotarget Country', category: 'Geographic', behaviour: 'reorder', supported: true,
+    summary: "Sorts answers by geographic proximity to the requester's country (reorders, does not eliminate).",
+  },
+  geotarget_regional: {
+    label: 'Geotarget Regional', category: 'Geographic', behaviour: 'reorder', supported: false,
+    summary: "Sorts answers by proximity to the requester's georegion (reorders).",
+  },
+  geotarget_latlong: {
+    label: 'Geotarget Latlong', category: 'Geographic', behaviour: 'reorder', supported: false,
+    summary: "Sorts answers by great-circle distance from the requester to each answer's lat/long (reorders).",
+  },
+  // --- Traffic Management ---
+  weighted_shuffle: {
+    label: 'Weighted Shuffle', category: 'Traffic Management', behaviour: 'reorder', supported: true,
+    summary: 'Randomly reorders answers biased by weight — higher weight ⇒ first more often.',
+    ns1Description:
+      'This filter examines the weight metadata field for all available answers, and reorders the answers by picking them randomly based on their weights until all answers have been randomly reordered. Answers with higher weight will be "first" more often. You can use this filter in conjunction with a filter like SELECT_FIRST_N to return one or more answers with probability proportional to their weights. Need to combine this with "sticky" behavior? Use WEIGHTED_STICKY.',
+  },
+  select_first_n: {
+    label: 'Select First N', category: 'Traffic Management', behaviour: 'select', supported: true,
+    summary: 'Keeps only the first N answers (N=1 ⇒ a single served answer).',
+    ns1Description: 'This filter eliminates all but the first N answers from the list. Use this with filters like SHUFFLE or WEIGHTED_SHUFFLE to implement round robin or weighted round robin.',
+  },
+  select_first_group: {
+    label: 'Select First Group', category: 'Traffic Management', behaviour: 'group', supported: false,
+    summary: 'Keeps only answers in the first surviving answer group.',
+  },
+  shuffle: {
+    label: 'Shuffle', category: 'Traffic Management', behaviour: 'reorder', supported: false,
+    summary: 'Randomly reorders the remaining answers with equal probability.',
+  },
+  cost: {
+    label: 'Cost', category: 'Traffic Management', behaviour: 'select', supported: false,
+    summary: 'Selects answers by the cost metadata field (lowest cost preferred).',
+  },
+  priority: {
+    label: 'Priority', category: 'Traffic Management', behaviour: 'select', supported: false,
+    summary: 'Selects answers by the priority metadata field (lowest number wins).',
+  },
+  sticky_shuffle: {
+    label: 'Sticky Shuffle', category: 'Traffic Management', behaviour: 'reorder', supported: false,
+    summary: 'Reorders answers deterministically per requester so repeat lookups are stable.',
+  },
+  group_sticky_shuffle: {
+    label: 'Group Sticky Shuffle', category: 'Traffic Management', behaviour: 'reorder', supported: false,
+    summary: 'Sticky shuffle applied at the answer-group level.',
+  },
+  weighted_sticky_shuffle: {
+    label: 'Weighted Sticky Shuffle', category: 'Traffic Management', behaviour: 'reorder', supported: false,
+    summary: 'Weighted shuffle with sticky (consistent-per-requester) ordering.',
+  },
+  // --- Other ---
+  additional_metadata: {
+    label: 'Additional Metadata', category: 'Other', behaviour: 'modify', supported: false,
+    summary: 'Attaches extra metadata to answers (does not eliminate or reorder).',
+  },
+  // --- Pulsar (advanced) ---
+  pulsar_availability_sort: {
+    label: 'Pulsar Availability Sort', category: 'Pulsar', behaviour: 'reorder', supported: false,
+    summary: 'Reorders answers by Pulsar-measured availability.',
+  },
+  pulsar_availability_threshold: {
+    label: 'Pulsar Availability Threshold', category: 'Pulsar', behaviour: 'eliminate', supported: false,
+    summary: 'Eliminates answers whose Pulsar availability is below a threshold.',
+  },
+  pulsar_performance_sort: {
+    label: 'Pulsar Performance Sort', category: 'Pulsar', behaviour: 'reorder', supported: false,
+    summary: 'Reorders answers by Pulsar-measured performance (RUM).',
+  },
+  pulsar_performance_stabilize: {
+    label: 'Pulsar Performance Stabilize', category: 'Pulsar', behaviour: 'eliminate', supported: false,
+    summary: 'Stabilises Pulsar performance-based selection to avoid flapping.',
+  },
 };
 
 export function filterMeta(type: string): FilterMeta {
-  return FILTERS[type] ?? { label: type.replace(/_/g, ' '), behaviour: 'unknown', supported: false, description: 'Unrecognised filter — RADAR falls back to partial evaluation for records using it.' };
+  return FILTERS[type] ?? {
+    label: type.replace(/_/g, ' '), category: null, behaviour: 'unknown', supported: false,
+    summary: 'Unrecognised filter type — RADAR has no local model for it, so records using it are reported as a partial evaluation.',
+  };
+}
+
+/** The "remove untagged answers on match" switch for the fence filters — read from the actual
+ *  filter config, never assumed. `explainSource` marks whether the explanation is NS1's own
+ *  verbatim text (asn/prefix, captured from NS1) or RADAR's plain-language wording. */
+export interface RemoveFlag { enabled: boolean; label: string; explain: string; explainSource: 'ns1' | 'radar' }
+const REMOVE_FLAGS: Record<string, { keys: string[]; label: string; explain: string; explainSource: 'ns1' | 'radar' }> = {
+  netfence_asn: {
+    keys: ['remove_no_asn'], explainSource: 'ns1',
+    label: 'Remove answers without asn list on any match',
+    explain: "If any answers have entries in the asn list matching the requester's AS, then eliminate all answers with no asn list; and if no answers match the requester, return answers with no asn list as fallbacks.",
+  },
+  netfence_prefix: {
+    keys: ['remove_no_ip_prefixes'], explainSource: 'ns1',
+    label: 'Remove answers without ip_prefixes on any match',
+    explain: 'If any answers have ip_prefixes matching the requester, then eliminate all answers with no ip_prefixes; and if no answers match the requester, return answers with no ip_prefixes as fallbacks.',
+  },
+  geofence_country: {
+    keys: ['remove_no_location', 'remove_no_country'], explainSource: 'radar',
+    label: 'Remove answers without a country on match',
+    explain: "RADAR's reading (NS1's own text for this option not captured): when any answer's country matches the requester, answers with no country are eliminated; if none match, answers with no country are returned as fallbacks.",
+  },
+};
+const truthy = (v: unknown): boolean => v === true || v === 1 || v === '1' || v === 'true';
+export function removeFlagFor(type: string, config: Record<string, unknown> | undefined): RemoveFlag | null {
+  const spec = REMOVE_FLAGS[type];
+  if (!spec) return null;
+  const enabled = spec.keys.some((k) => truthy(config?.[k])); // read from the real config, not assumed
+  return { enabled, label: spec.label, explain: spec.explain, explainSource: spec.explainSource };
 }
 
 // --- NS1 meta extraction (values may be scalar, array, or a {feed} pointer). ---

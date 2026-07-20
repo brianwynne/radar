@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { platformOf } from '../steering/platforms';
 import {
-  ISO_ALPHA2, asnList, countryList, countryName, filterMeta, summariseCountries, weightShares,
+  ISO_ALPHA2, asnList, countryList, countryName, filterMeta, removeFlagFor, summariseCountries, weightShares,
 } from '../steering/record-config';
 
 describe('platformOf (RDATA → delivery platform)', () => {
@@ -44,6 +44,41 @@ describe('filterMeta', () => {
     expect(filterMeta('select_first_n').supported).toBe(true);
     expect(filterMeta('shed_load').supported).toBe(false);
     expect(filterMeta('totally_unknown')).toMatchObject({ supported: false, behaviour: 'unknown' });
+  });
+
+  it("carries NS1's filter category and recognises the full catalogue", () => {
+    expect(filterMeta('netfence_asn').category).toBe('Fencing');
+    expect(filterMeta('geotarget_country').category).toBe('Geographic');
+    expect(filterMeta('weighted_shuffle').category).toBe('Traffic Management');
+    expect(filterMeta('up').category).toBe('Health checks');
+    expect(filterMeta('pulsar_performance_sort').category).toBe('Pulsar');
+    // Newly-catalogued types are recognised (not "unknown"), even if RADAR can't evaluate them yet.
+    expect(filterMeta('weighted_sticky_shuffle').behaviour).not.toBe('unknown');
+    expect(filterMeta('cost').label).toBe('Cost');
+    expect(filterMeta('totally_unknown').category).toBeNull();
+  });
+
+  it("carries NS1's verbatim description ONLY for the filters captured from NS1", () => {
+    // Provided by NS1 → verbatim text present.
+    expect(filterMeta('netfence_asn').ns1Description).toMatch(/Autonomous System \(AS\)/);
+    expect(filterMeta('netfence_prefix').ns1Description).toMatch(/ip_prefixes metadata field/);
+    expect(filterMeta('weighted_shuffle').ns1Description).toMatch(/weight metadata field/);
+    expect(filterMeta('select_first_n').ns1Description).toMatch(/eliminates all but the first N/);
+    // Not captured from NS1 → no fabricated NS1 text, only RADAR's summary.
+    expect(filterMeta('geofence_country').ns1Description).toBeUndefined();
+    expect(filterMeta('up').ns1Description).toBeUndefined();
+    expect(filterMeta('geofence_country').summary).toBeTruthy();
+  });
+});
+
+describe('removeFlagFor (reads the actual filter config, never assumes)', () => {
+  it('reflects the remove-untagged flag state from config', () => {
+    expect(removeFlagFor('netfence_asn', { remove_no_asn: '1' })).toMatchObject({ enabled: true, explainSource: 'ns1' });
+    expect(removeFlagFor('netfence_asn', {})?.enabled).toBe(false);
+    expect(removeFlagFor('netfence_asn', undefined)?.enabled).toBe(false);
+    expect(removeFlagFor('netfence_prefix', { remove_no_ip_prefixes: true })?.enabled).toBe(true);
+    expect(removeFlagFor('geofence_country', { remove_no_location: '1' })).toMatchObject({ enabled: true, explainSource: 'radar' });
+    expect(removeFlagFor('weighted_shuffle', {})).toBeNull(); // not a fence filter
   });
 });
 

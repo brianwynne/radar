@@ -129,6 +129,9 @@ button.ghost.active { border-color: var(--brand); color: var(--brand-ink); backg
 .filter-step-name { font-weight: 600; font-size: 0.85rem; }
 .filter-step-name::before { counter-increment: step; content: counter(step) ". "; color: var(--ink-soft); }
 .filter-step-desc { font-size: 0.76rem; margin-top: 0.2rem; }
+.filter-step-detail { margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--line); font-size: 0.76rem; }
+.filter-step-detail p { margin: 0.3rem 0 0; line-height: 1.4; }
+.filter-step-detail .tag-key { display: block; margin-top: 0.2rem; }
 .config-answers { display: flex; flex-direction: column; gap: 0.85rem; min-width: 0; }
 .platform-group-head { display: flex; align-items: center; gap: 0.45rem; margin-bottom: 0.35rem; }
 .platform-dot { width: 0.7rem; height: 0.7rem; border-radius: 50%; display: inline-block; flex: none; }
