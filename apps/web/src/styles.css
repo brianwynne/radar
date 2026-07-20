@@ -174,6 +174,19 @@ button.ghost.active { border-color: var(--brand); color: var(--brand-ink); backg
 .wt-bar-pct { text-align: right; font-variant-numeric: tabular-nums; }
 .wt-disclaimer { font-size: 0.74rem; margin-top: 0.3rem; }
 .wt-explanation { font-size: 0.85rem; padding: 0.6rem 0.75rem; border-left: 3px solid var(--line); background: var(--panel); border-radius: 6px; }
+.wt-modes { display: flex; gap: 0.4rem; }
+.wt-headline { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; padding: 0.5rem 0.75rem; border: 1px solid var(--line); border-radius: 8px; font-size: 0.9rem; }
+.wt-headline-share { display: inline-flex; align-items: center; gap: 0.3rem; font-weight: 600; }
+.wt-pool-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.4rem; }
+.chip.kept { border-width: 1px; }
+.chip.dropped { opacity: 0.55; text-decoration: line-through; }
+.wt-outcomes { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; }
+.wt-outcomes li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.wt-outcomes li.dropped .mono { text-decoration: line-through; opacity: 0.7; }
+.wt-compare-pick { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+.matrix.wt-compare td, .matrix.wt-compare th { text-align: center; }
+.matrix.wt-compare td:first-child, .matrix.wt-compare th:first-child { text-align: left; }
+.wt-compare-cell { font-variant-numeric: tabular-nums; font-weight: 600; }
 .step-idx { font-weight: 700; color: var(--ink-soft); }
 .step-type { font-weight: 700; }
 .step-reason { color: var(--ink-soft); margin-top: 0.35rem; }

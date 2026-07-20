@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VE, renderAt, stubApi } from './helpers';
-import { question, branches } from '../features/RecordWalkthrough';
+import { question, branches, outcomesOf } from '../features/RecordWalkthrough';
 import type { FilterTrace } from '../api/types';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -34,20 +34,45 @@ describe('walkthrough branches()', () => {
   });
 });
 
+describe('walkthrough outcomesOf()', () => {
+  it('prefers the engine outcomes, else synthesises disposition from input/output', () => {
+    const withOutcomes = { ...mkTrace('netfence_asn'), outcomes: [{ answerId: 'a', disposition: 'retained' as const, reason: 'ASN 5466 in answer set [5466]' }] };
+    expect(outcomesOf(withOutcomes)[0].reason).toMatch(/in answer set/);
+    const noOutcomes = { ...mkTrace('up'), input: ['a', 'b'], output: ['a'], outcomes: [] };
+    const derived = outcomesOf(noOutcomes);
+    expect(derived).toHaveLength(2);
+    expect(derived.find((o) => o.answerId === 'a')!.disposition).toBe('retained');
+    expect(derived.find((o) => o.answerId === 'b')!.disposition).toBe('removed');
+  });
+});
+
 describe('Walkthrough tab (in NS1 Explorer)', () => {
-  it('walks the chain top-down and shows how the weighting resolves', async () => {
+  it('walks the chain top-down, headlines the outcome, and shows how the weighting resolves', async () => {
     stubApi(VE);
     renderAt('/explorer/rte.ie/live.rte.ie/A');
     await userEvent.click(await screen.findByRole('button', { name: /^Walkthrough$/ }));
-    // Requester selector present.
     expect(await screen.findByLabelText(/Requester/i)).toBeInTheDocument();
+    // Plain-English headline (default requester is Eir).
+    expect(await screen.findByText('Eir', { selector: '.wt-headline strong' })).toBeInTheDocument();
     // Steps from the stub's traces (up + weighted_shuffle).
-    expect(await screen.findByText('Up')).toBeInTheDocument();
+    expect(screen.getByText('Up')).toBeInTheDocument();
     expect(screen.getByText('Weighted Shuffle')).toBeInTheDocument();
     expect(screen.getByText(/which answers are currently up/i)).toBeInTheDocument();
-    // Weighting resolves — Réalta 78% / Fastly 22% (from the stub distribution; appears in bar + table).
+    // Weighting resolves — Réalta 78% / Fastly 22% (headline + bar + table).
     await waitFor(() => expect(screen.getAllByText('78%').length).toBeGreaterThan(0));
     expect(screen.getAllByText('22%').length).toBeGreaterThan(0);
     expect(screen.getByText(/most likely delivery platform/i)).toBeInTheDocument();
+  });
+
+  it('compares several requesters side by side', async () => {
+    stubApi(VE);
+    renderAt('/explorer/rte.ie/live.rte.ie/A');
+    await userEvent.click(await screen.findByRole('button', { name: /^Walkthrough$/ }));
+    await userEvent.click(await screen.findByRole('button', { name: /Compare requesters/i }));
+    // A matrix with a platform row and per-ISP columns (default: first three ISPs).
+    expect(await screen.findByRole('columnheader', { name: /Eir/i })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: /Three Ireland/i })).toBeInTheDocument();
+    expect(screen.getByRole('cell', { name: /Réalta/i })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText('78%').length).toBeGreaterThan(0)); // Réalta share per ISP
   });
 });
