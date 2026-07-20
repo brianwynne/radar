@@ -871,6 +871,8 @@ export interface BgpPeer {
   peerAsn: number | null;
   provider: string | null;
   connectionType: string | null;
+  /** delivery = carries customer/audience traffic; route-collector / internal (iBGP) do not. */
+  role: 'delivery' | 'route-collector' | 'internal';
   description: string | null;
   state: BgpState;
   established: boolean;

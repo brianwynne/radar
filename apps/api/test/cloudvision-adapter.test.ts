@@ -2,7 +2,7 @@
 // an average of percentages); classification, freshness, BGP normalisation, completeness and
 // warnings are all exercised through the shared scenario fixtures.
 import { describe, it, expect } from 'vitest';
-import { buildSnapshot, normaliseBgpState, type AdapterConfig, type RawSnapshot } from '../src/cloudvision/adapter.js';
+import { buildSnapshot, normaliseBgpState, bgpSessionRole, type AdapterConfig, type RawSnapshot } from '../src/cloudvision/adapter.js';
 import { scenarioSnapshot, MOCK_EDGE_DEVICE_IDS, EDGE1, EDGE2 } from '../src/cloudvision/fixtures.js';
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_PROVIDER_FOR_ASN } from '../src/cloudvision/classification-rules.js';
 import type { ClassificationRule } from '../src/cloudvision/classification.js';
@@ -182,5 +182,39 @@ describe('normaliseBgpState', () => {
     expect(normaliseBgpState('Established')).toBe('ESTABLISHED');
     expect(normaliseBgpState('open confirm')).toBe('OPENCONFIRM');
     expect(normaliseBgpState('weird')).toBe('UNKNOWN');
+  });
+});
+
+describe('bgpSessionRole', () => {
+  it('route collectors and iBGP are non-delivery; everything external is delivery', () => {
+    expect(bgpSessionRole('Route collector')).toBe('route-collector');
+    expect(bgpSessionRole('RC')).toBe('route-collector');
+    expect(bgpSessionRole('iBGP')).toBe('internal');
+    expect(bgpSessionRole('Internal')).toBe('internal');
+    // Delivery paths — PNI / INEX / Transit / Peer, or an untagged external session.
+    expect(bgpSessionRole('PNI')).toBe('delivery');
+    expect(bgpSessionRole('INEX')).toBe('delivery');
+    expect(bgpSessionRole('Transit')).toBe('delivery');
+    expect(bgpSessionRole('Peer')).toBe('delivery');
+    expect(bgpSessionRole(null)).toBe('delivery');
+  });
+
+  it('buildSnapshot stamps the role onto each peer (RC excluded downstream)', () => {
+    const raw: RawSnapshot = {
+      devices: [{ id: 'D1', hostname: 'edge1', modelName: null, softwareVersion: null, streaming: true, reachable: true, observedAt: new Date('2026-07-15T12:00:00Z') }],
+      interfaces: [],
+      bgpPeers: [
+        { deviceId: 'D1', peerAddress: '185.6.42.1', peerAsn: 5466, state: 'Established', uptimeSeconds: 10, prefixesReceived: 1, prefixesAdvertised: 1, observedAt: new Date('2026-07-15T12:00:00Z'), connectionType: 'PNI', providerHint: 'Eir' },
+        { deviceId: 'D1', peerAddress: '185.6.36.8', peerAsn: 43760, state: 'Established', uptimeSeconds: 10, prefixesReceived: 0, prefixesAdvertised: 0, observedAt: new Date('2026-07-15T12:00:00Z'), connectionType: 'Route collector', providerHint: 'INEX' },
+      ],
+    };
+    const cfg: AdapterConfig = {
+      source: 'cloudvision', synthetic: false, now: Date.parse('2026-07-15T12:00:05Z'), staleAfterSeconds: 60,
+      expectedDeviceIds: [], classificationRules: DEFAULT_CLASSIFICATION_RULES, providerForAsn: DEFAULT_PROVIDER_FOR_ASN,
+      warningPercent: 80, criticalPercent: 90, primaryDirection: 'outbound',
+    };
+    const snap = buildSnapshot(raw, cfg);
+    expect(snap.bgpPeers.find((p) => p.peerAsn === 5466)!.role).toBe('delivery');
+    expect(snap.bgpPeers.find((p) => p.peerAsn === 43760)!.role).toBe('route-collector');
   });
 });

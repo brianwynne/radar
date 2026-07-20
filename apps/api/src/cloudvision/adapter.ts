@@ -7,7 +7,7 @@
 import { classifyInterface, type ClassificationRule } from './classification.js';
 import { deriveBandwidthBps, headroomBps, resolveBandwidth, utilisationPercent, type CounterSample } from './throughput.js';
 import type {
-  BgpPeer, BgpState, CloudVisionProvenance, CloudVisionSource, Completeness, Freshness, FreshnessLevel,
+  BgpPeer, BgpSessionRole, BgpState, CloudVisionProvenance, CloudVisionSource, Completeness, Freshness, FreshnessLevel,
   HealthStatus, LinkGroupState, LinkType, NetworkDevice, NetworkInterface, NetworkStateSnapshot,
   NetworkSummary, OperState,
 } from './types.js';
@@ -271,6 +271,18 @@ function bgpStatus(state: BgpState, hasObservation: boolean): HealthStatus {
   return 'warning'; // CONNECT/ACTIVE/OPENSENT/OPENCONFIRM — transitional
 }
 
+/** Classify a BGP session's role from its (verified) connection type. Route-collector and
+ *  internal (iBGP) sessions are NOT delivery paths — they carry no customer/audience traffic
+ *  and must not appear as "providers" in the edge delivery view. Everything else (PNI, INEX,
+ *  Transit, Peer, or an untagged external eBGP session) is a delivery session. Description-
+ *  driven only — never guessed from ASN heuristics. */
+export function bgpSessionRole(connectionType: string | null): BgpSessionRole {
+  const t = (connectionType ?? '').toLowerCase();
+  if (t.includes('route collector') || t === 'rc') return 'route-collector';
+  if (t.includes('ibgp') || t.includes('internal')) return 'internal';
+  return 'delivery';
+}
+
 function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, cfg: AdapterConfig): BgpPeer {
   const state = normaliseBgpState(raw.state);
   const warnings = [...(raw.warnings ?? [])];
@@ -284,6 +296,7 @@ function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, cfg: AdapterConfi
     peerAsn: raw.peerAsn,
     provider,
     connectionType: raw.connectionType ?? null,
+    role: bgpSessionRole(raw.connectionType ?? null),
     description: raw.description ?? null,
     state,
     established: state === 'ESTABLISHED',

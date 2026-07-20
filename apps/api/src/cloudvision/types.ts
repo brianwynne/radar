@@ -116,6 +116,9 @@ export interface NetworkInterface {
   provenance: CloudVisionProvenance;
 }
 
+/** Whether a BGP session is a real delivery path or non-delivery infrastructure. */
+export type BgpSessionRole = 'delivery' | 'route-collector' | 'internal';
+
 export interface BgpPeer {
   deviceId: string;
   deviceHostname: string;
@@ -125,6 +128,10 @@ export interface BgpPeer {
   provider: string | null;
   /** Human connection type from the peer description tag (PNI / INEX / Transit / Peer / …). */
   connectionType: string | null;
+  /** Session role derived from the connection type. Only `delivery` sessions carry
+   *  customer/audience traffic; `route-collector` and `internal` (iBGP) sessions are excluded
+   *  from the edge provider/delivery view. */
+  role: BgpSessionRole;
   /** Raw peer description (e.g. "[PNI] Eir"). */
   description: string | null;
   state: BgpState;

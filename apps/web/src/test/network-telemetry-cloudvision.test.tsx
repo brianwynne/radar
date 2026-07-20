@@ -171,6 +171,18 @@ describe('Network Telemetry page', () => {
     expect(peerRow.getByText(/Gb\/s · 40\.0%/)).toBeInTheDocument();
   });
 
+  it('excludes route-collector sessions from the delivery view and notes the hidden count', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    // The [RC] INEX route-collector session is a delivery non-participant: it must not appear as
+    // a provider group, and it must not be exposed as a Provider filter option.
+    expect(within(bgpTable()).queryByText('185.6.36.8')).not.toBeInTheDocument();
+    expect(within(bgpTable()).queryByText('Route collector')).not.toBeInTheDocument();
+    // But it is surfaced as a hidden-count note (nothing is silently dropped).
+    expect(screen.getByText(/1 route-collector session hidden/i)).toBeInTheDocument();
+  });
+
   it('filters BGP groups by provider and ASN', async () => {
     stubApi(NOC);
     renderAt('/network');

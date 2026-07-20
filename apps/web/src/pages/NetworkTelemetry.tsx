@@ -238,10 +238,16 @@ export function NetworkTelemetry() {
     return out;
   }, [interfaces, sort, collapsed]);
 
-  const bgpProviders = useMemo(() => [...new Set(t.bgpPeers.map((p) => p.provider).filter((x): x is string => !!x))].sort(), [t.bgpPeers]);
+  // The delivery view shows only edge delivery sessions — route-collector and internal (iBGP)
+  // sessions carry no audience traffic and are excluded (their count is surfaced below).
+  const bgpProviders = useMemo(
+    () => [...new Set(t.bgpPeers.filter((p) => p.role === 'delivery').map((p) => p.provider).filter((x): x is string => !!x))].sort(),
+    [t.bgpPeers],
+  );
   const bgpPeers = useMemo(
     () =>
       t.bgpPeers.filter((p) => {
+        if (p.role !== 'delivery') return false; // route-collector / iBGP are not delivery paths
         if (device && p.deviceId !== device) return false; // Router (shared with the rest of the page)
         if (bgpProvider && p.provider !== bgpProvider) return false;
         if (bgpAsn.trim() && !String(p.peerAsn ?? '').includes(bgpAsn.trim())) return false;
@@ -249,6 +255,14 @@ export function NetworkTelemetry() {
       }),
     [t.bgpPeers, device, bgpProvider, bgpAsn],
   );
+  // Non-delivery sessions excluded from the delivery view (within the current router scope).
+  const bgpExcluded = useMemo(() => {
+    const scoped = t.bgpPeers.filter((p) => (device ? p.deviceId === device : true) && p.role !== 'delivery');
+    return {
+      routeCollector: scoped.filter((p) => p.role === 'route-collector').length,
+      internal: scoped.filter((p) => p.role === 'internal').length,
+    };
+  }, [t.bgpPeers, device]);
 
   // Group BGP sessions by provider (fallback ASN / peer address) — one operator may hold several
   // sessions (PNI + INEX, across both edge routers); the group summary expands to the sessions.
@@ -562,6 +576,16 @@ export function NetworkTelemetry() {
           </tbody>
         </table>
       </div>
+      {(bgpExcluded.routeCollector > 0 || bgpExcluded.internal > 0) && (
+        <p className="muted bgp-excluded-note">
+          Delivery view only.{' '}
+          {[
+            bgpExcluded.routeCollector > 0 ? `${bgpExcluded.routeCollector} route-collector` : null,
+            bgpExcluded.internal > 0 ? `${bgpExcluded.internal} internal (iBGP)` : null,
+          ].filter(Boolean).join(' and ')}{' '}
+          {bgpExcluded.routeCollector + bgpExcluded.internal === 1 ? 'session' : 'sessions'} hidden — they carry no audience traffic.
+        </p>
+      )}
     </section>
   );
 }
