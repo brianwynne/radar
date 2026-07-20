@@ -59,6 +59,8 @@ export interface AnswerOutcome {
   reason: string;
   /** Retained only as an untagged fallback (nothing matched / no restriction) — highlight it. */
   fallback?: boolean;
+  /** shed_load: probability (0..1) this answer is dropped at the current load (1 = removed). */
+  shedProbability?: number;
 }
 
 export type FilterBehaviour = 'eliminate' | 'reorder' | 'select' | 'group' | 'modify' | 'unknown';
@@ -110,6 +112,8 @@ export interface Scenario {
   network?: string;
   clientPrefix?: string;
   healthOverrides?: Record<string, boolean>;
+  /** shed_load load simulation: answerId | feed id | "*" (all shed answers) → load value. */
+  loadOverrides?: Record<string, number>;
 }
 
 export interface EvaluationResult {

@@ -332,12 +332,15 @@ const geofence_country: FilterFn = (input, config, ctx) => {
 // load is normally a FEED — with no runtime feed state in v1 it is ASSUMED not shedding (like `up`),
 // unless the scenario supplies `loadOverrides` (by answerId or feed id) to simulate a load.
 function loadOf(w: Work, metric: string, ctx: Scenario): { load: number | undefined; assumed: boolean } {
+  // Override precedence: this answer's id, then its feed id, then the `*` wildcard (a single load
+  // applied to every shed answer — what the Walkthrough's PNI-load slider uses).
   const raw = w.raw.meta?.[metric] as unknown;
+  const wildcard = ctx.loadOverrides?.['*'];
   if (isFeed(raw)) {
-    const ov = ctx.loadOverrides?.[w.id] ?? ctx.loadOverrides?.[raw.feed];
+    const ov = ctx.loadOverrides?.[w.id] ?? ctx.loadOverrides?.[raw.feed] ?? wildcard;
     return ov !== undefined ? { load: ov, assumed: false } : { load: undefined, assumed: true };
   }
-  const ov = ctx.loadOverrides?.[w.id];
+  const ov = ctx.loadOverrides?.[w.id] ?? wildcard;
   if (ov !== undefined) return { load: ov, assumed: false };
   const n = numMeta(raw);
   return n !== undefined ? { load: n, assumed: false } : { load: undefined, assumed: true };

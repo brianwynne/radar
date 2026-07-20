@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VE, renderAt, stubApi } from './helpers';
 import { question, branches, outcomesOf, highlightMatches } from '../features/RecordWalkthrough';
@@ -100,5 +100,23 @@ describe('Walkthrough tab (in NS1 Explorer)', () => {
     expect(screen.getByRole('columnheader', { name: /Three Ireland/i })).toBeInTheDocument();
     expect(screen.getByRole('cell', { name: /Réalta/i })).toBeInTheDocument();
     await waitFor(() => expect(screen.getAllByText('78%').length).toBeGreaterThan(0)); // Réalta share per ISP
+  });
+
+  it('drives the PNI-load slider: crossing the shed watermark spills Réalta to commercial', async () => {
+    stubApi(VE);
+    renderAt('/explorer/rte.ie/live.rte.ie/A');
+    await userEvent.click(await screen.findByRole('button', { name: /^Walkthrough$/ }));
+    // Steady state (feed-driven load assumed idle): Réalta 78%.
+    await waitFor(() => expect(screen.getAllByText('78%').length).toBeGreaterThan(0));
+    // The slider appears because the chain now has a shed_load step. Enable simulation.
+    await userEvent.click(await screen.findByLabelText(/Simulate PNI load/i));
+    const slider = await screen.findByLabelText('PNI load');
+    // Drive load to 90 (≥ high watermark 85) → Réalta shed → commercial takes 100%.
+    fireEvent.change(slider, { target: { value: '90' } });
+    await waitFor(() => expect(screen.getAllByText('100%').length).toBeGreaterThan(0));
+    expect(screen.getByText(/Fastly/, { selector: '.wt-headline-share' })).toBeInTheDocument();
+    // Back below the low watermark (50) → Réalta returns.
+    fireEvent.change(slider, { target: { value: '50' } });
+    await waitFor(() => expect(screen.getAllByText('78%').length).toBeGreaterThan(0));
   });
 });

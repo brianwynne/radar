@@ -180,6 +180,15 @@ button.ghost.active { border-color: var(--brand); color: var(--brand-ink); backg
 .wt-pool-chips { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.4rem; }
 .chip.kept { border-width: 1px; }
 .chip.dropped { opacity: 0.55; text-decoration: line-through; }
+.chip.shedding { border-color: var(--warn); color: var(--warn); background: var(--warn-bg); text-decoration: none; }
+.chip.dropped.shed-out { color: var(--warn); border-color: var(--warn); opacity: 0.8; }
+/* PNI-load slider row in the Walkthrough (shows only when the chain has a shed_load step). */
+.wt-shed { display: flex; align-items: center; gap: 0.9rem; flex-wrap: wrap; margin: 0.6rem 0 0; padding: 0.55rem 0.75rem; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-muted); }
+.wt-shed.on { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.wt-slider { display: flex; align-items: center; gap: 0.6rem; flex: 1; min-width: 220px; }
+.wt-slider input[type="range"] { flex: 1; accent-color: var(--warn); }
+.wt-slider-val { font-weight: 700; color: var(--warn); min-width: 2.6rem; text-align: right; font-variant-numeric: tabular-nums; }
+.wt-shed-hint { font-size: 0.76rem; }
 .wt-outcomes { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; }
 .wt-outcomes li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .wt-outcomes li.dropped .mono { text-decoration: line-through; opacity: 0.7; }

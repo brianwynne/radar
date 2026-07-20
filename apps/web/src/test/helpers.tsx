@@ -40,7 +40,7 @@ interface ReqBody {
   zone: string;
   domain: string;
   type: string;
-  scenario: { resolverIp: string; ecsPresent: boolean; ecsPrefix?: string; country?: string; asn?: number; healthOverrides?: Record<string, boolean> };
+  scenario: { resolverIp: string; ecsPresent: boolean; ecsPrefix?: string; country?: string; asn?: number; healthOverrides?: Record<string, boolean>; loadOverrides?: Record<string, number> };
 }
 
 function trace(index: number, type: string, supported: boolean, behaviour: FilterTrace['behaviour'], reason: string, reorder = false, outcomes: FilterTrace['outcomes'] = []): FilterTrace {
@@ -58,7 +58,17 @@ export function makeExplain(req: ReqBody): ExplainResponse {
     { id: 'ans-realta', label: 'Réalta', deliveryPlatform: 'Réalta', rdata: ['192.0.2.10'], weight: 70 },
     { id: 'ans-fastly', label: 'Fastly', deliveryPlatform: 'Fastly', rdata: ['192.0.2.20'], weight: 20 },
   ];
-  const eligible = realtaDown ? ['ans-fastly'] : ['ans-realta', 'ans-fastly'];
+  // shed_load simulation: Réalta has watermarks 70/85, driven by the "*" load override. Absent
+  // load = feed-driven, assumed not shedding (steady state).
+  const load = req.scenario.loadOverrides?.['*'];
+  const LOW = 70, HIGH = 85;
+  const shedProb = load === undefined ? undefined : load <= LOW ? 0 : load >= HIGH ? 1 : (load - LOW) / (HIGH - LOW);
+  const realtaShed = shedProb === 1;
+  const eligible = realtaDown || realtaShed ? ['ans-fastly'] : ['ans-realta', 'ans-fastly'];
+  const shedReason = shedProb === undefined ? 'loadavg is feed-driven → assumed not shedding'
+    : shedProb >= 1 ? `loadavg ${load} ≥ high watermark 85 → shed (removed)`
+      : shedProb > 0 ? `loadavg ${load} between 70–85 → shed on ${Math.round(shedProb * 100)}% of queries`
+        : `loadavg ${load} ≤ low watermark 70 → served normally`;
   return {
     provenance: { ...PROV, endpoint: `/v1/zones/${req.zone}/${req.domain}/${req.type}` },
     request: { zone: req.zone, domain: req.domain, type: req.type, scenario: { qname: req.domain, qtype: req.type, ...req.scenario } },
@@ -67,13 +77,17 @@ export function makeExplain(req: ReqBody): ExplainResponse {
       identity: { source: ecs ? 'ecs' : 'resolver', evaluatedAddress: ecs ? (req.scenario.ecsPrefix ?? '') : req.scenario.resolverIp, country: req.scenario.country, asn, confidence: ecs ? 'high' : 'low', notes: [] },
       answers,
       traces: partial
-        ? [trace(0, 'up', true, 'eliminate', 'All up.'), trace(1, 'shed_load', false, 'unknown', 'Unsupported filter — evaluation stops.')]
+        ? [trace(0, 'up', true, 'eliminate', 'All up.'), trace(1, 'sticky_shuffle', false, 'unknown', 'Unsupported filter — evaluation stops.')]
         : [
             trace(0, 'up', true, 'eliminate', 'All up.', false, [
               { answerId: 'ans-realta', disposition: 'retained', reason: 'meta.up = true' },
               { answerId: 'ans-fastly', disposition: 'retained', reason: 'no country metadata → kept as a fallback', fallback: true },
             ]),
-            trace(1, 'weighted_shuffle', true, 'reorder', 'Ordered by weight.', true),
+            trace(1, 'shed_load', true, 'eliminate', `Load shedding (metric=loadavg): ${realtaShed ? '1 removed' : '0 removed'}.`, false, [
+              { answerId: 'ans-realta', disposition: realtaShed ? 'removed' : 'retained', reason: shedReason, ...(shedProb !== undefined ? { shedProbability: shedProb } : {}) },
+              { answerId: 'ans-fastly', disposition: 'retained', reason: 'no load-shedding watermarks — not subject to shed_load' },
+            ]),
+            trace(2, 'weighted_shuffle', true, 'reorder', 'Ordered by weight.', true),
           ],
       eligibleAnswerIds: eligible,
       selected: partial ? undefined : eligible[0],
@@ -85,14 +99,18 @@ export function makeExplain(req: ReqBody): ExplainResponse {
         : {
             probabilistic: true,
             method: 'weighted_shuffle',
-            shares: eligible.map((id) => ({ answerId: id, label: answers.find((a) => a.id === id)!.label, deliveryPlatform: answers.find((a) => a.id === id)!.deliveryPlatform, share: id === 'ans-realta' ? 0.78 : 0.22 })),
+            shares: eligible.map((id) => {
+              const wRe = 70 * (1 - (shedProb ?? 0)), wFa = 20, tot = wRe + wFa;
+              const share = id === 'ans-realta' ? wRe / tot : realtaShed ? 1 : wFa / tot;
+              return { answerId: id, label: answers.find((a) => a.id === id)!.label, deliveryPlatform: answers.find((a) => a.id === id)!.deliveryPlatform, share };
+            }),
             disclaimers: ['Probabilistic, not a guaranteed traffic share. Cloudflare pool selection is separate.'],
           },
       complete: !partial,
       stoppedAtFilterIndex: partial ? 1 : undefined,
-      explanation: partial ? 'INCOMPLETE — unsupported filter shed_load.' : 'Réalta is the most likely delivery platform for this request.',
+      explanation: partial ? 'INCOMPLETE — unsupported filter sticky_shuffle.' : 'Réalta is the most likely delivery platform for this request.',
       warnings: [],
-      unsupportedFilters: partial ? ['shed_load'] : [],
+      unsupportedFilters: partial ? ['sticky_shuffle'] : [],
     },
   };
 }

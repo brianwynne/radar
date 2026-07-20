@@ -84,6 +84,19 @@ describe('shed_load', () => {
     expect(r.selectionDeterminism).toBe('probabilistic');
   });
 
+  it('the "*" wildcard applies one load to every shed answer (the Walkthrough slider)', () => {
+    const r = evaluate(record, sky({ '*': 90 }));
+    expect(share(r, 'Réalta')).toBe(0);
+    expect(Math.round(share(r, 'Fastly') * 100)).toBe(100);
+  });
+
+  it('a specific feed/answer override beats the "*" wildcard', () => {
+    // Wildcard 90 would shed everything, but Parkwest is pinned cool (40) → PW carries it.
+    const r = evaluate(record, sky({ '*': 90, 'sky-pw': 40 }));
+    expect(Math.round(share(r, 'Réalta') * 100)).toBe(100);
+    expect(shedStep(r).outcomes.filter((o) => o.disposition === 'removed').length).toBe(1);
+  });
+
   it('answers without watermarks are never subject to shedding', () => {
     const r = evaluate(record, sky({ 'sky-cw': 99, 'sky-pw': 99 }));
     const fastly = shedStep(r).outcomes.find((o) => /not subject/.test(o.reason));

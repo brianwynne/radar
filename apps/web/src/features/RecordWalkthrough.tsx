@@ -11,8 +11,8 @@ import { filterMeta, removeFlagFor } from '../steering/record-config';
 import { colorFor, orderOf } from '../steering/platforms';
 import type { AnswerOutcome, EvaluationResult, ExplainRequest, ExplainResponse, FilterTrace, TracedAnswer } from '../api/types';
 
-interface Form { asn: string; country: string; ecsPrefix: string; resolverIp: string; realtaDown: boolean }
-const initialForm = (): Form => ({ ...ispToScenario(ISPS[0]), realtaDown: false });
+interface Form { asn: string; country: string; ecsPrefix: string; resolverIp: string; realtaDown: boolean; shedSim: boolean; pniLoad: number }
+const initialForm = (): Form => ({ ...ispToScenario(ISPS[0]), realtaDown: false, shedSim: false, pniLoad: 70 });
 
 const pct = (s: number) => `${(s * 100).toFixed(s >= 0.1 ? 0 : 1)}%`;
 
@@ -45,6 +45,9 @@ function scenarioOf(f: Partial<Form>): ExplainRequest['scenario'] {
     ...(f.country && f.country.trim() ? { country: f.country.trim().toUpperCase() } : {}),
     ...(asn !== undefined && !Number.isNaN(asn) ? { asn } : {}),
     ...(f.realtaDown ? { healthOverrides: { 'ans-realta': false } } : {}),
+    // The "*" wildcard drives every shed_load answer to the slider's load — so the operator can
+    // watch the requester spill from Réalta to commercial as the PNI fills.
+    ...(f.shedSim ? { loadOverrides: { '*': f.pniLoad ?? 70 } } : {}),
   };
 }
 
@@ -58,6 +61,7 @@ export function question(t: FilterTrace, id: EvaluationResult['identity']): stri
     case 'geofence_country': return `Is the requester's country (${country}) listed in an answer's country metadata?`;
     case 'geofence_regional': return "Is the requester's region listed in an answer's georegion metadata?";
     case 'up': return 'Which answers are currently up (healthy)?';
+    case 'shed_load': return 'At the current load, is any answer over its shed watermark (and so shed to the remaining answers)?';
     case 'weighted_shuffle': return "Reorder the surviving answers randomly, biased by each answer's weight.";
     case 'shuffle': return 'Reorder the surviving answers randomly (equal chance each).';
     case 'select_first_n': return 'Keep only the first N answers after the reorder.';
@@ -170,6 +174,23 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
         </label>
       </div>
 
+      {/* PNI-load slider — only when the chain actually contains a shed_load step. Drives every
+          shed answer's load via the "*" override so the operator can watch the shed happen. */}
+      {ev?.traces.some((t) => t.type === 'shed_load') && (
+        <div className={`wt-shed ${form.shedSim ? 'on' : ''}`}>
+          <label className="switch" title="Simulate a PNI/cache load level to see what shed_load would do">
+            <input type="checkbox" checked={form.shedSim} onChange={(e) => set({ shedSim: e.target.checked })} /> Simulate PNI load
+          </label>
+          {form.shedSim && (
+            <span className="wt-slider">
+              <input type="range" aria-label="PNI load" min={0} max={100} step={1} value={form.pniLoad} onChange={(e) => set({ pniLoad: Number(e.target.value) })} />
+              <span className="wt-slider-val mono">{form.pniLoad}%</span>
+            </span>
+          )}
+          {form.shedSim && <span className="muted wt-shed-hint">applies to every shed answer’s feed</span>}
+        </div>
+      )}
+
       {error && <div className="notice danger">{error}</div>}
       {!ev && loading && <span className="muted">Evaluating…</span>}
 
@@ -213,8 +234,15 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
                   )}
                   {/* Live answer pool: survivors + dropped, coloured by platform; fallbacks flagged green */}
                   <div className="wt-pool-chips">
-                    {kept.map((o) => <span key={o.answerId} className={`chip kept ${o.fallback ? 'fallback' : ''}`} style={o.fallback ? undefined : { borderColor: colorFor(platformOfId(o.answerId)) }} title={o.reason || platformOfId(o.answerId)}>{labelOfId(o.answerId)}{o.fallback && ' · fallback'}</span>)}
-                    {dropped.map((o) => <span key={o.answerId} className="chip dropped" title={o.reason || platformOfId(o.answerId)}>{labelOfId(o.answerId)}</span>)}
+                    {kept.map((o) => {
+                      const shedding = o.shedProbability !== undefined && o.shedProbability > 0 && o.shedProbability < 1;
+                      return (
+                        <span key={o.answerId} className={`chip kept ${o.fallback ? 'fallback' : ''} ${shedding ? 'shedding' : ''}`} style={o.fallback || shedding ? undefined : { borderColor: colorFor(platformOfId(o.answerId)) }} title={o.reason || platformOfId(o.answerId)}>
+                          {labelOfId(o.answerId)}{o.fallback && ' · fallback'}{shedding && ` · shed ${Math.round(o.shedProbability! * 100)}%`}
+                        </span>
+                      );
+                    })}
+                    {dropped.map((o) => <span key={o.answerId} className={`chip dropped ${o.shedProbability === 1 ? 'shed-out' : ''}`} title={o.reason || platformOfId(o.answerId)}>{labelOfId(o.answerId)}{o.shedProbability === 1 && ' · shed'}</span>)}
                   </div>
                   <div className="wt-result muted">→ {highlightMatches(t.reason, idTokens)}</div>
                   {outcomes.some((o) => o.reason) && (
@@ -230,6 +258,9 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
                                 <span className="badge ok badge-sm" title="Kept as the untagged fallback — nothing matched the requester">fallback</span>
                               ) : (
                                 <span className={`badge badge-sm ${o.disposition === 'removed' ? 'danger' : 'ok'}`}>{o.disposition === 'removed' ? 'dropped' : 'kept'}</span>
+                              )}
+                              {o.shedProbability !== undefined && o.shedProbability > 0 && o.shedProbability < 1 && (
+                                <span className="badge warn badge-sm" title="Shed on this fraction of queries at the current load">shed {Math.round(o.shedProbability * 100)}%</span>
                               )}
                               <span className="muted">{highlightMatches(o.reason, idTokens)}</span>
                             </li>

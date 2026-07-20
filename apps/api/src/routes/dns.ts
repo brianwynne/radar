@@ -24,6 +24,8 @@ const bodySchema = z.object({
     network: z.string().optional(),
     clientPrefix: z.string().optional(),
     healthOverrides: z.record(z.string(), z.boolean()).optional(),
+    // shed_load load simulation: answerId | feed id | "*" (all shed answers) → load value.
+    loadOverrides: z.record(z.string(), z.number()).optional(),
   }),
 });
 
