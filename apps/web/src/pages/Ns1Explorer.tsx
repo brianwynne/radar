@@ -7,6 +7,7 @@ import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { ProvenanceLine } from '../components/Provenance';
 import { RecordEditor } from '../components/RecordEditor';
+import { RecordConfigView } from '../features/RecordConfigView';
 import { addRecent, getRecent, type RecordRef } from '../ns1/recent';
 import { SnapshotsPanel } from '../features/Snapshots';
 import { ExplainPanel, type ExplainScenario } from '../features/ExplainPanel';
@@ -15,7 +16,7 @@ import { AsnBreakdown } from '../features/AsnBreakdown';
 import { ispToScenario, type Isp } from '../steering/isps';
 import type { Ns1ActiveRecordResponse, Provenance } from '../api/types';
 
-type View = 'normalised' | 'raw';
+type View = 'config' | 'normalised' | 'raw';
 interface RecordSummary {
   domain: string;
   type: string;
@@ -57,7 +58,7 @@ export function Ns1Explorer() {
   const [zonesError, setZonesError] = useState<string | null>(null);
   const [records, setRecords] = useState<RecordSummary[] | null>(null);
   const [recordsError, setRecordsError] = useState<string | null>(null);
-  const [view, setView] = useState<View>('normalised');
+  const [view, setView] = useState<View>('config');
   const [editing, setEditing] = useState(false); // raw-view record editor (edit + Copy for NS1)
   const [payload, setPayload] = useState<{ provenance: Provenance; body: Record<string, unknown> } | null>(null);
   const [recordError, setRecordError] = useState<string | null>(null);
@@ -270,6 +271,9 @@ export function Ns1Explorer() {
               <h3 style={{ margin: 0 }}>
                 Record: <span className="mono">{domain}</span> {type}
               </h3>
+              <button className={`ghost ${view === 'config' ? 'active' : ''}`} onClick={() => { setView('config'); setEditing(false); }} title="Human-readable steering config — platforms, translated ASNs/countries, weights, filter chain">
+                Config
+              </button>
               <button className={`ghost ${view === 'normalised' ? 'active' : ''}`} onClick={() => { setView('normalised'); setEditing(false); }}>
                 Normalised
               </button>
@@ -309,7 +313,9 @@ export function Ns1Explorer() {
                   </div>
                 )}
                 <ProvenanceLine p={payload.provenance} />
-                {editing && view === 'raw' ? (
+                {view === 'config' ? (
+                  <RecordConfigView record={payload.body} zone={zone} domain={domain} type={type} />
+                ) : editing && view === 'raw' ? (
                   <RecordEditor initial={payload.body} onClose={() => setEditing(false)} />
                 ) : (
                   <pre className="raw-json">{JSON.stringify(payload.body, null, 2)}</pre>

@@ -22,7 +22,7 @@ describe('NS1 Explorer — discovery & selection', () => {
     stubApi(VE);
     renderAt('/explorer/rte.ie/live.rte.ie/A');
     expect(await screen.findByText(/Record:/)).toBeInTheDocument();
-    expect(await screen.findByText(/"domain": "live.rte.ie"/)).toBeInTheDocument();
+    expect(await screen.findByText('192.0.2.10')).toBeInTheDocument(); // record rendered in the Config view
     // Recent convenience is populated after viewing.
     expect(await screen.findByText('Recent:')).toBeInTheDocument();
   });
@@ -73,6 +73,6 @@ describe('NS1 Explorer — deep links', () => {
     const row = eir.closest('tr') as HTMLElement;
     await userEvent.click(within(row).getByRole('button', { name: 'record' }));
     await waitFor(() => expect(screen.getByText(/Record:/)).toBeInTheDocument());
-    expect(await screen.findByText(/"domain": "live.rte.ie"/)).toBeInTheDocument();
+    expect(await screen.findByText('192.0.2.10')).toBeInTheDocument(); // record rendered in the Config view
   });
 });

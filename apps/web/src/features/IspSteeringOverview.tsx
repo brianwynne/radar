@@ -6,21 +6,8 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { ISPS, ispToScenario, type Isp } from '../steering/isps';
+import { colorFor, orderOf } from '../steering/platforms';
 import type { ExplainResponse } from '../api/types';
-
-// Canonical delivery platforms + stable colours (stacked left→right in this order).
-const PLATFORM_ORDER = ['Réalta', 'Fastly', 'Akamai', 'CloudFront'];
-const PLATFORM_COLORS: Record<string, string> = {
-  Réalta: '#2f855a',
-  Fastly: '#dd4b39',
-  Akamai: '#2b6cb0',
-  CloudFront: '#805ad5',
-};
-const colorFor = (p: string) => PLATFORM_COLORS[p] ?? '#718096';
-const orderOf = (p: string) => {
-  const i = PLATFORM_ORDER.indexOf(p);
-  return i === -1 ? PLATFORM_ORDER.length : i;
-};
 
 interface Segment {
   platform: string;
