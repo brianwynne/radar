@@ -129,13 +129,13 @@ describe('unsupported filter (guide §17, principle 5.4) — partial evaluation'
   it('flags an unrecognised filter, sets complete=false + stoppedAtFilterIndex, passes answers through', () => {
     const withUnsupported: NS1Record = {
       ...record,
-      filters: [{ filter: 'up' }, { filter: 'shed_load' }, { filter: 'select_first_n', config: { N: 1 } }],
+      filters: [{ filter: 'up' }, { filter: 'sticky_shuffle' }, { filter: 'select_first_n', config: { N: 1 } }],
     };
     const r = evaluate(withUnsupported, irishEcs);
     expect(r.complete).toBe(false);
     expect(r.stoppedAtFilterIndex).toBe(1);
-    expect(r.unsupportedFilters).toContain('shed_load');
-    const t = r.traces.find((s) => s.type === 'shed_load')!;
+    expect(r.unsupportedFilters).toContain('sticky_shuffle');
+    const t = r.traces.find((s) => s.type === 'sticky_shuffle')!;
     expect(t.supported).toBe(false);
     expect(t.behaviour).toBe('unknown');
     expect(t.input).toEqual(t.output); // nothing dropped silently

@@ -33,6 +33,10 @@ export interface Scenario extends DnsRequest {
   clientPrefix?: string;
   /** answerId -> up, overriding meta.up for simulation. */
   healthOverrides?: Record<string, boolean>;
+  /** Load value for `shed_load`, overriding a feed-driven (or unset) metric for simulation.
+   *  Keyed by answerId OR by feed id (the `{feed:<id>}` reference). Lets the walkthrough ask
+   *  "at this PNI load, what sheds?" without a runtime feed. */
+  loadOverrides?: Record<string, number>;
 }
 
 /** What was actually evaluated, and how it was derived (brief §8). */

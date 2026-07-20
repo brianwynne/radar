@@ -140,7 +140,7 @@ describe('DNS explain — evaluation contract', () => {
     expect(res.statusCode).toBe(200);
     const ev = res.json().evaluation;
     expect(ev.complete).toBe(false);
-    expect(ev.unsupportedFilters).toContain('shed_load');
+    expect(ev.unsupportedFilters).toContain('sticky_shuffle');
     await app.close();
   });
 

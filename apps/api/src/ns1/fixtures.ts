@@ -104,7 +104,7 @@ export const RECORD_LIVE_RTE_IE_CNAME: unknown = {
 };
 
 /** GET /v1/zones/rte.ie/vod.rte.ie/A — a second synthetic record whose Filter Chain
- *  contains an UNSUPPORTED filter (shed_load), so RADAR reports a PARTIAL evaluation
+ *  contains an UNSUPPORTED filter (sticky_shuffle), so RADAR reports a PARTIAL evaluation
  *  rather than inventing behaviour (guide §17). Used by the Steering Matrix. */
 export const RECORD_VOD_RTE_IE_A: unknown = {
   _radar_note: SYNTHETIC,
@@ -121,7 +121,7 @@ export const RECORD_VOD_RTE_IE_A: unknown = {
   filters: [
     { filter: 'up' },
     // Not in the RADAR engine registry → unsupported → partial evaluation.
-    { filter: 'shed_load', config: { threshold: 0.9 } },
+    { filter: 'sticky_shuffle', config: {} },
     { filter: 'weighted_shuffle' },
     { filter: 'select_first_n', config: { N: 1 } },
   ],

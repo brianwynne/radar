@@ -28,6 +28,9 @@ interface Work {
   label: string;
   platform?: string;
   raw: NS1Answer;
+  /** Fraction of queries this answer survives `shed_load` (1 = never shed). Scales its expected
+   *  distribution share; set only by the shed_load filter in the mid-watermark band. */
+  shedFactor?: number;
 }
 
 interface StepResult {
@@ -314,12 +317,81 @@ const geofence_country: FilterFn = (input, config, ctx) => {
   }, `Fenced by country ${country}`);
 };
 
-// NOTE: `priority`, `cost`, `shed_load` and the Pulsar filters are deliberately NOT
-// implemented (NS1 guide §17). Their wire representation, mode (sort vs sift),
-// missing-value behaviour and interaction with later filters are fixture-pending, so
-// RADAR treats them as UNSUPPORTED → partial rather than guessing (see
-// docs/ns1/assumptions.md). The raw filter config is still displayed; evaluation stops
-// claiming completeness at that step.
+// NOTE: `priority`, `cost` and the Pulsar filters are deliberately NOT implemented (NS1 guide
+// §17). Their wire representation, mode (sort vs sift), missing-value behaviour and interaction
+// with later filters are fixture-pending, so RADAR treats them as UNSUPPORTED → partial rather
+// than guessing (see docs/ns1/assumptions.md). The raw filter config is still displayed;
+// evaluation stops claiming completeness at that step.
+
+// `shed_load` (validated against IBM NS1 Connect docs + the ns1-go SDK): sheds an answer as its
+// load crosses per-answer watermarks. Config carries `metric` (connections|requests|loadavg); each
+// answer carries `low_watermark`, `high_watermark`, and the live load under the metric's own key
+// (there is NO field literally called "load"). Behaviour: load ≤ low → served; between → dropped on
+// a rising FRACTION of queries (NS1's exact curve is unpublished — we model a linear ramp); load ≥
+// high → removed entirely. Answers WITHOUT watermarks are never shed (they are the fallback). The
+// load is normally a FEED — with no runtime feed state in v1 it is ASSUMED not shedding (like `up`),
+// unless the scenario supplies `loadOverrides` (by answerId or feed id) to simulate a load.
+function loadOf(w: Work, metric: string, ctx: Scenario): { load: number | undefined; assumed: boolean } {
+  const raw = w.raw.meta?.[metric] as unknown;
+  if (isFeed(raw)) {
+    const ov = ctx.loadOverrides?.[w.id] ?? ctx.loadOverrides?.[raw.feed];
+    return ov !== undefined ? { load: ov, assumed: false } : { load: undefined, assumed: true };
+  }
+  const ov = ctx.loadOverrides?.[w.id];
+  if (ov !== undefined) return { load: ov, assumed: false };
+  const n = numMeta(raw);
+  return n !== undefined ? { load: n, assumed: false } : { load: undefined, assumed: true };
+}
+
+const shed_load: FilterFn = (input, config, ctx) => {
+  const metric = String(config.metric ?? 'loadavg');
+  const output: Work[] = [];
+  const outcomes: AnswerOutcome[] = [];
+  let removed = 0, partial = 0, assumed = 0, subject = 0;
+  for (const w of input) {
+    const low = numMeta(w.raw.meta?.low_watermark);
+    const high = numMeta(w.raw.meta?.high_watermark);
+    if (low === undefined || high === undefined || high <= low) {
+      w.shedFactor = 1;
+      output.push(w);
+      outcomes.push({ answerId: w.id, disposition: 'retained', reason: 'no load-shedding watermarks — not subject to shed_load' });
+      continue;
+    }
+    subject++;
+    const { load, assumed: asm } = loadOf(w, metric, ctx);
+    if (load === undefined) {
+      assumed++;
+      w.shedFactor = 1;
+      output.push(w);
+      outcomes.push({ answerId: w.id, disposition: 'retained', reason: `${metric} is feed-driven/unset → assumed not shedding (no runtime feed in v1; supply loadOverrides to simulate)`, shedProbability: 0 });
+      continue;
+    }
+    const shedProb = load <= low ? 0 : load >= high ? 1 : (load - low) / (high - low);
+    if (shedProb >= 1) {
+      removed++;
+      outcomes.push({ answerId: w.id, disposition: 'removed', reason: `${metric} ${load} ≥ high watermark ${high} → shed (removed; traffic moves to the remaining answers)`, shedProbability: 1 });
+      continue;
+    }
+    w.shedFactor = 1 - shedProb;
+    output.push(w);
+    if (shedProb <= 0) {
+      outcomes.push({ answerId: w.id, disposition: 'retained', reason: `${metric} ${load} ≤ low watermark ${low} → served normally (not shed)`, shedProbability: 0 });
+    } else {
+      partial++;
+      outcomes.push({ answerId: w.id, disposition: 'retained', reason: `${metric} ${load} between ${low}–${high} → shed on ${Math.round(shedProb * 100)}% of queries`, shedProbability: shedProb });
+    }
+  }
+  const parts = [`${removed} removed`, `${partial} partially shed`, `${output.length} kept`];
+  return {
+    output,
+    outcomes,
+    reorder: false,
+    metadataConsumed: subject > 0 ? [metric, 'low_watermark', 'high_watermark'] : [],
+    confidence: assumed > 0 ? 'medium' : 'high',
+    reason: `Load shedding (metric=${metric}): ${parts.join(', ')}.`,
+    warning: assumed > 0 ? `${assumed} answer(s) have feed-driven load with no runtime feed in v1 — assumed not shedding.` : undefined,
+  };
+};
 
 const weighted_shuffle: FilterFn = (input) => {
   const w = (x: Work) => numMeta(x.raw.meta?.weight) ?? 1;
@@ -364,6 +436,7 @@ const REGISTRY: Record<string, FilterFn> = {
   netfence_prefix,
   geotarget_country,
   geofence_country,
+  shed_load,
   weighted_shuffle,
   select_first_n,
 };
@@ -375,6 +448,7 @@ const BEHAVIOUR: Record<string, FilterBehaviour> = {
   netfence_prefix: 'eliminate',
   geofence_country: 'eliminate',
   geotarget_country: 'reorder',
+  shed_load: 'eliminate',
   weighted_shuffle: 'reorder',
   select_first_n: 'select',
 };
@@ -475,7 +549,10 @@ export function evaluate(record: NS1Record, scenario: Scenario): EvaluationResul
 
   const SHUFFLE = new Set(['shuffle', 'weighted_shuffle', 'sticky_shuffle', 'weighted_sticky_shuffle']);
   const CONTEXT_META = new Set(['asn', 'country', 'ip_prefixes', 'georegion', 'geo']);
-  const probabilistic = traces.some((t) => t.supported && SHUFFLE.has(t.type) && t.input.length > 1);
+  // A shuffle, or a shed_load that is mid-band (an answer shed on a FRACTION of queries), makes the
+  // specific returned answer non-deterministic.
+  const shedPartial = traces.some((t) => t.supported && t.type === 'shed_load' && t.outcomes.some((o) => o.shedProbability !== undefined && o.shedProbability > 0 && o.shedProbability < 1));
+  const probabilistic = shedPartial || traces.some((t) => t.supported && SHUFFLE.has(t.type) && t.input.length > 1);
   const contextDependent = traces.some((t) => t.supported && t.metadataConsumed.some((m) => CONTEXT_META.has(m)));
   const selectionDeterminism: SelectionDeterminism = !complete
     ? 'partial'
@@ -582,7 +659,11 @@ function computeDistribution(
 
   const set = weightedSet && weightedSet.length ? weightedSet : undefined;
   if (set && method === 'weighted_shuffle') {
-    const w = (x: Work) => numMeta(x.raw.meta?.weight) ?? 1;
+    // Effective weight = configured weight × shed survival factor. In the shed mid-band an answer
+    // is served on only (1 − shedProbability) of queries, so its expected share is scaled down and
+    // the freed share flows to the answers that are not shedding (approximation — NS1's exact
+    // mid-band curve is unpublished; the endpoints load≤low and load≥high are exact).
+    const w = (x: Work) => (numMeta(x.raw.meta?.weight) ?? 1) * (x.shedFactor ?? 1);
     const total = set.reduce((s, x) => s + w(x), 0);
     if (total <= 0) return undefined;
     return {

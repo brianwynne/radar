@@ -31,6 +31,10 @@ export interface AnswerOutcome {
    *  matched the requester, or it carries no restriction) — worth highlighting: it is serving as
    *  the safety net, not as a positive match. */
   fallback?: boolean;
+  /** For `shed_load`: the probability (0..1) this answer is dropped on any given query at the
+   *  current load. 0 = never shed (load ≤ low watermark), 1 = always shed (load ≥ high → removed);
+   *  a value in between means it is served on only (1 − shedProbability) of queries. */
+  shedProbability?: number;
 }
 
 /** How a filter acts on the answer list (NS1 guide §8.1). */
