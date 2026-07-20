@@ -21,6 +21,7 @@ type View = 'config' | 'walkthrough' | 'normalised' | 'raw';
 interface RecordSummary {
   domain: string;
   type: string;
+  ttl?: number;
 }
 
 // A bare /explorer lands in the primary zone, then on the currently-ACTIVE steering record
@@ -36,9 +37,9 @@ function zoneName(z: unknown, i: number): string {
 function extractRecords(zone: Record<string, unknown>): RecordSummary[] {
   const raw = Array.isArray(zone.records) ? zone.records : [];
   return raw
-    .map((r) => r as { domain?: string; type?: string })
+    .map((r) => r as { domain?: string; type?: string; ttl?: unknown })
     .filter((r) => r.domain && r.type)
-    .map((r) => ({ domain: r.domain as string, type: r.type as string }));
+    .map((r) => ({ domain: r.domain as string, type: r.type as string, ttl: typeof r.ttl === 'number' ? r.ttl : undefined }));
 }
 
 export function Ns1Explorer() {
@@ -248,6 +249,7 @@ export function Ns1Explorer() {
                 return (
                   <button key={`${r.domain}/${r.type}`} className={`ghost ${active ? 'active' : ''}`} onClick={() => selectRecord(r)}>
                     {r.domain} <span className="mono muted">{r.type}</span>
+                    {r.ttl !== undefined && <span className="badge neutral badge-sm ttl-badge" title="Record TTL — how long resolvers cache this answer">TTL {r.ttl}s</span>}
                   </button>
                 );
               })}
@@ -271,6 +273,9 @@ export function Ns1Explorer() {
             <div className="step-head">
               <h3 style={{ margin: 0 }}>
                 Record: <span className="mono">{domain}</span> {type}
+                {payload?.body && typeof payload.body.ttl === 'number' && (
+                  <span className="badge neutral badge-sm ttl-badge" title="Record TTL — how long resolvers cache this answer">TTL {payload.body.ttl as number}s</span>
+                )}
               </h3>
               <button className={`ghost ${view === 'config' ? 'active' : ''}`} onClick={() => { setView('config'); setEditing(false); }} title="Human-readable steering config — platforms, translated ASNs/countries, weights, filter chain">
                 Config

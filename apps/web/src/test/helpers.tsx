@@ -94,8 +94,8 @@ export function makeExplain(req: ReqBody): ExplainResponse {
 export const ZONE_BODY = {
   zone: 'rte.ie',
   records: [
-    { domain: 'live.rte.ie', type: 'A' },
-    { domain: 'vod.rte.ie', type: 'A' },
+    { domain: 'live.rte.ie', type: 'A', ttl: 300 },
+    { domain: 'vod.rte.ie', type: 'A', ttl: 30 },
   ],
 };
 export const RECORD_BODY = { id: 'demo', zone: 'rte.ie', domain: 'live.rte.ie', type: 'A', ttl: 30, use_client_subnet: true, answers: [{ id: 'ans-realta', answer: ['192.0.2.10'] }], filters: [{ filter: 'up' }] };

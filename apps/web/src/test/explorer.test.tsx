@@ -27,6 +27,13 @@ describe('NS1 Explorer — discovery & selection', () => {
     expect(await screen.findByText('Recent:')).toBeInTheDocument();
   });
 
+  it("shows each record's TTL as a badge in the record list", async () => {
+    stubApi(VE);
+    renderAt('/explorer/rte.ie/live.rte.ie/A');
+    expect(await screen.findByText('TTL 300s')).toBeInTheDocument(); // live.rte.ie (ttl 300)
+    expect(screen.getAllByText('TTL 30s').length).toBeGreaterThan(0); // vod.rte.ie list badge + selected-record header
+  });
+
   it('gates the raw NS1 view on ns1.raw.read', async () => {
     const detailOnly = { ...VE, permissions: VE.permissions.filter((p) => p !== 'ns1.raw.read') };
     stubApi(detailOnly);
