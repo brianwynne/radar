@@ -9,7 +9,7 @@ import { Ns1Error } from '../ns1/errors.js';
 import { normaliseRecord } from '../ns1/normalise.js';
 import { requirePermission } from '../auth/guards.js';
 import type { Ns1RouteOptions } from './ns1.js';
-import { buildProvenance, sendNs1Error } from './ns1-helpers.js';
+import { buildProvenance, resolveEffectiveNs1, sendNs1Error } from './ns1-helpers.js';
 
 const bodySchema = z.object({
   zone: z.string().min(1),
@@ -36,7 +36,7 @@ const explainSchema = {
 } as const;
 
 export const dnsRoutes: FastifyPluginAsync<Ns1RouteOptions> = async (app, opts) => {
-  const { client, ns1 } = opts;
+  const { client, ns1, ns1Connection } = opts;
 
   app.post('/explain', { preHandler: requirePermission('dns.explain.read'), schema: explainSchema }, async (req, reply) => {
     const parsed = bodySchema.safeParse(req.body);
@@ -51,7 +51,7 @@ export const dnsRoutes: FastifyPluginAsync<Ns1RouteOptions> = async (app, opts) 
       const fullScenario: Scenario = { qname: domain, qtype: type.toUpperCase(), ...scenario };
       const evaluation = evaluate(record, fullScenario);
       return {
-        provenance: buildProvenance(ns1, `/v1/zones/${zone}/${domain}/${type}`, retrievedAt),
+        provenance: buildProvenance(resolveEffectiveNs1(ns1, ns1Connection), `/v1/zones/${zone}/${domain}/${type}`, retrievedAt),
         request: { zone, domain, type, scenario: fullScenario },
         evaluation,
       };

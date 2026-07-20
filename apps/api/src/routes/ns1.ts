@@ -9,7 +9,7 @@ import { Ns1Error } from '../ns1/errors.js';
 import { normaliseRecord } from '../ns1/normalise.js';
 import { filterActivity, normaliseActivity } from '../ns1/activity.js';
 import { requirePermission } from '../auth/guards.js';
-import { buildProvenance, sendNs1Error } from './ns1-helpers.js';
+import { buildProvenance, resolveEffectiveNs1, sendNs1Error, type Ns1Connection } from './ns1-helpers.js';
 
 const activityQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(500).optional(),
@@ -21,6 +21,8 @@ const activityQuerySchema = z.object({
 export interface Ns1RouteOptions {
   client: Ns1ReadClient;
   ns1: Ns1Config;
+  /** Source of the effective (live⇄mock) mode so provenance/config reflect the live connector. */
+  ns1Connection?: Ns1Connection;
 }
 
 const doc = (summary: string) => ({ tags: ['ns1'], summary, security: [{ bearerAuth: [] }] }) as const;
@@ -44,23 +46,28 @@ async function read(
 }
 
 export const ns1Routes: FastifyPluginAsync<Ns1RouteOptions> = async (app, opts) => {
-  const { client, ns1 } = opts;
+  const { client, ns1, ns1Connection } = opts;
+  // Effective NS1 config (live⇄mock reflects the connector, not the startup RADAR_MODE).
+  const eff = () => resolveEffectiveNs1(ns1, ns1Connection);
 
   // Mode/status banner — visible to any dashboard viewer so the UI can label mock data.
-  app.get('/config', { preHandler: requirePermission('dashboard.read'), schema: doc('NS1 read-only mode and status') }, async () => ({
-    mode: ns1.mode,
-    synthetic: ns1.mode === 'mock',
-    readOnly: true,
-    disclaimer: ns1.mode === 'mock' ? 'SYNTHETIC / MOCK NS1 data — not real RTÉ or NS1 configuration.' : undefined,
-  }));
+  app.get('/config', { preHandler: requirePermission('dashboard.read'), schema: doc('NS1 read-only mode and status') }, async () => {
+    const mode = eff().mode;
+    return {
+      mode,
+      synthetic: mode === 'mock',
+      readOnly: true,
+      disclaimer: mode === 'mock' ? 'SYNTHETIC / MOCK NS1 data — not real RTÉ or NS1 configuration.' : undefined,
+    };
+  });
 
   app.get('/zones', { preHandler: requirePermission('ns1.detail.read'), schema: doc('List NS1 zones') }, (req, reply) =>
-    read(req, reply, ns1, '/v1/zones', async () => ({ zones: await client.listZones(req.id) })),
+    read(req, reply, eff(), '/v1/zones', async () => ({ zones: await client.listZones(req.id) })),
   );
 
   app.get('/zones/:zone', { preHandler: requirePermission('ns1.detail.read'), schema: doc('Get a complete NS1 zone') }, (req, reply) => {
     const { zone } = req.params as { zone: string };
-    return read(req, reply, ns1, `/v1/zones/${zone}`, async () => ({ zone: await client.getZone(zone, req.id) }));
+    return read(req, reply, eff(), `/v1/zones/${zone}`, async () => ({ zone: await client.getZone(zone, req.id) }));
   });
 
   // RADAR-normalised record view (engine input shape; unknown fields preserved).
@@ -69,7 +76,7 @@ export const ns1Routes: FastifyPluginAsync<Ns1RouteOptions> = async (app, opts) 
     { preHandler: requirePermission('ns1.detail.read'), schema: doc('Get a normalised NS1 record') },
     (req, reply) => {
       const { zone, domain, type } = req.params as { zone: string; domain: string; type: string };
-      return read(req, reply, ns1, `/v1/zones/${zone}/${domain}/${type}`, async () => ({
+      return read(req, reply, eff(), `/v1/zones/${zone}/${domain}/${type}`, async () => ({
         record: normaliseRecord(await client.getRecord(zone, domain, type, req.id)),
       }));
     },
@@ -81,7 +88,7 @@ export const ns1Routes: FastifyPluginAsync<Ns1RouteOptions> = async (app, opts) 
     { preHandler: requirePermission('ns1.raw.read'), schema: doc('Get the raw NS1 record') },
     (req, reply) => {
       const { zone, domain, type } = req.params as { zone: string; domain: string; type: string };
-      return read(req, reply, ns1, `/v1/zones/${zone}/${domain}/${type}`, async () => ({
+      return read(req, reply, eff(), `/v1/zones/${zone}/${domain}/${type}`, async () => ({
         raw: await client.getRecord(zone, domain, type, req.id),
       }));
     },
@@ -113,7 +120,7 @@ export const ns1Routes: FastifyPluginAsync<Ns1RouteOptions> = async (app, opts) 
         const raw = await client.getActivity({ limit }, req.id);
         const items = filterActivity(normaliseActivity(raw), { actor, action, resource });
         return {
-          provenance: buildProvenance(ns1, '/v1/account/activity', retrievedAt),
+          provenance: buildProvenance(eff(), '/v1/account/activity', retrievedAt),
           mappingNote: "Field mapping is fixture-derived; unconfirmed NS1 fields appear only under each item's raw object.",
           count: items.length,
           items,

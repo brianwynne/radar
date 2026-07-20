@@ -37,6 +37,21 @@ describe('NS1 routes — RBAC', () => {
     await app.close();
   });
 
+  it('reports the EFFECTIVE connector mode, not the startup mode, in /config and provenance', async () => {
+    // Startup config is mock, but NS1 was switched to live via the connector (Integrations page).
+    // The banner and every provenance must read live/non-synthetic — how the data was ACTUALLY served.
+    const ns1Manager = { effectiveConnection: () => ({ mode: 'live' as const, baseUrl: 'https://api.nsone.net/v1' }) };
+    const app = await makeApp('VIEWING_ENGINEER', { ns1Manager } as unknown as Parameters<typeof buildApp>[1]);
+    const cfg = await app.inject({ method: 'GET', url: '/api/v1/ns1/config' });
+    expect(cfg.json()).toMatchObject({ mode: 'live', synthetic: false });
+    expect(cfg.json().disclaimer).toBeUndefined();
+    const zones = await app.inject({ method: 'GET', url: '/api/v1/ns1/zones' });
+    expect(zones.json().provenance).toMatchObject({ mode: 'live', synthetic: false });
+    const explain = await app.inject({ method: 'POST', url: '/api/v1/dns/explain', payload: explainBody });
+    expect(explain.json().provenance).toMatchObject({ mode: 'live', synthetic: false });
+    await app.close();
+  });
+
   it('zones/record/raw/explain are denied to a NOC viewer (403) but allowed to a Viewing Engineer', async () => {
     const noc = await makeApp('NOC_VIEWER');
     for (const url of ['/api/v1/ns1/zones', RECORD_PATH, `${RECORD_PATH}/raw`]) {

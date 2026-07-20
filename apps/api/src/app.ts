@@ -204,10 +204,10 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   // Read-only NS1 + DNS explanation. The NS1 client is GET-only; in mock mode it needs no
   // credential. Tests may inject a fixture client via deps.
   const ns1Client = deps.ns1Client ?? createNs1Client(config.ns1);
-  await app.register(ns1Routes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1 });
-  await app.register(ns1AsnRoutes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1, resolver: deps.asnResolver });
-  await app.register(ns1ActiveRoutes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1, resolveCname: deps.ns1ActiveResolveCname });
-  await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1 });
+  await app.register(ns1Routes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1, ns1Connection: deps.ns1Manager });
+  await app.register(ns1AsnRoutes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1, resolver: deps.asnResolver, ns1Connection: deps.ns1Manager });
+  await app.register(ns1ActiveRoutes, { prefix: '/api/v1/ns1', client: ns1Client, ns1: config.ns1, resolveCname: deps.ns1ActiveResolveCname, ns1Connection: deps.ns1Manager });
+  await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1, ns1Connection: deps.ns1Manager });
   await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database, ns1Connection: deps.ns1Manager });
   await app.register(ns1ConnectionRoutes, { prefix: '/api/v1', manager: deps.ns1Manager });
   await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });

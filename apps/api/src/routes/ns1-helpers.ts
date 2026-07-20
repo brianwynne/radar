@@ -18,6 +18,18 @@ export interface Provenance {
 
 const MOCK_DISCLAIMER = 'SYNTHETIC / MOCK NS1 data — not real RTÉ or NS1 configuration.';
 
+/** The NS1 connector manager, seen by the routes only as a source of the effective mode. */
+export type Ns1Connection = { effectiveConnection(): { mode: RadarMode; baseUrl: string } };
+
+/** Overlay the connector's EFFECTIVE (live⇄mock) mode onto the static startup config, so
+ *  provenance reflects how the data was actually fetched — not the startup RADAR_MODE. When a
+ *  record is served by a live-configured connector, its provenance must read "live", never
+ *  "mock/synthetic". Falls back to the static config when no connector manager is wired. */
+export function resolveEffectiveNs1(ns1: Ns1Config, connection?: Ns1Connection): Ns1Config {
+  const e = connection?.effectiveConnection();
+  return e ? { ...ns1, mode: e.mode, baseUrl: e.baseUrl } : ns1;
+}
+
 export function buildProvenance(ns1: Ns1Config, endpoint: string, retrievedAt: string): Provenance {
   const synthetic = ns1.mode === 'mock';
   return {

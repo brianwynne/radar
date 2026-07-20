@@ -10,11 +10,13 @@ import { createRipestatResolver } from '../ns1/asn-resolver.js';
 import { Ns1Error } from '../ns1/errors.js';
 import { normaliseRecord } from '../ns1/normalise.js';
 import { requirePermission } from '../auth/guards.js';
-import { buildProvenance, sendNs1Error } from './ns1-helpers.js';
+import { buildProvenance, resolveEffectiveNs1, sendNs1Error, type Ns1Connection } from './ns1-helpers.js';
 
 export interface Ns1AsnRouteOptions {
   client: Ns1ReadClient;
   ns1: Ns1Config;
+  /** Effective (live⇄mock) mode source so provenance reflects the live connector. */
+  ns1Connection?: Ns1Connection;
   resolver?: AsnResolver; // injectable for tests; defaults to RIPEstat
 }
 
@@ -26,7 +28,7 @@ interface AnswerTag {
 }
 
 export const ns1AsnRoutes: FastifyPluginAsync<Ns1AsnRouteOptions> = async (app, opts) => {
-  const { client, ns1 } = opts;
+  const { client, ns1, ns1Connection } = opts;
   const resolver = opts.resolver ?? createRipestatResolver();
 
   app.get<{ Params: { zone: string; domain: string; type: string } }>(
@@ -79,7 +81,7 @@ export const ns1AsnRoutes: FastifyPluginAsync<Ns1AsnRouteOptions> = async (app, 
         const resolvedCount = rows.filter((r) => r.resolved).length;
 
         return {
-          provenance: buildProvenance(ns1, `/v1/zones/${zone}/${domain}/${type}`, retrievedAt),
+          provenance: buildProvenance(resolveEffectiveNs1(ns1, ns1Connection), `/v1/zones/${zone}/${domain}/${type}`, retrievedAt),
           record: { zone, domain, type },
           source: resolver.source,
           asnCount: uniqueAsns.length,

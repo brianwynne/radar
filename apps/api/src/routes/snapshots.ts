@@ -6,13 +6,13 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { ConfigurationSnapshot } from '@radar/data';
 import type { Ns1ReadClient } from '../ns1/client.js';
-import type { Ns1Config, RadarMode } from '../ns1/config.js';
+import type { Ns1Config } from '../ns1/config.js';
 import type { Database } from '../database/repositories.js';
 import { Ns1Error } from '../ns1/errors.js';
 import { canonicalise, diffJson, rawChecksum, structuralChecksum, summariseRecordDiff } from '../ns1/snapshot.js';
 import { captureRecordSnapshot } from '../ns1/snapshot-capture.js';
 import { requirePermission } from '../auth/guards.js';
-import { buildProvenance, sendNs1Error } from './ns1-helpers.js';
+import { buildProvenance, resolveEffectiveNs1, sendNs1Error, type Ns1Connection } from './ns1-helpers.js';
 
 export interface SnapshotRouteOptions {
   client: Ns1ReadClient;
@@ -21,7 +21,7 @@ export interface SnapshotRouteOptions {
   /** When present, the effective (live⇄mock) connector mode is read from it per-request so a
    *  snapshot captured after an Engineer switches NS1 to live is labelled live, not the startup
    *  mode. Falls back to the static `ns1` config when absent. */
-  ns1Connection?: { effectiveConnection(): { mode: RadarMode; baseUrl: string } };
+  ns1Connection?: Ns1Connection;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -56,10 +56,7 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
   const { client, ns1, database, ns1Connection } = opts;
   // The connector's effective mode/base — reflects runtime live⇄mock swaps (a snapshot must be
   // labelled by how it was ACTUALLY fetched, not the startup config).
-  const effectiveNs1 = (): Ns1Config => {
-    const e = ns1Connection?.effectiveConnection();
-    return e ? { ...ns1, mode: e.mode, baseUrl: e.baseUrl } : ns1;
-  };
+  const effectiveNs1 = (): Ns1Config => resolveEffectiveNs1(ns1, ns1Connection);
 
   // Capture — fetch, preserve raw, canonicalise, checksum, persist snapshot + audit atomically.
   app.post('/ns1/zones/:zone/:domain/:type/snapshots', { preHandler: requirePermission('snapshot.create'), schema: doc('Capture an NS1 record snapshot') }, async (req, reply) => {

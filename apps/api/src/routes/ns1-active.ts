@@ -7,18 +7,20 @@ import type { Ns1ReadClient } from '../ns1/client.js';
 import type { Ns1Config } from '../ns1/config.js';
 import { Ns1Error } from '../ns1/errors.js';
 import { requirePermission } from '../auth/guards.js';
-import { buildProvenance, sendNs1Error } from './ns1-helpers.js';
+import { buildProvenance, resolveEffectiveNs1, sendNs1Error, type Ns1Connection } from './ns1-helpers.js';
 import { resolveActiveRecord, DEFAULT_ACTIVE_ENTRY, type CnameResolver } from '../ns1/active-record.js';
 
 export interface Ns1ActiveRouteOptions {
   client: Ns1ReadClient;
   ns1: Ns1Config;
+  /** Effective (live⇄mock) mode source so provenance reflects the live connector. */
+  ns1Connection?: Ns1Connection;
   entry?: string; // public entry whose CNAME points at the active record (default: live.rte.ie)
   resolveCname?: CnameResolver; // injectable for tests; defaults to the system resolver
 }
 
 export const ns1ActiveRoutes: FastifyPluginAsync<Ns1ActiveRouteOptions> = async (app, opts) => {
-  const { client, ns1 } = opts;
+  const { client, ns1, ns1Connection } = opts;
   const entry = opts.entry ?? DEFAULT_ACTIVE_ENTRY;
 
   app.get(
@@ -33,7 +35,7 @@ export const ns1ActiveRoutes: FastifyPluginAsync<Ns1ActiveRouteOptions> = async 
           : [];
         const result = await resolveActiveRecord(client, zones, entry, { resolveCname: opts.resolveCname, correlationId: req.id });
         return {
-          provenance: buildProvenance(ns1, result.active ? `/v1/zones/${result.active.zone}/${result.active.domain}/${result.active.type}` : `dns:${entry}`, retrievedAt),
+          provenance: buildProvenance(resolveEffectiveNs1(ns1, ns1Connection), result.active ? `/v1/zones/${result.active.zone}/${result.active.domain}/${result.active.type}` : `dns:${entry}`, retrievedAt),
           ...result,
         };
       } catch (err) {
