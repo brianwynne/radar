@@ -133,8 +133,8 @@ export const api = {
     request<{ snapshot: SnapshotDetail }>(`/api/v1/snapshots/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ label }) }),
   compareSnapshots: (a: string, b: string) =>
     request<CompareResponse>('/api/v1/snapshots/compare', { method: 'POST', body: JSON.stringify({ a, b }) }),
-  compareCurrent: (id: string) =>
-    request<CompareCurrentResponse>(`/api/v1/snapshots/${enc(id)}/compare-current`, { method: 'POST', body: JSON.stringify({}) }),
+  compareCurrent: (id: string, target?: { zone: string; domain: string; type: string }) =>
+    request<CompareCurrentResponse>(`/api/v1/snapshots/${enc(id)}/compare-current`, { method: 'POST', body: JSON.stringify(target ?? {}) }),
   liveSteeringConfig: () => request<LiveSteeringConfig>('/api/v1/live-steering/config'),
   liveSteeringState: (q: { isp?: string; asn?: number; record?: string } = {}) => {
     const p = new URLSearchParams();

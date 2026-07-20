@@ -105,6 +105,11 @@ button.ghost.active { border-color: var(--brand); color: var(--brand-ink); backg
 .step.unsupported { border-left-color: var(--warn); background: var(--warn-bg); }
 .step.disabled { opacity: 0.6; border-left-color: var(--ink-soft); }
 .step-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+/* Snapshot compare-mode controls (pick a snapshot, choose what to compare it with). */
+.compare-controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem 0.9rem; margin-top: 0.75rem; }
+.compare-controls legend { padding: 0 0.4rem; font-size: 0.75rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.04em; }
+.compare-controls label.radio { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.compare-controls label.field { flex-direction: row; align-items: center; gap: 0.5rem; font-weight: 600; }
 .step-idx { font-weight: 700; color: var(--ink-soft); }
 .step-type { font-weight: 700; }
 .step-reason { color: var(--ink-soft); margin-top: 0.35rem; }

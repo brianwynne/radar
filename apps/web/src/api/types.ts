@@ -316,6 +316,7 @@ export interface CompareCurrentResponse {
   snapshot: {
     id: string;
     label?: string;
+    resourceKey?: string;
     capturedAt: string;
     retrievedAt: string;
     sourceMode: string | null;
@@ -324,12 +325,17 @@ export interface CompareCurrentResponse {
     structuralChecksum?: string;
   };
   current: {
+    resourceKey?: string;
     retrievedAt: string;
     sourceMode: string;
     synthetic: boolean;
     rawChecksum: string;
     structuralChecksum: string;
   };
+  /** The NS1 record the snapshot was compared against (own record unless a target was given). */
+  target?: { zone: string; domain: string; type: string };
+  /** True when the current record is a DIFFERENT record than the snapshot's own. */
+  crossRecord?: boolean;
   rawChecksumEqual: boolean;
   structuralChecksumEqual: boolean;
   identical: boolean;

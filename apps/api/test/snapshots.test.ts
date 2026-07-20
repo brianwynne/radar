@@ -258,4 +258,26 @@ describe('snapshots — compare-current', () => {
     expect(body.summary.filtersAdded).toBeGreaterThan(0);
     expect(body.snapshot.id).toBe(snap.id);
   });
+
+  it('compares a snapshot against a DIFFERENT current record when a target is given', async () => {
+    const { db } = fakeDatabase();
+    const app = await makeApp('ENGINEER', db);
+    const id = (await app.inject({ method: 'POST', url: CAP })).json().snapshot.id; // snapshot of live.rte.ie/A
+    // Diff it against the current vod.rte.ie/A record (a different record in the zone).
+    const res = await app.inject({ method: 'POST', url: `/api/v1/snapshots/${id}/compare-current`, payload: { zone: 'rte.ie', domain: 'vod.rte.ie', type: 'A' } });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.crossRecord).toBe(true);
+    expect(body.target).toEqual({ zone: 'rte.ie', domain: 'vod.rte.ie', type: 'A' });
+    expect(body.current.resourceKey).toBe('rte.ie/vod.rte.ie/A');
+    expect(body.identical).toBe(false); // different records differ
+    expect(body.warnings.some((w: string) => /across different records/i.test(w))).toBe(true);
+  });
+
+  it('rejects a partial target (zone, domain and type must be given together)', async () => {
+    const { db } = fakeDatabase();
+    const app = await makeApp('ENGINEER', db);
+    const id = (await app.inject({ method: 'POST', url: CAP })).json().snapshot.id;
+    expect((await app.inject({ method: 'POST', url: `/api/v1/snapshots/${id}/compare-current`, payload: { zone: 'rte.ie' } })).statusCode).toBe(400);
+  });
 });

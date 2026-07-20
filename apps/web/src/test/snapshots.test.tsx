@@ -64,12 +64,32 @@ describe('Snapshots (in NS1 Explorer)', () => {
     expect(boxes.length).toBeGreaterThanOrEqual(2);
     await userEvent.click(boxes[0]);
     await userEvent.click(boxes[1]);
-    await userEvent.click(await screen.findByRole('button', { name: /Compare selected/i }));
+    await userEvent.click(await screen.findByRole('button', { name: /^Compare$/ }));
 
     expect(await screen.findByText('Comparison')).toBeInTheDocument();
     const table = screen.getByText('answers[0].meta.weight').closest('table') as HTMLElement;
     expect(within(table).getByText('changed')).toBeInTheDocument();
     expect(within(table).getByText('70')).toBeInTheDocument();
     expect(within(table).getByText('60')).toBeInTheDocument();
+  });
+
+  it('compares one snapshot against a chosen current NS1 record', async () => {
+    stubApi(VE);
+    renderAt(RECORD);
+    await screen.findByText('before change');
+    // Switch to record-compare mode, select one snapshot, pick a record.
+    await userEvent.click(screen.getByRole('radio', { name: /current NS1 record/i }));
+    await userEvent.click(screen.getAllByRole('checkbox')[0]);
+    const select = await screen.findByLabelText(/NS1 record to compare against/i);
+    await userEvent.selectOptions(select, 'vod.rte.ie|A'); // a different record in the zone
+    await userEvent.click(screen.getByRole('button', { name: /^Compare$/ }));
+
+    expect(await screen.findByText('Comparison')).toBeInTheDocument();
+    expect(screen.getByText(/current vod\.rte\.ie/i)).toBeInTheDocument(); // heading names the target record
+    expect(screen.getByText('answers[0].meta.weight')).toBeInTheDocument(); // diff from compare-current
+    // The compare-current POST carried the chosen record as its target.
+    const call = fetchCalls().find((c) => String(c[0]).includes('/compare-current') && c[1]?.method === 'POST');
+    expect(call).toBeTruthy();
+    expect(JSON.parse(String(call![1]!.body))).toEqual({ zone: 'rte.ie', domain: 'vod.rte.ie', type: 'A' });
   });
 });
