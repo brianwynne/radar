@@ -46,6 +46,7 @@ const scen = (country: string, asn: number, ecsPrefix: string): Scenario => ({
 const share = (r: ReturnType<typeof evaluate>, platform: string) =>
   r.expectedDistribution?.shares.filter((s) => s.deliveryPlatform === platform).reduce((a, s) => a + s.share, 0) ?? 0;
 const removedAt = (r: ReturnType<typeof evaluate>, type: string) => r.traces.find((t) => t.type === type)!.removedAnswerIds;
+const outcomesAt = (r: ReturnType<typeof evaluate>, type: string) => r.traces.find((t) => t.type === type)!.outcomes;
 
 describe('platform mapping from RDATA (not just meta.note)', () => {
   it('derives Réalta/Akamai/Fastly from the answer target', () => {
@@ -99,6 +100,25 @@ describe('no ASN match → untagged remain, then prefix fence selects the tagged
     expect(r.selected).toBe('prefix-realta');
     expect(r.selectionDeterminism).toBe('context_dependent'); // one survivor, no shuffle over >1; hinges on ASN/prefix
     expect(share(r, 'Réalta')).toBeCloseTo(1, 5);
+  });
+});
+
+describe('per-answer outcome accuracy: fallback flag + reasons match the actual disposition', () => {
+  it('flags an untagged answer KEPT as a fallback (nothing matched) and never says "dropped"', () => {
+    const r = evaluate(record, scen('IE', 99999, '203.0.113.7/32')); // no ASN-tagged answer matches AS99999
+    const o = outcomesAt(r, 'netfence_asn').find((x) => x.answerId === 'fastly-allother')!;
+    expect(o.disposition).toBe('retained');
+    expect(o.fallback).toBe(true);
+    expect(o.reason).toMatch(/fallback/i);
+    expect(o.reason).not.toMatch(/dropped/i); // the old bug labelled kept answers "dropped"
+  });
+
+  it('an untagged answer actually DROPPED (a tag matched + remove flag on) reads "dropped", not fallback', () => {
+    const r = evaluate(record, scen('IE', 100, '198.51.100.0/24')); // AS100 matches → untagged dropped
+    const o = outcomesAt(r, 'netfence_asn').find((x) => x.answerId === 'fastly-allother')!;
+    expect(o.disposition).toBe('removed');
+    expect(o.fallback).toBeUndefined();
+    expect(o.reason).toMatch(/dropped/i);
   });
 });
 

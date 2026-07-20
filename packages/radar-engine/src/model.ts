@@ -27,6 +27,10 @@ export interface AnswerOutcome {
   answerId: string;
   disposition: AnswerDisposition;
   reason: string;
+  /** True when this answer was retained ONLY because it is an untagged fallback (no fence tag
+   *  matched the requester, or it carries no restriction) — worth highlighting: it is serving as
+   *  the safety net, not as a positive match. */
+  fallback?: boolean;
 }
 
 /** How a filter acts on the answer list (NS1 guide §8.1). */

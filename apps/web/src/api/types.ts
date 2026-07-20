@@ -57,6 +57,8 @@ export interface AnswerOutcome {
   answerId: string;
   disposition: AnswerDisposition;
   reason: string;
+  /** Retained only as an untagged fallback (nothing matched / no restriction) — highlight it. */
+  fallback?: boolean;
 }
 
 export type FilterBehaviour = 'eliminate' | 'reorder' | 'select' | 'group' | 'modify' | 'unknown';

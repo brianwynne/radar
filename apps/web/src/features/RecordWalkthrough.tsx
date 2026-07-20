@@ -189,9 +189,9 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
                       <div className={`wt-branch ${!matched ? 'taken' : ''}`}><span className="wt-branch-key">If NO</span> {br.ifNo}</div>
                     </div>
                   )}
-                  {/* Live answer pool: survivors + dropped, coloured by platform */}
+                  {/* Live answer pool: survivors + dropped, coloured by platform; fallbacks flagged green */}
                   <div className="wt-pool-chips">
-                    {kept.map((o) => <span key={o.answerId} className="chip kept" style={{ borderColor: colorFor(platformOfId(o.answerId)) }} title={o.reason || platformOfId(o.answerId)}>{labelOfId(o.answerId)}</span>)}
+                    {kept.map((o) => <span key={o.answerId} className={`chip kept ${o.fallback ? 'fallback' : ''}`} style={o.fallback ? undefined : { borderColor: colorFor(platformOfId(o.answerId)) }} title={o.reason || platformOfId(o.answerId)}>{labelOfId(o.answerId)}{o.fallback && ' · fallback'}</span>)}
                     {dropped.map((o) => <span key={o.answerId} className="chip dropped" title={o.reason || platformOfId(o.answerId)}>{labelOfId(o.answerId)}</span>)}
                   </div>
                   <div className="wt-result muted">→ {t.reason}</div>
@@ -201,10 +201,14 @@ function SingleWalkthrough({ zone, domain, type }: { zone: string; domain: strin
                       {open.has(t.index) && (
                         <ul className="wt-outcomes">
                           {outcomes.map((o) => (
-                            <li key={o.answerId} className={o.disposition === 'removed' ? 'dropped' : 'kept'}>
+                            <li key={o.answerId} className={o.disposition === 'removed' ? 'dropped' : o.fallback ? 'fallback' : 'kept'}>
                               <span className="platform-dot" style={{ background: colorFor(platformOfId(o.answerId)) }} />
                               <span className="mono">{labelOfId(o.answerId)}</span>
-                              <span className={`badge badge-sm ${o.disposition === 'removed' ? 'danger' : 'ok'}`}>{o.disposition === 'removed' ? 'dropped' : 'kept'}</span>
+                              {o.fallback ? (
+                                <span className="badge ok badge-sm" title="Kept as the untagged fallback — nothing matched the requester">fallback</span>
+                              ) : (
+                                <span className={`badge badge-sm ${o.disposition === 'removed' ? 'danger' : 'ok'}`}>{o.disposition === 'removed' ? 'dropped' : 'kept'}</span>
+                              )}
                               <span className="muted">{o.reason}</span>
                             </li>
                           ))}

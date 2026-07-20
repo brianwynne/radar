@@ -183,6 +183,8 @@ button.ghost.active { border-color: var(--brand); color: var(--brand-ink); backg
 .wt-outcomes { list-style: none; margin: 0.4rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; }
 .wt-outcomes li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .wt-outcomes li.dropped .mono { text-decoration: line-through; opacity: 0.7; }
+.wt-outcomes li.fallback .mono { color: var(--ok, #2f855a); font-weight: 600; }
+.chip.fallback { border-color: var(--ok, #2f855a); color: var(--ok, #2f855a); background: color-mix(in srgb, var(--ok, #2f855a) 10%, transparent); font-weight: 600; }
 .wt-compare-pick { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 .matrix.wt-compare td, .matrix.wt-compare th { text-align: center; }
 .matrix.wt-compare td:first-child, .matrix.wt-compare th:first-child { text-align: left; }

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { VE, renderAt, stubApi } from './helpers';
 import { question, branches, outcomesOf } from '../features/RecordWalkthrough';
@@ -62,6 +62,17 @@ describe('Walkthrough tab (in NS1 Explorer)', () => {
     await waitFor(() => expect(screen.getAllByText('78%').length).toBeGreaterThan(0));
     expect(screen.getAllByText('22%').length).toBeGreaterThan(0);
     expect(screen.getByText(/most likely delivery platform/i)).toBeInTheDocument();
+  });
+
+  it('highlights an answer kept as an untagged fallback', async () => {
+    stubApi(VE);
+    renderAt('/explorer/rte.ie/live.rte.ie/A');
+    await userEvent.click(await screen.findByRole('button', { name: /^Walkthrough$/ }));
+    const upStep = (await screen.findByText('Up')).closest('.wt-step') as HTMLElement;
+    await userEvent.click(within(upStep).getByRole('button', { name: /per-answer detail/i }));
+    // The fallback answer is badged "fallback" with the explanatory reason.
+    expect(within(upStep).getByText('fallback')).toBeInTheDocument();
+    expect(within(upStep).getByText(/kept as a fallback/i)).toBeInTheDocument();
   });
 
   it('compares several requesters side by side', async () => {

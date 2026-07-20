@@ -43,8 +43,8 @@ interface ReqBody {
   scenario: { resolverIp: string; ecsPresent: boolean; ecsPrefix?: string; country?: string; asn?: number; healthOverrides?: Record<string, boolean> };
 }
 
-function trace(index: number, type: string, supported: boolean, behaviour: FilterTrace['behaviour'], reason: string, reorder = false): FilterTrace {
-  return { index, type, disabled: false, supported, behaviour, config: {}, metadataConsumed: [], input: ['ans-realta', 'ans-fastly'], output: ['ans-realta', 'ans-fastly'], orderingBefore: [], orderingAfter: [], removedAnswerIds: [], outcomes: [], reorder, reason, confidence: 'high' };
+function trace(index: number, type: string, supported: boolean, behaviour: FilterTrace['behaviour'], reason: string, reorder = false, outcomes: FilterTrace['outcomes'] = []): FilterTrace {
+  return { index, type, disabled: false, supported, behaviour, config: {}, metadataConsumed: [], input: ['ans-realta', 'ans-fastly'], output: ['ans-realta', 'ans-fastly'], orderingBefore: [], orderingAfter: [], removedAnswerIds: [], outcomes, reorder, reason, confidence: 'high' };
 }
 
 /** Build a plausible evaluation response reflecting the request (never hard-coded in the
@@ -68,7 +68,13 @@ export function makeExplain(req: ReqBody): ExplainResponse {
       answers,
       traces: partial
         ? [trace(0, 'up', true, 'eliminate', 'All up.'), trace(1, 'shed_load', false, 'unknown', 'Unsupported filter — evaluation stops.')]
-        : [trace(0, 'up', true, 'eliminate', 'All up.'), trace(1, 'weighted_shuffle', true, 'reorder', 'Ordered by weight.', true)],
+        : [
+            trace(0, 'up', true, 'eliminate', 'All up.', false, [
+              { answerId: 'ans-realta', disposition: 'retained', reason: 'meta.up = true' },
+              { answerId: 'ans-fastly', disposition: 'retained', reason: 'no country metadata → kept as a fallback', fallback: true },
+            ]),
+            trace(1, 'weighted_shuffle', true, 'reorder', 'Ordered by weight.', true),
+          ],
       eligibleAnswerIds: eligible,
       selected: partial ? undefined : eligible[0],
       selectionDeterminism: partial ? 'partial' : 'probabilistic',

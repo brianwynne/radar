@@ -160,7 +160,7 @@ function fence(
   metaKey: 'asn' | 'ip_prefixes' | 'country',
   removeUntagged: boolean,
   classify: (w: Work) => Tag,
-  describe: (w: Work, tag: Tag) => string,
+  describe: (w: Work, tag: Tag, dropUntagged: boolean) => string,
   summary: string,
 ): StepResult {
   const tags = input.map((w) => ({ w, tag: classify(w) }));
@@ -172,7 +172,10 @@ function fence(
   for (const { w, tag } of tags) {
     const keep = tag === 'match' || tag === 'feed' || (tag === 'untagged' && !dropUntagged);
     if (keep) output.push(w);
-    outcomes.push({ answerId: w.id, disposition: keep ? 'retained' : 'removed', reason: describe(w, tag) });
+    // An untagged answer that survives did so only as a fallback (nothing matched, or it has no
+    // restriction) — flag it so the UI can highlight the safety net.
+    const fallback = tag === 'untagged' && keep;
+    outcomes.push({ answerId: w.id, disposition: keep ? 'retained' : 'removed', reason: describe(w, tag, dropUntagged), ...(fallback ? { fallback: true } : {}) });
   }
   return {
     output,
@@ -180,7 +183,7 @@ function fence(
     reorder: false,
     metadataConsumed: [metaKey],
     confidence: feedSeen ? 'medium' : 'high',
-    reason: `${summary}: matched ${tags.filter((t) => t.tag === 'match').length}, untagged ${dropUntagged ? 'dropped (a tag matched)' : 'kept'}, removed ${input.length - output.length}, retained ${output.length}.`,
+    reason: `${summary}: ${tags.filter((t) => t.tag === 'match').length} matched, untagged ${dropUntagged ? 'dropped (a tagged answer matched)' : 'kept as fallbacks'}, ${input.length - output.length} removed, ${output.length} retained.`,
     warning: feedSeen && removeUntagged ? 'Feed-driven tag present: cannot assert a match, so untagged answers were kept.' : undefined,
   };
 }
@@ -204,13 +207,16 @@ const netfence_asn: FilterFn = (input, config, ctx) => {
     if (set === 'feed') return 'feed';
     return set.includes(asn) ? 'match' : 'nomatch';
   };
-  return fence(input, 'asn', flagOn(config.remove_no_asn), tagOf, (w, tag) => {
+  return fence(input, 'asn', flagOn(config.remove_no_asn), tagOf, (w, tag, dropUntagged) => {
     const set = asnMeta(w.raw.meta?.asn);
     const list = Array.isArray(set) ? `[${set.join(', ')}]` : '';
     if (tag === 'match') return `ASN ${asn} in answer set ${list}`;
     if (tag === 'feed') return 'ASN metadata is feed-driven → kept (state unknown in v1)';
     if (tag === 'nomatch') return `ASN ${asn} not in answer set ${list}`;
-    return flagOn(config.remove_no_asn) ? 'untagged (no ASN meta) → dropped: a tagged answer matched (remove_no_asn)' : 'no ASN metadata → global answer, kept';
+    if (dropUntagged) return 'no ASN metadata → dropped: another answer matched the requester and remove_no_asn is on';
+    return flagOn(config.remove_no_asn)
+      ? `no ASN metadata → kept as a fallback (no answer's ASN list matched AS${asn})`
+      : 'no ASN metadata → kept as a global fallback (this answer has no ASN restriction)';
   }, `Fenced by ASN ${asn}`);
 };
 
@@ -233,13 +239,16 @@ const netfence_prefix: FilterFn = (input, config, ctx) => {
     if (set === 'feed') return 'feed';
     return set.some((p) => cidrContains(p, clientPrefix) === true) ? 'match' : 'nomatch';
   };
-  return fence(input, 'ip_prefixes', flagOn(config.remove_no_ip_prefixes), tagOf, (w, tag) => {
+  return fence(input, 'ip_prefixes', flagOn(config.remove_no_ip_prefixes), tagOf, (w, tag, dropUntagged) => {
     const set = listMeta(w.raw.meta?.ip_prefixes);
     const list = Array.isArray(set) ? `[${set.join(', ')}]` : '';
     if (tag === 'match') return `client ${clientPrefix} within answer prefixes ${list}`;
     if (tag === 'feed') return 'prefix metadata is feed-driven → kept';
     if (tag === 'nomatch') return `client ${clientPrefix} not within ${list}`;
-    return flagOn(config.remove_no_ip_prefixes) ? 'untagged (no prefix meta) → dropped: a tagged answer matched (remove_no_ip_prefixes)' : 'no prefix metadata → global answer, kept';
+    if (dropUntagged) return 'no ip_prefixes metadata → dropped: another answer matched the requester and remove_no_ip_prefixes is on';
+    return flagOn(config.remove_no_ip_prefixes)
+      ? `no ip_prefixes metadata → kept as a fallback (no answer's prefixes contained ${clientPrefix})`
+      : 'no ip_prefixes metadata → kept as a global fallback (this answer has no prefix restriction)';
   }, `Fenced by prefix ${clientPrefix}`);
 };
 
@@ -293,12 +302,15 @@ const geofence_country: FilterFn = (input, config, ctx) => {
     if (cs.length === 0) return 'untagged';
     return cs.includes(country) ? 'match' : 'nomatch';
   };
-  return fence(input, 'country', flagOn(config.remove_no_location), tagOf, (w, tag) => {
+  return fence(input, 'country', flagOn(config.remove_no_location), tagOf, (w, tag, dropUntagged) => {
     const cs = countryList(w.raw.meta?.country);
     const list = `[${cs.join(', ')}]`;
     if (tag === 'match') return `country ${country} in ${list}`;
     if (tag === 'nomatch') return `country ${country} not in ${list}`;
-    return flagOn(config.remove_no_location) ? 'untagged (no country meta) → dropped: a geo-tagged answer matched (remove_no_location)' : 'no country metadata → kept (fallback)';
+    if (dropUntagged) return 'no country metadata → dropped: a geo-tagged answer matched the requester and remove_no_location is on';
+    return flagOn(config.remove_no_location)
+      ? `no country metadata → kept as a fallback (no country-tagged answer matched ${country})`
+      : 'no country metadata → kept as a global fallback (this answer has no geo restriction)';
   }, `Fenced by country ${country}`);
 };
 
