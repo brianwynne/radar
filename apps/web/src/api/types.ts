@@ -1029,7 +1029,7 @@ export interface ResolverSnapshot {
 }
 /** A handle for one on-demand "check now" run: the one-off measurement per ISP. */
 export interface ResolverCheck { isp: string; asn: number; measurementId: number }
-export interface ResolverCheckStart { checks: ResolverCheck[]; startedAt: string }
+export interface ResolverCheckStart { checks: ResolverCheck[]; startedAt: string; target: string }
 export interface ResolverCheckResult { snapshot: ResolverSnapshot; pending: boolean }
 // ---- Resolver identity (whoami + ECS): the ISP's ACTUAL recursive resolvers behind CPE forwarders
 export interface ResolverIdentityEntry { resolver: string; public: boolean; probeCount: number; ecs: string | null; ecsPrefix: number | null }

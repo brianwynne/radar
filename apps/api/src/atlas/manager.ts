@@ -11,12 +11,22 @@ import type { ResolverIdentitySnapshot, ResolverSnapshot } from './types.js';
 export interface ResolverCheck { isp: string; asn: number; measurementId: number }
 export interface ResolverManager {
   snapshot(): Promise<ResolverSnapshot>;
-  checkNow(): Promise<{ checks: ResolverCheck[]; startedAt: string }>;
-  checkResults(checks: ResolverCheck[]): Promise<{ snapshot: ResolverSnapshot; pending: boolean }>;
+  /** Fire a burst per ISP. `target` overrides the record checked (defaults to the configured one). */
+  checkNow(target?: string): Promise<{ checks: ResolverCheck[]; startedAt: string; target: string }>;
+  checkResults(checks: ResolverCheck[], target?: string): Promise<{ snapshot: ResolverSnapshot; pending: boolean }>;
   setPolling(enabled: boolean): Promise<{ pollingEnabled: boolean }>;
   pollingEnabled(): boolean;
   /** The ISP's ACTUAL recursive resolvers (behind CPE forwarders) + their ECS behaviour. */
   identity(): Promise<ResolverIdentitySnapshot>;
+}
+
+// Accept only a plausible hostname (letters/digits/hyphen labels, dot-separated) so a caller can't
+// inject anything odd into the Atlas query. Returns the trimmed, lower-cased name, or null if unusable.
+export function normaliseTarget(raw: string | undefined | null): string | null {
+  if (!raw) return null;
+  const t = raw.trim().toLowerCase().replace(/\.$/, '');
+  if (t.length === 0 || t.length > 253) return null;
+  return /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(t) ? t : null;
 }
 
 const dnsDefinition = (target: string, description: string, interval?: number) => ({
@@ -53,9 +63,9 @@ export class HttpAtlasManager implements ResolverManager {
   }
   // A short high-cadence BURST: a recurring measurement (60s interval) that auto-stops after ~11 min,
   // oversampling the 300s cache cycle so each resolver's MAX served TTL = its true set-TTL.
-  private async createBurst(m: AtlasIspMeasurement): Promise<number | null> {
+  private async createBurst(m: AtlasIspMeasurement, target: string): Promise<number | null> {
     const stopTime = Math.floor(Date.now() / 1000) + this.burstWindowSecs;
-    const body = { definitions: [dnsDefinition(this.cfg.target, `RADAR TTL burst — ${this.cfg.target} via ${m.isp} (AS${m.asn})`, 60)], probes: [{ type: 'asn', value: m.asn, requested: 20 }], is_oneoff: false, stop_time: stopTime };
+    const body = { definitions: [dnsDefinition(target, `RADAR TTL burst — ${target} via ${m.isp} (AS${m.asn})`, 60)], probes: [{ type: 'asn', value: m.asn, requested: 20 }], is_oneoff: false, stop_time: stopTime };
     const r = await this.fetchImpl(`${this.cfg.endpoint}/measurements/`, { method: 'POST', headers: this.auth(), body: JSON.stringify(body) });
     const j = (await r.json().catch(() => ({}))) as { measurements?: number[] };
     return j.measurements?.[0] ?? null;
@@ -98,14 +108,15 @@ export class HttpAtlasManager implements ResolverManager {
     return { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, retrievedAt: new Date().toISOString() }, isps, observedAt, target: this.cfg.target, warnings, pollingEnabled: this.enabled };
   }
 
-  async checkNow(): Promise<{ checks: ResolverCheck[]; startedAt: string }> {
+  async checkNow(target?: string): Promise<{ checks: ResolverCheck[]; startedAt: string; target: string }> {
+    const t = normaliseTarget(target) ?? this.cfg.target;
     const covered = this.measurements.filter((m) => m.asn && this.hasCoverage(m));
     const checks: ResolverCheck[] = [];
     for (const m of covered) {
-      const id = await this.createBurst(m);
+      const id = await this.createBurst(m, t);
       if (id !== null) checks.push({ isp: m.isp, asn: m.asn, measurementId: id });
     }
-    return { checks, startedAt: new Date().toISOString() };
+    return { checks, startedAt: new Date().toISOString(), target: t };
   }
   // Covered = the ISP had a recurring measurement (i.e. Atlas has probes there). Three → null → skip.
   private hasCoverage(m: AtlasIspMeasurement): boolean {
@@ -114,7 +125,8 @@ export class HttpAtlasManager implements ResolverManager {
 
   // Aggregate a BURST: fetch ALL runs per ISP, collapse to per-resolver MAX (set-TTL) + verdicts.
   // Pending until every covered ISP has ≥ burstTargetRuns distinct runs (or the frontend times out).
-  async checkResults(checks: ResolverCheck[]): Promise<{ snapshot: ResolverSnapshot; pending: boolean }> {
+  async checkResults(checks: ResolverCheck[], target?: string): Promise<{ snapshot: ResolverSnapshot; pending: boolean }> {
+    const t = normaliseTarget(target) ?? this.cfg.target;
     const warnings: string[] = [];
     const covered = checks.map((c) => ({ m: { isp: c.isp, asn: c.asn, measurementId: c.measurementId } as AtlasIspMeasurement }));
     let pending = false;
@@ -133,7 +145,7 @@ export class HttpAtlasManager implements ResolverManager {
     // Include the no-coverage ISPs (e.g. Three) so the view is complete.
     for (const m of this.cfg.measurements) if (m.measurementId === null && !isps.some((i) => i.isp === m.isp)) isps.push(buildBurstIsp({ ...m }, []));
     const observedAt = isps.map((i) => i.observedAt).filter((x): x is string => !!x).sort().at(-1) ?? null;
-    const snapshot: ResolverSnapshot = { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, notice: 'TTL burst check — per-resolver set-TTL (max over ~11 min)', retrievedAt: new Date().toISOString() }, isps, observedAt, target: this.cfg.target, warnings, pollingEnabled: this.enabled };
+    const snapshot: ResolverSnapshot = { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, notice: `TTL burst check — per-resolver set-TTL for ${t} (max over ~11 min)`, retrievedAt: new Date().toISOString() }, isps, observedAt, target: t, warnings, pollingEnabled: this.enabled };
     if (isps.some((i) => i.covered && i.samples.length > 0)) this.lastCheck = snapshot; // seed the baseline with real data
     return { snapshot, pending };
   }
@@ -176,7 +188,7 @@ export class DisabledResolverManager implements ResolverManager {
     return { provenance: { source: 'disabled', synthetic: false, readOnly: true, informationalOnly: true, notice: 'RIPE Atlas resolver reader is not connected — enable it (ATLAS_ENABLED + live mode + key) to read live measurements.', retrievedAt: new Date().toISOString() }, isps: [], observedAt: null, target: this.target, warnings: [], pollingEnabled: false };
   }
   async snapshot() { return this.empty(); }
-  async checkNow() { return { checks: [], startedAt: new Date().toISOString() }; }
+  async checkNow(target?: string) { return { checks: [], startedAt: new Date().toISOString(), target: normaliseTarget(target) ?? this.target }; }
   async checkResults() { return { snapshot: this.empty(), pending: false }; }
   async setPolling() { return { pollingEnabled: false }; }
   async identity(): Promise<ResolverIdentitySnapshot> {

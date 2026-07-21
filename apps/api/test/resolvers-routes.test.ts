@@ -8,6 +8,7 @@ import { createAtlasManager, loadAtlasConfig } from '../src/atlas/index.js';
 import { MockAtlasManager } from '../src/atlas/mock.js';
 import type { ResolverManager, ResolverSnapshot } from '../src/atlas/index.js';
 import type { ResolverIdentitySnapshot } from '../src/atlas/types.js';
+import { normaliseTarget } from '../src/atlas/manager.js';
 
 const mockManager = () => new MockAtlasManager(loadAtlasConfig({ ATLAS_ENABLED: 'true', ATLAS_MODE: 'mock' }));
 
@@ -83,6 +84,23 @@ describe('resolver-reader route', () => {
     expect(body.provenance.synthetic).toBe(false); // not synthetic — just not connected
     expect(body.isps).toEqual([]);
     await a.close();
+  });
+
+  it('accepts a custom target to check a different record; baseline stays configured', async () => {
+    const eng = await app('ENGINEER');
+    const start = (await eng.inject({ method: 'POST', url: '/api/v1/network/resolvers/check', payload: { target: 'vod.rte.ie' } })).json();
+    expect(start.target).toBe('vod.rte.ie'); // burst fired against the requested record
+    const res = (await eng.inject({ method: 'POST', url: '/api/v1/network/resolvers/check/results', payload: { checks: start.checks, target: 'vod.rte.ie' } })).json();
+    expect(res.snapshot.target).toBe('vod.rte.ie');
+    // The cached baseline is unaffected — still the configured record.
+    expect(((await eng.inject({ url: '/api/v1/network/resolvers' })).json() as ResolverSnapshot).target).toBe('live.rte.ie');
+    await eng.close();
+  });
+
+  it('normaliseTarget accepts hostnames and rejects junk', () => {
+    expect(normaliseTarget('VOD.rte.ie.')).toBe('vod.rte.ie'); // trimmed, lower-cased, trailing dot dropped
+    expect(normaliseTarget('live.rte.ie')).toBe('live.rte.ie');
+    for (const bad of ['', '  ', 'not a host', 'no-dot', 'http://x.com', '-bad.com', 'a..b', 'x.'.repeat(200)]) expect(normaliseTarget(bad)).toBeNull();
   });
 
   it('polling toggle is engineer-gated and flips the flag', async () => {

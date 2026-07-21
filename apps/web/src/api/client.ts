@@ -215,9 +215,9 @@ export const api = {
   networkStatus: () => request<NetworkStatusResponse>('/api/v1/network/status'),
   resolvers: () => request<ResolverSnapshot>('/api/v1/network/resolvers'),
   resolverIdentity: () => request<ResolverIdentitySnapshot>('/api/v1/network/resolvers/identity'),
-  resolverCheck: () => request<ResolverCheckStart>('/api/v1/network/resolvers/check', { method: 'POST' }),
-  resolverCheckResults: (checks: ResolverCheck[]) =>
-    request<ResolverCheckResult>('/api/v1/network/resolvers/check/results', { method: 'POST', body: JSON.stringify({ checks }) }),
+  resolverCheck: (target?: string) => request<ResolverCheckStart>('/api/v1/network/resolvers/check', { method: 'POST', body: JSON.stringify(target ? { target } : {}) }),
+  resolverCheckResults: (checks: ResolverCheck[], target?: string) =>
+    request<ResolverCheckResult>('/api/v1/network/resolvers/check/results', { method: 'POST', body: JSON.stringify({ checks, target }) }),
   resolverPolling: (enabled: boolean) =>
     request<{ pollingEnabled: boolean }>('/api/v1/network/resolvers/polling', { method: 'POST', body: JSON.stringify({ enabled }) }),
   networkDevices: () => request<NetworkDevicesResponse>('/api/v1/network/devices'),

@@ -13,7 +13,8 @@ export interface ResolverRoutesOptions {
   now?: () => number;
 }
 
-const checkBody = z.object({ checks: z.array(z.object({ isp: z.string(), asn: z.number().int(), measurementId: z.number().int() })) });
+const checkStartBody = z.object({ target: z.string().max(253).optional() });
+const checkBody = z.object({ checks: z.array(z.object({ isp: z.string(), asn: z.number().int(), measurementId: z.number().int() })), target: z.string().max(253).optional() });
 const pollingBody = z.object({ enabled: z.boolean() });
 const schema = (summary: string, description: string) => ({ tags: ['network'], summary, description, security: [{ bearerAuth: [] }] });
 
@@ -43,8 +44,11 @@ export const resolverRoutes: FastifyPluginAsync<ResolverRoutesOptions> = async (
 
   app.post(
     '/network/resolvers/check',
-    { preHandler: requirePermission('connector.manage'), schema: schema('Check resolvers now', 'Fire a one-off RIPE Atlas DNS measurement per covered ISP and return the handles to poll. Spends Atlas credits (user-initiated).') },
-    async () => opts.manager.checkNow(),
+    { preHandler: requirePermission('connector.manage'), schema: schema('Check resolvers now', 'Fire a burst RIPE Atlas DNS measurement per covered ISP and return the handles to poll. Optional `target` checks a different record (defaults to the configured one). Spends Atlas credits (user-initiated).') },
+    async (req) => {
+      const parsed = checkStartBody.safeParse(req.body ?? {});
+      return opts.manager.checkNow(parsed.success ? parsed.data.target : undefined);
+    },
   );
 
   app.post(
@@ -53,7 +57,7 @@ export const resolverRoutes: FastifyPluginAsync<ResolverRoutesOptions> = async (
     async (req) => {
       const parsed = checkBody.safeParse(req.body);
       if (!parsed.success) return { error: 'invalid checks' };
-      return opts.manager.checkResults(parsed.data.checks);
+      return opts.manager.checkResults(parsed.data.checks, parsed.data.target);
     },
   );
 

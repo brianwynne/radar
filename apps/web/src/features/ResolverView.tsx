@@ -246,6 +246,8 @@ export function ResolverView() {
   const [view, setView] = useState<'steering' | 'identity'>('steering');
   const [ident, setIdent] = useState<ResolverIdentitySnapshot | null>(null);
   const [identState, setIdentState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [checkTarget, setCheckTarget] = useState('');
+  const hostnameOk = (h: string) => /^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i.test(h.trim());
 
   useEffect(() => {
     if (view !== 'identity' || ident || identState === 'loading') return;
@@ -269,14 +271,17 @@ export function ResolverView() {
   const covered = useMemo(() => (snap?.isps ?? []).filter((i) => i.covered).length, [snap]);
 
   async function checkNow() {
-    setChecking(true); setCheckNote('Starting an ~11-min TTL burst from each ISP (a query every 60s, to catch each resolver fresh)…'); setError(null);
+    const wanted = checkTarget.trim();
+    if (wanted && !hostnameOk(wanted)) { setError(`“${wanted}” is not a valid hostname.`); return; }
+    setChecking(true); setError(null);
     try {
-      const { checks } = await api.resolverCheck();
+      const { checks, target } = await api.resolverCheck(wanted || undefined);
+      setCheckNote(`Starting an ~11-min TTL burst for ${target} from each ISP (a query every 60s, to catch each resolver fresh)…`);
       const start = Date.now();
       // A burst runs ~11 min; poll every 30s, accumulating per-resolver max, until done or ~13 min.
       for (;;) {
         await new Promise((r) => setTimeout(r, 30000));
-        const { snapshot, pending } = await api.resolverCheckResults(checks as ResolverCheck[]);
+        const { snapshot, pending } = await api.resolverCheckResults(checks as ResolverCheck[], target);
         setSnap(snapshot);
         const mins = Math.round((Date.now() - start) / 60000);
         if (!pending) { setCheckNote(`Burst complete — per-resolver set-TTL established across ${covered} ISPs.`); break; }
@@ -331,7 +336,21 @@ export function ResolverView() {
               <input type="checkbox" checked={snap.pollingEnabled ?? true} disabled={busy} onChange={togglePolling} /> 6h polling
             </label>
           )}
-          {canManage && <button className="primary" onClick={checkNow} disabled={checking}>{checking ? 'Checking…' : 'Check resolvers now'}</button>}
+          {canManage && (
+            <input
+              className="rv-target-input mono"
+              type="text"
+              value={checkTarget}
+              placeholder={snap.target}
+              disabled={checking}
+              spellCheck={false}
+              aria-label="Domain to check"
+              title="Record to check on-demand (defaults to the configured record). The 6-hourly baseline stays on the configured record."
+              onChange={(e) => setCheckTarget(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && !checking) checkNow(); }}
+            />
+          )}
+          {canManage && <button className="primary" onClick={checkNow} disabled={checking}>{checking ? 'Checking…' : `Check ${checkTarget.trim() || snap.target}`}</button>}
         </div>
       </div>
       {checkNote && <div className="notice info rv-note">{checking && <span className="rv-spin" />}{checkNote}</div>}

@@ -35,14 +35,17 @@ describe('Resolver reader tab', () => {
   it('hides the engineer controls from a viewer', async () => {
     stubApi(NOC);
     await openResolvers();
-    expect(screen.queryByRole('button', { name: /Check resolvers now/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Check /i })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/6h polling/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Domain to check/i)).not.toBeInTheDocument();
   });
 
-  it('gives an engineer the check button and a working polling switch', async () => {
+  it('gives an engineer the check button, domain input and a working polling switch', async () => {
     stubApi(ENGINEER);
     await openResolvers();
-    expect(screen.getByRole('button', { name: /Check resolvers now/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Check /i })).toBeInTheDocument();
+    // Domain box defaults (placeholder) to the configured record and lets a different one be checked.
+    expect((screen.getByLabelText(/Domain to check/i) as HTMLInputElement).placeholder).toBe('live.rte.ie');
     const poll = screen.getByLabelText(/6h polling/i) as HTMLInputElement;
     expect(poll.checked).toBe(true);
     await userEvent.click(poll); // → POST /polling {enabled:false} → stub returns pollingEnabled:false

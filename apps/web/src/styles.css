@@ -439,6 +439,8 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-group-head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); font-weight: 700; padding-top: 0.2rem; }
 .rv-public-group { margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--line); opacity: 0.85; }
 .rv-samples-note { font-size: 0.72rem; line-height: 1.45; margin: 0.35rem 0 0.2rem; padding: 0.35rem 0.5rem; border-radius: 6px; background: rgba(127,127,127,0.08); }
+.rv-target-input { width: 15rem; max-width: 42vw; padding: 0.3rem 0.5rem; font-size: 0.82rem; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); }
+.rv-target-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
 /* Steering / Resolver-identity view toggle */
 .rv-viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
