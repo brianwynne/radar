@@ -2,6 +2,7 @@
 // resolving live.rte.ie (measurement 192116677).
 import { describe, it, expect } from 'vitest';
 import { isPublicResolver, parseDnsAbuf, summarizeChain } from '../src/atlas/decode.js';
+import { buildIspView } from '../src/atlas/client.js';
 
 // Eir probe 27252, resolver serving a cached answer: live.rte.ie → livebase → liveedge → 4× A
 // (185.54.105.x). TTLs as served: apex CNAME 88, livebase CNAME 53, A 27.
@@ -50,5 +51,33 @@ describe('parseDnsAbuf + summarizeChain', () => {
     expect(parseDnsAbuf('not-base64-@@')).toEqual([]);
     expect(parseDnsAbuf('AAAA')).toEqual([]); // too short
     expect(summarizeChain([])).toMatchObject({ platform: null, target: null, vips: [], minTtl: null });
+  });
+});
+
+describe('buildIspView — steering verdict keyed on the NS1-record TTL (not the edge)', () => {
+  const m = { isp: 'Eir', asn: 5466, measurementId: 192119190 };
+
+  it('NS1-record TTL ≤ ceiling → steering NOT impeded, window = record TTL (edge TTL is irrelevant)', () => {
+    // EIR_CACHED: NS1 record (livebase) CNAME TTL 53, edge A TTL 27.
+    const v = buildIspView(m, [{ prb_id: 1, timestamp: 1_700_000_000, resultset: [{ dst_addr: '10.0.16.2', result: { abuf: EIR_CACHED } }] }], 35);
+    expect(v.recordTtl).toEqual({ min: 53, max: 53 });
+    expect(v.steeringImpeded).toBe(false);      // 53 ≤ 60 ceiling
+    expect(v.steeringWindowSecs).toBe(53);      // driven by the NS1 record, not the 27s edge
+  });
+
+  it('a high NS1-record TTL flips steeringImpeded true even when the edge TTL is low', () => {
+    // Synthesise a chain: apex 300, NS1 record 300 (high), edge A 30 (low). Steering is impeded by
+    // the record TTL regardless of the low edge TTL — the exact case the operator flagged.
+    const rrs = [
+      { name: 'live.rte.ie', type: 5, ttl: 300, data: 'livebase.nsone.rte.ie' },
+      { name: 'livebase.nsone.rte.ie', type: 5, ttl: 300, data: 'liveedge.rte.ie' },
+      { name: 'liveedge.rte.ie', type: 1, ttl: 30, data: '185.54.104.4' },
+    ];
+    const s = summarizeChain(rrs);
+    expect(s.recordTtl).toBe(300);
+    expect(s.edgeTtl).toBe(30);
+    // (buildIspView verdict for this shape is exercised via the mock at 300s in the route tests;
+    // here we assert the summariser separates the two layers correctly.)
+    expect(s.recordTtl! > 60 && s.edgeTtl! <= 35).toBe(true);
   });
 });

@@ -18,6 +18,12 @@ interface AtlasResult {
   result?: { abuf?: string };
 }
 
+// The NS1 record (*.nsone.rte.ie) is THE steering record: while a resolver holds its CNAME cached it
+// will not return to NS1, so NS1 cannot re-steer / shed those users until it expires. A record TTL
+// above this ceiling means steering is impeded (NS1's decision is frozen for up to that long). The
+// liveedge A TTL is a DIFFERENT layer (Cloudflare LB pool refresh) and does NOT govern NS1 steering.
+const STEER_TTL_CEILING = 60;
+
 const iso = (epochSec: number | null | undefined): string | null =>
   epochSec ? new Date(epochSec * 1000).toISOString() : null;
 const vipPrefix = (ip: string): string => ip.split('.').slice(0, 3).join('.');
@@ -29,7 +35,7 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
     return {
       isp: m.isp, asn: m.asn, measurementId: null, covered: false,
       note: 'No RIPE Atlas probe coverage for this ISP.',
-      probeCount: 0, resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, platforms: {}, pools: {}, edgeTtl: null, apexTtl: null, recordTtl: null, honoursLowTtl: null, observedAt: null, samples: [],
+      probeCount: 0, resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, platforms: {}, pools: {}, edgeTtl: null, apexTtl: null, recordTtl: null, steeringImpeded: null, steeringWindowSecs: null, honoursLowTtl: null, observedAt: null, samples: [],
     };
   }
   const samples: ResolverSample[] = [];
@@ -74,12 +80,16 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
 
   const range = (xs: number[]) => (xs.length ? { min: Math.min(...xs), max: Math.max(...xs) } : null);
   const edge = range(edgeTtls);
+  const record = range(recordTtls);
   return {
     isp: m.isp, asn: m.asn, measurementId: m.measurementId, covered: true,
     probeCount: probes.size, resolverCount: resolvers.size,
     ispResolverCount: resolvers.size - publicResolvers.size, publicResolverCount: publicResolvers.size,
     platforms, pools,
-    edgeTtl: edge, apexTtl: range(apexTtls), recordTtl: range(recordTtls),
+    edgeTtl: edge, apexTtl: range(apexTtls), recordTtl: record,
+    // NS1-record TTL governs steering agility (see STEER_TTL_CEILING). This is the metric that matters.
+    steeringImpeded: record ? record.max > STEER_TTL_CEILING : null,
+    steeringWindowSecs: record ? record.max : null,
     honoursLowTtl: edge ? edge.max <= honourTtlThreshold : null,
     observedAt: iso(latest), samples,
   };

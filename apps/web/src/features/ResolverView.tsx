@@ -46,15 +46,21 @@ function IspCard({ v }: { v: ResolverIspView }) {
         ))}
       </div>
       <div className="rv-meta">
-        <div className="rv-metric" title="TTL on the NS1 record (livebase/live) — the one that governs how fast a shed change reaches this ISP">
-          <span className="rv-metric-k">record TTL</span>
+        <div className="rv-metric rv-metric-primary" title="TTL on the NS1 record (*.nsone.rte.ie) — THE steering record. While a resolver holds it cached it won't return to NS1, so this is how long NS1's steering / shed decision stays frozen for this ISP.">
+          <span className="rv-metric-k">steering TTL</span>
           <span className="rv-metric-v mono">{ttlRange(v.recordTtl)}</span>
-          <span className="muted rv-metric-note">NS1 · shed</span>
+          <span className="muted rv-metric-note">NS1 record</span>
+          {v.steeringImpeded !== null && (
+            <span className={`badge badge-sm ${v.steeringImpeded ? 'warn' : 'ok'}`}>
+              {v.steeringImpeded ? `steering frozen ~${v.steeringWindowSecs}s` : `re-steers ≤${v.steeringWindowSecs}s`}
+            </span>
+          )}
         </div>
-        <div className="rv-metric" title="TTL on the liveedge A record (Cloudflare LB) — governs DC/pool re-selection; a good proxy for low-TTL honouring">
+        <div className="rv-metric" title="TTL on the liveedge A record (Cloudflare LB). A DIFFERENT layer — it only refreshes Cloudflare's pool/DC pick, NOT NS1 steering.">
           <span className="rv-metric-k">edge TTL</span>
           <span className="rv-metric-v mono">{ttlRange(v.edgeTtl)}</span>
-          {v.honoursLowTtl !== null && <span className={`badge badge-sm ${v.honoursLowTtl ? 'ok' : 'warn'}`}>{v.honoursLowTtl ? 'honoured' : 'floored'}</span>}
+          <span className="muted rv-metric-note">Cloudflare LB · not steering</span>
+          {v.honoursLowTtl !== null && <span className={`badge badge-sm ${v.honoursLowTtl ? 'ok' : 'warn'} badge-ghost`}>{v.honoursLowTtl ? 'honoured' : 'floored'}</span>}
         </div>
         <div className="rv-metric">
           <span className="rv-metric-k">pools</span>
@@ -262,6 +268,9 @@ export function ResolverView() {
 
       {view === 'steering' ? (
         <>
+          <div className="notice info rv-explain">
+            <span className="mono">live.rte.ie</span> is only a user-facing alias — <b>steering happens at the NS1 record</b> (<span className="mono">*.nsone.rte.ie</span>). The <b>steering TTL</b> below is that record’s TTL: while a resolver holds it cached it won’t return to NS1, so it’s how long NS1’s steering / shed decision stays <b>frozen</b> for the ISP. A high value <b>impedes steering</b>. The <b>edge TTL</b> is a separate layer (Cloudflare LB pool refresh) and does not affect NS1 steering.
+          </div>
           {snap.warnings.map((w, i) => <div key={i} className="notice warn">{w}</div>)}
           {snap.isps.length === 0 ? (
             <div className="notice info">{snap.provenance.notice ?? 'No resolver data — the RIPE Atlas connector is not connected.'}{canManage && ' Turn on 6h polling or run a check to populate it.'}</div>

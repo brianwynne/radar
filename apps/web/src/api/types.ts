@@ -1002,6 +1002,10 @@ export interface ResolverIspView {
   edgeTtl: { min: number; max: number } | null;
   apexTtl: { min: number; max: number } | null;
   recordTtl: { min: number; max: number } | null;
+  /** NS1-record TTL high enough to impede steering (NS1 can't re-steer within it). */
+  steeringImpeded: boolean | null;
+  /** Seconds NS1's steering decision stays frozen in a resolver = NS1-record TTL max. */
+  steeringWindowSecs: number | null;
   honoursLowTtl: boolean | null;
   observedAt: string | null;
   samples: ResolverSample[];

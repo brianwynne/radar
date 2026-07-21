@@ -49,9 +49,14 @@ export interface ResolverIspView {
   /** Observed edge (liveedge A) TTL range. A max well above what we set = the resolver caps/floors. */
   edgeTtl: { min: number; max: number } | null;
   apexTtl: { min: number; max: number } | null;
-  /** Observed NS1-record (livebase/live) TTL range — the shed-relevant one. */
+  /** Observed NS1-record (*.nsone.rte.ie) TTL range — THE steering TTL. While a resolver holds this
+   *  cached it won't return to NS1, so a high value freezes NS1's steering / shed decision. */
   recordTtl: { min: number; max: number } | null;
-  /** True when every observed edge TTL is ≤ the honour threshold (resolvers respect the low TTL). */
+  /** True when the NS1-record TTL is high enough to impede steering (NS1 can't re-steer within it). */
+  steeringImpeded: boolean | null;
+  /** How long (s) NS1's steering decision stays frozen in a resolver = the NS1-record TTL max. */
+  steeringWindowSecs: number | null;
+  /** Edge (liveedge A / Cloudflare-LB) low-TTL honouring — a DIFFERENT layer, not NS1 steering. */
   honoursLowTtl: boolean | null;
   observedAt: string | null;
   samples: ResolverSample[];

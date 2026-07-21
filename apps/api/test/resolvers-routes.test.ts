@@ -34,7 +34,10 @@ describe('resolver-reader route', () => {
     expect(eir.covered).toBe(true);
     expect(eir.platforms.Réalta).toBeGreaterThan(0);
     expect(Object.keys(eir.pools)).toEqual(expect.arrayContaining(['185.54.104', '185.54.105'])); // CW/PW split
-    expect(eir.honoursLowTtl).toBe(true);
+    // Steering verdict is keyed on the NS1-record TTL (300s here) → steering impeded, ~5 min frozen.
+    expect(eir.steeringImpeded).toBe(true);
+    expect(eir.steeringWindowSecs).toBe(300);
+    expect(eir.honoursLowTtl).toBe(true); // edge (Cloudflare-LB) layer honours its low TTL — separate concern
     expect(body.pollingEnabled).toBe(true);
     await a.close();
   });

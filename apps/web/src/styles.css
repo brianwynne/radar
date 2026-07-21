@@ -413,6 +413,9 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-plat { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 0.1rem 0.5rem; }
 .rv-meta { display: flex; flex-direction: column; gap: 0.35rem; }
 .rv-metric { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.rv-metric-primary { padding: 0.3rem 0.4rem; border-radius: 6px; background: rgba(120, 130, 255, 0.08); border-left: 3px solid var(--accent); }
+.rv-metric-primary .rv-metric-v { font-size: 1.02rem; }
+.badge-ghost { opacity: 0.6; font-weight: 500; }
 .rv-metric-k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); min-width: 4.5rem; }
 .rv-metric-v { font-weight: 650; }
 .rv-pool { font-size: 0.76rem; color: var(--ink-soft); border: 1px dashed var(--line); border-radius: 5px; padding: 0.02rem 0.35rem; }
