@@ -7,6 +7,7 @@ import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { SyntheticTag } from '../components/Provenance';
 import { RecordEditor } from '../components/RecordEditor';
+import { CreateRecordPanel } from './CreateTestRecord';
 import type { CompareCurrentResponse, JsonDiffEntry, SnapshotDetail as Detail } from '../api/types';
 
 type Tab = 'summary' | 'canonical' | 'raw';
@@ -68,6 +69,7 @@ export function SnapshotDetail() {
   const { hasPermission } = useAuth();
   const canRead = hasPermission('snapshot.read');
   const canRaw = hasPermission('ns1.raw.read');
+  const canWrite = hasPermission('ns1.record.create');
 
   const [snap, setSnap] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +79,13 @@ export function SnapshotDetail() {
   const [cmpError, setCmpError] = useState<string | null>(null);
   const [editingRaw, setEditingRaw] = useState(false); // raw-tab record editor (edit + Copy for NS1)
   const [comparing, setComparing] = useState(false);
+  const [creating, setCreating] = useState(false); // "Create record from snapshot" panel
+  const [zones, setZones] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!canWrite) return;
+    api.zones().then((r) => setZones(r.zones.map((z) => (z as { zone?: string }).zone ?? '').filter(Boolean))).catch(() => setZones([]));
+  }, [canWrite]);
 
   useEffect(() => {
     if (!canRead || !snapshotId) {
@@ -131,8 +140,22 @@ export function SnapshotDetail() {
         <p>
           Stored snapshot of <span className="mono">{snap.resourceKey}</span>.{' '}
           {recordLink && <Link to={recordLink}>View current record →</Link>}
+          {canWrite && snap.rawPayload != null && (
+            <button className="ghost" style={{ marginLeft: '0.6rem' }} onClick={() => setCreating((v) => !v)} title="Create a record in the test zone from this snapshot's captured config (guarded — dry-run then confirm)">
+              {creating ? 'Cancel' : 'Create record from snapshot'}
+            </button>
+          )}
         </p>
       </div>
+
+      {creating && canWrite && (
+        <CreateRecordPanel
+          targetZone={zones[0] ?? 'livetest.rte.ie'}
+          zones={zones}
+          initialRecord={snap.rawPayload as Record<string, unknown>}
+          onClose={() => setCreating(false)}
+        />
+      )}
 
       <div className="card">
         <h3>Metadata &amp; provenance</h3>

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { NOC, VE, renderAt, stubApi } from './helpers';
+import { NOC, VE, ENGINEER, renderAt, stubApi } from './helpers';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -22,6 +22,23 @@ describe('Snapshot detail', () => {
     stubApi(NOC);
     renderAt(at);
     expect(await screen.findByText(/do not have permission to view snapshots/i)).toBeInTheDocument();
+  });
+
+  it('lets an engineer create a record from the snapshot', async () => {
+    stubApi(ENGINEER);
+    renderAt(at);
+    const btn = await screen.findByRole('button', { name: /Create record from snapshot/i });
+    await userEvent.click(btn);
+    // The guarded create panel opens, seeded from the snapshot payload.
+    expect(await screen.findByRole('heading', { name: /Create record from snapshot/i })).toBeInTheDocument();
+    expect(screen.getByText(/Record body supplied/i)).toBeInTheDocument();
+  });
+
+  it('hides the create action from a viewing engineer', async () => {
+    stubApi(VE);
+    renderAt(at);
+    await screen.findByText(/Metadata & provenance/i);
+    expect(screen.queryByRole('button', { name: /Create record from snapshot/i })).not.toBeInTheDocument();
   });
 
   it('renders the canonical payload tab', async () => {
