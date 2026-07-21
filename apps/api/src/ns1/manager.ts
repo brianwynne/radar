@@ -165,10 +165,11 @@ export class Ns1ConnectorManager {
     return this.persistedWrite ? undefined : this.base.writeApiKey; // env fallback only when no DB row
   }
 
-  /** The write GATE (NS1_WRITE_ENABLED) — the persisted 'ns1-write' row's `enabled` when present
-   *  (toggleable at runtime), else the env base config. */
+  /** The write GATE — controlled SOLELY by the create-panel switch (the persisted 'ns1-write' row's
+   *  `enabled`). Defaults OFF: a fresh install (no persisted row) is off regardless of env, so writes
+   *  are inert until an engineer explicitly turns the switch on. */
   private effectiveWriteEnabled(): boolean {
-    return this.persistedWrite ? this.persistedWrite.enabled : this.base.writeEnabled;
+    return this.persistedWrite ? this.persistedWrite.enabled : false;
   }
 
   /** Rebuild the record writer's inner from the effective mode/baseUrl + write key + gate. The
