@@ -52,7 +52,8 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
   // Clone-only source
   const [srcZone, setSrcZone] = useState(source?.zone ?? 'nsone.rte.ie');
   const [srcDomain, setSrcDomain] = useState(source?.domain ?? 'livebase.nsone.rte.ie');
-  const [srcType, setSrcType] = useState<CreatableRecordType>(source?.type ?? 'CNAME');
+  // Only CNAME steering records are cloned, so the source type is fixed (no selector).
+  const [srcType] = useState<CreatableRecordType>(source?.type ?? 'CNAME');
   const [ttlOverride, setTtlOverride] = useState(true);
 
   const [plan, setPlan] = useState<RecordPlan | null>(null);
@@ -65,10 +66,33 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
   const [editedBody, setEditedBody] = useState<Record<string, unknown> | null>(() => initialRecord ?? null);
   const [editing, setEditing] = useState(false);
 
+  // CNAME records in the selected SOURCE zone (clone mode) — the source-record dropdown.
+  const [srcRecords, setSrcRecords] = useState<string[]>([]);
+
   useEffect(() => {
     if (!canWrite) return;
     api.recordCapability().then(setCap).catch(() => setCap(null));
   }, [canWrite]);
+
+  useEffect(() => {
+    if (mode !== 'clone' || supplied || !srcZone.trim()) { setSrcRecords([]); return; }
+    let live = true;
+    api.zone(srcZone.trim())
+      .then((r) => {
+        if (!live) return;
+        const zoneObj = (r.zone ?? {}) as { records?: unknown[] };
+        const names = (Array.isArray(zoneObj.records) ? zoneObj.records : [])
+          .map((x) => x as { domain?: string; type?: string })
+          .filter((x) => x.domain && String(x.type).toUpperCase() === 'CNAME')
+          .map((x) => x.domain as string);
+        setSrcRecords(names);
+        // Keep the current source record if still present, else pick the first (and drop a stale plan).
+        if (names.length && !names.includes(srcDomain)) { setSrcDomain(names[0]); setPlan(null); setEditedBody(null); setEditing(false); }
+      })
+      .catch(() => { if (live) setSrcRecords([]); });
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, supplied, srcZone]);
 
   async function toggleGate(enabled: boolean) {
     setGateBusy(true); setGateError(null);
@@ -159,14 +183,16 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
           {!supplied && mode === 'clone' && (
             <>
               <h2 style={{ marginTop: 0 }}>Source (cloned from)</h2>
-              {field('Source zone', <input value={srcZone} onChange={(e) => setShape(setSrcZone)(e.target.value)} className="mono" placeholder="nsone.rte.ie" />)}
-              {field('Source record name', <input value={srcDomain} onChange={(e) => setShape(setSrcDomain)(e.target.value)} className="mono" placeholder="livebase.nsone.rte.ie" />)}
-              {field('Source type', (
-                <select value={srcType} onChange={(e) => setShape(setSrcType)(e.target.value as CreatableRecordType)}>
-                  <option value="A">A</option><option value="AAAA">AAAA</option><option value="CNAME">CNAME</option>
-                </select>
-              ))}
-              <div className="muted" style={{ fontSize: '0.72rem', marginBottom: '0.6rem' }}>Reads the source record (any zone) and <b>copies</b> its answers + steering filter chain into the target zone below — a cross-zone copy, not NS1’s same-zone clone.</div>
+              {field('Source zone', zones && zones.length
+                ? <select value={srcZone} onChange={(e) => setShape(setSrcZone)(e.target.value)}>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</select>
+                : <input value={srcZone} onChange={(e) => setShape(setSrcZone)(e.target.value)} className="mono" placeholder="nsone.rte.ie" />)}
+              {field('Source record (CNAME)', srcRecords.length
+                ? <select value={srcRecords.includes(srcDomain) ? srcDomain : ''} onChange={(e) => setShape(setSrcDomain)(e.target.value)}>
+                    {!srcRecords.includes(srcDomain) && <option value="">Select a record…</option>}
+                    {srcRecords.map((d) => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                : <span className="muted">{srcZone.trim() ? 'No CNAME records in this zone.' : 'Pick a source zone first.'}</span>)}
+              <div className="muted" style={{ fontSize: '0.72rem', marginBottom: '0.6rem' }}>Reads the source record and <b>copies</b> its answers + steering filter chain into the target zone below — a cross-zone copy, not NS1’s same-zone clone. Or clone from a <b>snapshot</b> via the snapshot page.</div>
             </>
           )}
           <h2 style={{ marginTop: !supplied && mode === 'clone' ? '0.5rem' : 0 }}>Target (created)</h2>

@@ -256,8 +256,10 @@ export class Ns1ConnectorManager {
     }
     if (writeAction !== 'retain') {
       const sealedWrite = writeAction === 'replace' ? this.secretBox!.seal(suppliedWrite) : undefined;
+      // Storing/clearing the write key must NOT flip the gate — preserve the current gate state
+      // (the gate defaults OFF and is toggled explicitly via setWriteEnabled / the create-panel switch).
       this.persistedWrite = await this.repo.upsert({
-        connector: WRITE_CONNECTOR, enabled: true, mode, endpoint: apiBase, verifyTls: true, edgeDeviceIds: null,
+        connector: WRITE_CONNECTOR, enabled: this.effectiveWriteEnabled(), mode, endpoint: apiBase, verifyTls: true, edgeDeviceIds: null,
         updatedBy: actor.subject ?? null, tokenAction: writeAction,
         tokenCiphertext: sealedWrite?.ciphertext, tokenNonce: sealedWrite?.nonce, tokenTag: sealedWrite?.tag,
       });

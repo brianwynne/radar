@@ -63,6 +63,19 @@ describe('NS1 manager — write key', () => {
     expect(m.getRecordWriter().writeReady()).toBe(false); // no key → not ready
   });
 
+  it('storing the write key does NOT enable the gate — it defaults OFF', async () => {
+    const m = new Ns1ConnectorManager({
+      baseConfig: loadNs1Config({}), // NS1_WRITE_ENABLED unset → gate OFF by default
+      repository: new MultiRepo(), secretBox: new SecretBox(randomBytes(32)),
+      fetchImpl: (async () => new Response('[]', { status: 200 })) as typeof fetch,
+    });
+    await m.init();
+    const view = await m.updateSettings({ mode: 'live', apiBase: 'https://api.nsone.net/v1', key: 'read-key', writeKey: 'write-key' }, actor);
+    expect(view.writeKeyConfigured).toBe(true);
+    expect(view.writeEnabled).toBe(false); // gate stays OFF — must be turned on explicitly
+    expect(m.getRecordWriter().writeEnabled()).toBe(false);
+  });
+
   it('toggles the write gate at runtime (persisted, drives writeEnabled)', async () => {
     const m = make();
     await m.init();
