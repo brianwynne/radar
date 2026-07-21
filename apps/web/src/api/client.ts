@@ -22,6 +22,7 @@ import type {
   NetworkPathsResponse,
   NetworkStatusResponse,
   ResolverSnapshot, ResolverCheckStart, ResolverCheck, ResolverCheckResult, ResolverIdentitySnapshot,
+  CreateRecordInput, RecordPlan, RecordCreateResult, RecordCapability, CloneRecordInput,
   NetworkDevicesResponse,
   NetworkInterfacesResponse,
   NetworkLinkGroupsResponse,
@@ -220,6 +221,12 @@ export const api = {
     request<ResolverCheckResult>('/api/v1/network/resolvers/check/results', { method: 'POST', body: JSON.stringify({ checks, target }) }),
   resolverPolling: (enabled: boolean) =>
     request<{ pollingEnabled: boolean }>('/api/v1/network/resolvers/polling', { method: 'POST', body: JSON.stringify({ enabled }) }),
+  // Guarded NS1 create-record (dry-run + confirm)
+  recordCapability: () => request<RecordCapability>('/api/v1/ns1/records/capability'),
+  recordPlan: (input: CreateRecordInput) => request<RecordPlan>('/api/v1/ns1/records/plan', { method: 'POST', body: JSON.stringify(input) }),
+  recordApply: (input: CreateRecordInput) => request<RecordCreateResult>('/api/v1/ns1/records/apply', { method: 'POST', body: JSON.stringify(input) }),
+  recordClonePlan: (input: CloneRecordInput) => request<RecordPlan>('/api/v1/ns1/records/clone/plan', { method: 'POST', body: JSON.stringify(input) }),
+  recordCloneApply: (input: CloneRecordInput) => request<RecordCreateResult>('/api/v1/ns1/records/clone/apply', { method: 'POST', body: JSON.stringify(input) }),
   networkDevices: () => request<NetworkDevicesResponse>('/api/v1/network/devices'),
   networkInterfaces: (q: { deviceId?: string; provider?: string; linkType?: string; status?: string; unknownOnly?: boolean } = {}) => {
     const p = new URLSearchParams();

@@ -442,6 +442,12 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-target-input { width: 15rem; max-width: 42vw; padding: 0.3rem 0.5rem; font-size: 0.82rem; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); }
 .rv-target-input:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 
+/* Create-test-record: exact NS1 payload preview */
+.ctr .field input, .ctr .field select { width: 100%; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 7px; background: var(--panel); color: var(--ink); font-size: 0.85rem; }
+.ctr-payload { margin: 0.3rem 0 0.7rem; padding: 0.6rem 0.7rem; border-radius: 8px; background: rgba(127,127,127,0.1); border: 1px solid var(--line); font-size: 0.76rem; line-height: 1.4; overflow-x: auto; white-space: pre; }
+.ctr button.danger { background: var(--danger, #c0392b); color: #fff; border: 0; padding: 0.4rem 0.8rem; border-radius: 7px; font-weight: 650; cursor: pointer; }
+.ctr button.danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* Steering / Resolver-identity view toggle */
 .rv-viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .rv-viewtoggle button { border: 0; background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.78rem; padding: 0.25rem 0.7rem; cursor: pointer; }

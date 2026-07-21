@@ -56,6 +56,8 @@ import type { ValidationService } from './validation/index.js';
 import type { CloudVisionPoller } from './cloudvision/poller.js';
 import type { CloudVisionSource } from './cloudvision/types.js';
 import { createNs1Client } from './ns1/index.js';
+import { ns1WriteRoutes } from './routes/ns1-write.js';
+import { createNs1RecordWriter, type Ns1RecordWriter } from './ns1/record-writer.js';
 import type { Ns1ReadClient } from './ns1/index.js';
 import type { AsnResolver } from './ns1/asn-resolver.js';
 import type { CnameResolver } from './ns1/active-record.js';
@@ -69,6 +71,7 @@ export interface BuildDeps extends AuthDeps {
   databaseHealth?: DatabaseHealthCheck;
   ns1Client?: Ns1ReadClient;
   ns1Manager?: Ns1ConnectorManager;
+  ns1RecordWriter?: Ns1RecordWriter;
   asnResolver?: AsnResolver;
   ns1ActiveResolveCname?: CnameResolver; // injectable CNAME resolver for the active-record route (tests)
   database?: Database;
@@ -213,6 +216,8 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1, ns1Connection: deps.ns1Manager });
   await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database, ns1Connection: deps.ns1Manager });
   await app.register(ns1ConnectionRoutes, { prefix: '/api/v1', manager: deps.ns1Manager });
+  // Guarded NS1 create-record path (dry-run + confirm). RADAR's only write to NS1; default-off.
+  await app.register(ns1WriteRoutes, { prefix: '/api/v1', writer: deps.ns1RecordWriter ?? createNs1RecordWriter(config.ns1), readClient: ns1Client, audit: deps.database?.audit });
   await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });
   await app.register(changeDetectionRoutes, { prefix: '/api/v1', service: deps.changeDetection });
   await app.register(liveSteeringRoutes, { prefix: '/api/v1', store: deps.steeringStore });

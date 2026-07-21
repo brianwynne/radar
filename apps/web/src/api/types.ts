@@ -1046,6 +1046,27 @@ export interface ResolverIspIdentity {
   ecsPrefixes: number[];
   observedAt: string | null;
 }
+// ---- Guarded NS1 create-record (dry-run + confirm) ----
+export type CreatableRecordType = 'A' | 'AAAA' | 'CNAME';
+export interface CreateRecordInput { zone: string; domain: string; type: CreatableRecordType; answers: string[]; ttl: number }
+export interface RecordPlan {
+  allowed: boolean;
+  blockedReason: string | null;
+  target: { zone: string; domain: string; type: CreatableRecordType };
+  request: { method: 'PUT'; path: string; body: Record<string, unknown> };
+  warnings: string[];
+}
+export interface RecordCreateResult {
+  created: boolean;
+  provenance: { source: 'ns1'; readOnly: false; write: true; notice: string; appliedAt: string };
+  record: unknown;
+}
+export interface RecordCapability { writeEnabled: boolean; allowList: string[] }
+export interface CloneRecordInput {
+  source: { zone: string; domain: string; type: CreatableRecordType };
+  target: { zone: string; domain: string; ttl?: number };
+}
+
 export interface ResolverIdentitySnapshot {
   provenance: { source: 'ripe-atlas' | 'mock' | 'disabled'; synthetic: boolean; readOnly: true; informationalOnly: true; notice?: string; retrievedAt: string };
   isps: ResolverIspIdentity[];

@@ -20,6 +20,7 @@ export type RadarPermission =
   | 'mapping.manage'
   | 'threshold.manage'
   | 'connector.manage'
+  | 'ns1.record.create'
   | 'audit.read';
 
 export const RADAR_ROLES: readonly RadarRole[] = ['NOC_VIEWER', 'VIEWING_ENGINEER', 'ENGINEER'];
@@ -28,7 +29,7 @@ export const RADAR_ROLES: readonly RadarRole[] = ['NOC_VIEWER', 'VIEWING_ENGINEE
 const DIRECT: Record<RadarRole, RadarPermission[]> = {
   NOC_VIEWER: ['dashboard.read', 'steering.summary.read', 'topology.summary.read'],
   VIEWING_ENGINEER: ['dns.explain.read', 'ns1.detail.read', 'ns1.raw.read', 'simulation.run', 'dns.observed.run', 'validation.run', 'snapshot.read', 'audit.read'],
-  ENGINEER: ['snapshot.create', 'topology.manage', 'mapping.manage', 'threshold.manage', 'connector.manage'],
+  ENGINEER: ['snapshot.create', 'topology.manage', 'mapping.manage', 'threshold.manage', 'connector.manage', 'ns1.record.create'],
 };
 
 /** The single inheritance chain: each role inherits the one before it. */
