@@ -119,7 +119,7 @@ export function buildBurstIsp(m: AtlasIspMeasurement, results: AtlasResult[]): R
   if (m.measurementId === null) {
     return { isp: m.isp, asn: m.asn, measurementId: null, covered: false, note: 'No RIPE Atlas probe coverage for this ISP.', probeCount: 0, resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, localResolverCount: 0, platforms: {}, pools: {}, recordName: null, edgeName: null, vips: [], edgeTtl: null, apexTtl: null, recordTtl: null, steeringImpeded: null, steeringWindowSecs: null, honoursLowTtl: null, observedAt: null, samples: [] };
   }
-  interface Agg { recMax: number; edgeMax: number; obs: number; pub: boolean; local: boolean; platform: string | null; target: string | null; recordName: string | null; vips: Set<string>; last: number }
+  interface Agg { recMax: number; edgeMax: number; apexMax: number; obs: number; pub: boolean; local: boolean; platform: string | null; target: string | null; recordName: string | null; vips: Set<string>; last: number }
   const byRes = new Map<string, Agg>();
   const probes = new Set<number>();
   let latest = 0;
@@ -137,10 +137,11 @@ export function buildBurstIsp(m: AtlasIspMeasurement, results: AtlasResult[]): R
       const local = !pub && isProbeLocalResolver(resolver);
       probes.add(prb);
       let a = byRes.get(resolver);
-      if (!a) { a = { recMax: -1, edgeMax: -1, obs: 0, pub, local, platform: null, target: null, recordName: null, vips: new Set(), last: 0 }; byRes.set(resolver, a); }
+      if (!a) { a = { recMax: -1, edgeMax: -1, apexMax: -1, obs: 0, pub, local, platform: null, target: null, recordName: null, vips: new Set(), last: 0 }; byRes.set(resolver, a); }
       a.obs++;
       if (s.recordTtl !== null) a.recMax = Math.max(a.recMax, s.recordTtl);
       if (s.edgeTtl !== null) a.edgeMax = Math.max(a.edgeMax, s.edgeTtl);
+      if (s.apexTtl !== null) a.apexMax = Math.max(a.apexMax, s.apexTtl);
       if (s.platform && !a.platform) a.platform = s.platform;
       if (s.target && !a.target) a.target = s.target;
       if (s.recordName && !a.recordName) a.recordName = s.recordName;
@@ -164,6 +165,7 @@ export function buildBurstIsp(m: AtlasIspMeasurement, results: AtlasResult[]): R
   const pools: Record<string, number> = {};
   const ispRecMaxes: number[] = [];
   const ispEdgeMaxes: number[] = [];
+  const ispApexMaxes: number[] = [];
   const vipSet = new Set<string>();
   let recordName: string | null = null;
   let edgeName: string | null = null;
@@ -176,10 +178,11 @@ export function buildBurstIsp(m: AtlasIspMeasurement, results: AtlasResult[]): R
       for (const v of a.vips) { if (/^\d+\.\d+\.\d+\.\d+$/.test(v)) inc(pools, vipPrefix(v)); vipSet.add(v); }
       if (a.recMax >= 0) ispRecMaxes.push(a.recMax);
       if (a.edgeMax >= 0) ispEdgeMaxes.push(a.edgeMax);
+      if (a.apexMax >= 0) ispApexMaxes.push(a.apexMax);
       if (!recordName && a.recordName) recordName = a.recordName;
       if (!edgeName && a.target) edgeName = a.target;
     }
-    samples.push({ probeId: 0, resolver, public: a.pub, local: a.local, platform: a.platform, target: a.target, vips: [...a.vips].sort(), apexTtl: null, recordTtl: a.recMax >= 0 ? a.recMax : null, edgeTtl: a.edgeMax >= 0 ? a.edgeMax : null, observedAt: iso(a.last), obs: a.obs, ttlVerdict: verdictOf(a) });
+    samples.push({ probeId: 0, resolver, public: a.pub, local: a.local, platform: a.platform, target: a.target, vips: [...a.vips].sort(), apexTtl: a.apexMax >= 0 ? a.apexMax : null, recordTtl: a.recMax >= 0 ? a.recMax : null, edgeTtl: a.edgeMax >= 0 ? a.edgeMax : null, observedAt: iso(a.last), obs: a.obs, ttlVerdict: verdictOf(a) });
   }
   samples.sort((x, y) => Number(x.public || x.local) - Number(y.public || y.local) || (y.recordTtl ?? -1) - (x.recordTtl ?? -1));
   const range = (xs: number[]) => (xs.length ? { min: Math.min(...xs), max: Math.max(...xs) } : null);
@@ -190,7 +193,7 @@ export function buildBurstIsp(m: AtlasIspMeasurement, results: AtlasResult[]): R
     probeCount: probes.size, resolverCount: byRes.size,
     ispResolverCount: byRes.size - pub - local, publicResolverCount: pub, localResolverCount: local,
     platforms, pools, recordName, edgeName, vips: [...vipSet].sort(),
-    edgeTtl: edge, apexTtl: null, recordTtl: record,
+    edgeTtl: edge, apexTtl: range(ispApexMaxes), recordTtl: record,
     steeringImpeded: record ? record.max > STEER_TTL_CEILING : null,
     steeringWindowSecs: record ? record.max : null,
     honoursLowTtl: edge ? edge.max <= 35 : null,

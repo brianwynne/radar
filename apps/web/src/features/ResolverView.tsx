@@ -32,6 +32,28 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
   const platforms = Object.entries(v.platforms).sort((a, b) => b[1] - a[1]);
   const pools = Object.entries(v.pools).sort((a, b) => b[1] - a[1]);
   const total = platforms.reduce((s, [, n]) => s + n, 0) || 1;
+  // ISP-level honour per hop: the reference published TTL is the most common value passed through by
+  // the non-local (reference + on-net) resolvers; a hop is NOT honoured if any of the ISP's own
+  // recursives serve it LONGER than that (inflation). null when no data for that hop.
+  const mode = (xs: number[]): number | null => {
+    if (!xs.length) return null;
+    const c = new Map<number, number>();
+    for (const x of xs) c.set(x, (c.get(x) ?? 0) + 1);
+    return [...c.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0][0];
+  };
+  const nums = (pick: (s: typeof v.samples[number]) => number | null, pred: (s: typeof v.samples[number]) => boolean) =>
+    v.samples.filter(pred).map(pick).filter((x): x is number => x != null);
+  const onNet = (s: typeof v.samples[number]) => !s.public && !s.local;
+  const nonLocal = (s: typeof v.samples[number]) => !s.local;
+  const hopHonour = (pick: (s: typeof v.samples[number]) => number | null): boolean | null => {
+    const pubv = mode(nums(pick, nonLocal));
+    if (pubv == null) return null;
+    return !nums(pick, onNet).some((x) => x > pubv + 5);
+  };
+  const honApex = hopHonour((s) => s.apexTtl);
+  const honRecord = hopHonour((s) => s.recordTtl);
+  const honourBadge = (h: boolean | null) => h === null ? null
+    : <span className={`badge badge-sm ${h ? 'ok' : 'warn'} badge-ghost`} title={h ? 'The ISP’s own recursives serve this within RTÉ’s published TTL (not held longer).' : 'At least one of the ISP’s recursives serves this LONGER than published (inflation).'}>{h ? 'TTL honoured' : 'TTL not honoured'}</span>;
   return (
     <div className="rv-card">
       <div className="rv-head">
@@ -51,12 +73,14 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
           <span className="rv-hop-name mono">{target}</span>
           <span className="rv-hop-role muted">alias</span>
           <span className="rv-hop-ttl mono">{ttlRange(v.apexTtl)}</span>
+          {honourBadge(honApex)}
         </div>
         <div className="rv-hop-link">↓ CNAME</div>
         <div className="rv-hop rv-hop-steer" title="THE steering record — while a resolver holds this cached it won't return to NS1, so its TTL is how long NS1's steering / shed decision stays frozen.">
           <span className="rv-hop-name mono">{v.recordName ?? '*.nsone.rte.ie'}</span>
           <span className="rv-hop-role">NS1 record · steering</span>
           <span className="rv-hop-ttl mono">{ttlRange(v.recordTtl)}</span>
+          {honourBadge(honRecord)}
           {v.steeringImpeded !== null && (
             <span className={`badge badge-sm ${v.steeringImpeded ? 'warn' : 'ok'}`}>
               {v.steeringImpeded ? `frozen ~${v.steeringWindowSecs}s` : `re-steers ≤${v.steeringWindowSecs}s`}
@@ -68,7 +92,7 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
           <span className="rv-hop-name mono">{v.edgeName ?? 'liveedge.rte.ie'}</span>
           <span className="rv-hop-role muted">Cloudflare LB · not steering</span>
           <span className="rv-hop-ttl mono">{ttlRange(v.edgeTtl)}</span>
-          {v.honoursLowTtl !== null && <span className={`badge badge-sm ${v.honoursLowTtl ? 'ok' : 'warn'} badge-ghost`}>{v.honoursLowTtl ? 'honoured' : 'floored'}</span>}
+          {v.honoursLowTtl !== null && <span className={`badge badge-sm ${v.honoursLowTtl ? 'ok' : 'warn'} badge-ghost`} title={v.honoursLowTtl ? 'The ISP’s recursives serve the low edge TTL (≤35s).' : 'The ISP’s recursives floor the edge TTL UP (serve it longer than the ~30s published).'}>{v.honoursLowTtl ? 'TTL honoured' : 'TTL not honoured (floored)'}</span>}
         </div>
         {(v.vips.length > 0 || pools.length > 0) && (
           <div className="rv-hop-ips">

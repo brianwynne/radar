@@ -16,7 +16,8 @@ describe('Resolver reader tab', () => {
     stubApi(NOC);
     await openResolvers();
     expect(screen.getByText(/Réalta 100%/)).toBeInTheDocument();
-    expect(screen.getByText('honoured')).toBeInTheDocument(); // edge TTL ≤ threshold
+    // Chain hops (live.rte.ie apex, NS1 record, liveedge) each carry a TTL honoured/not-honoured badge.
+    expect(screen.getAllByText('TTL honoured').length).toBeGreaterThanOrEqual(3);
     expect(screen.getByText(/185\.54\.104/)).toBeInTheDocument(); // CW/PW pool split visible
     expect(screen.getByText(/No RIPE Atlas probe coverage/i)).toBeInTheDocument(); // Three gap
   });
