@@ -11,7 +11,6 @@ import { LiveSteering } from './pages/LiveSteering';
 import { Topology } from './pages/Topology';
 import { NetworkTelemetry } from './pages/NetworkTelemetry';
 import { ConnectorSettings } from './pages/ConnectorSettings';
-import { CreateTestRecord } from './pages/CreateTestRecord';
 import { Activity } from './pages/Activity';
 import { SnapshotDetail } from './pages/SnapshotDetail';
 import { Settings } from './pages/Placeholders';
@@ -49,7 +48,6 @@ export function App() {
         <Route path="cdn" element={<CommercialCdn />} />
         <Route path="cdn/fastly" element={<CommercialCdn />} />
         <Route path="network/connection" element={<ConnectorSettings />} />
-        <Route path="records/new" element={<CreateTestRecord />} />
         <Route path="explorer" element={<Ns1Explorer />} />
         <Route path="explorer/:zone" element={<Ns1Explorer />} />
         <Route path="explorer/:zone/:domain/:type" element={<Ns1Explorer />} />

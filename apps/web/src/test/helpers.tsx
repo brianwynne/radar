@@ -23,7 +23,7 @@ export const ENGINEER: Principal = {
   ...VE,
   displayName: 'Engineer',
   roles: ['ENGINEER'],
-  permissions: [...VE.permissions, 'snapshot.create', 'topology.manage', 'mapping.manage', 'threshold.manage', 'connector.manage'],
+  permissions: [...VE.permissions, 'snapshot.create', 'topology.manage', 'mapping.manage', 'threshold.manage', 'connector.manage', 'ns1.record.create'],
 };
 
 export const PROV: Provenance = {

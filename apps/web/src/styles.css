@@ -454,6 +454,10 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .ctr-payload { margin: 0.3rem 0 0.7rem; padding: 0.6rem 0.7rem; border-radius: 8px; background: rgba(127,127,127,0.1); border: 1px solid var(--line); font-size: 0.76rem; line-height: 1.4; overflow-x: auto; white-space: pre; }
 .ctr button.danger { background: var(--danger, #c0392b); color: #fff; border: 0; padding: 0.4rem 0.8rem; border-radius: 7px; font-weight: 650; cursor: pointer; }
 .ctr button.danger:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Create/clone panel nested inside the selected zone in the NS1 Explorer */
+.ns1-create-panel { margin-top: 0.8rem; padding: 0.85rem; border: 1px solid var(--accent, var(--line)); border-radius: 10px; background: rgba(120,130,255,0.05); }
+.ns1-create-panel .section-head { flex-wrap: wrap; gap: 0.5rem; }
+.ns1-create-panel .grid.cols-2 { gap: 0.8rem; }
 
 /* Steering / Resolver-identity view toggle */
 .rv-viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }

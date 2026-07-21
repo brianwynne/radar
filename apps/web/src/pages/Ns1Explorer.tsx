@@ -14,6 +14,8 @@ import { SnapshotsPanel } from '../features/Snapshots';
 import { ExplainPanel, type ExplainScenario } from '../features/ExplainPanel';
 import { IspSteeringOverview } from '../features/IspSteeringOverview';
 import { AsnBreakdown } from '../features/AsnBreakdown';
+import { CreateRecordPanel } from './CreateTestRecord';
+import type { CreatableRecordType } from '../api/types';
 import { ispToScenario, type Isp } from '../steering/isps';
 import type { Ns1ActiveRecordResponse, Provenance } from '../api/types';
 
@@ -48,6 +50,7 @@ export function Ns1Explorer() {
   const { hasPermission } = useAuth();
   const canRaw = hasPermission('ns1.raw.read');
   const canExplain = hasPermission('dns.explain.read');
+  const canWrite = hasPermission('ns1.record.create');
   const navigate = useNavigate();
   const location = useLocation();
   const { zone, domain, type } = useParams<{ zone: string; domain: string; type: string }>();
@@ -62,6 +65,9 @@ export function Ns1Explorer() {
   const [zonesError, setZonesError] = useState<string | null>(null);
   const [records, setRecords] = useState<RecordSummary[] | null>(null);
   const [recordsError, setRecordsError] = useState<string | null>(null);
+  const [recordsRefresh, setRecordsRefresh] = useState(0);
+  // Inline create/clone panel, nested in the selected zone (engineer-only).
+  const [createPanel, setCreatePanel] = useState<null | { mode: 'create' | 'clone'; source?: { zone: string; domain: string; type: CreatableRecordType } }>(null);
   const [view, setView] = useState<View>('config');
   const [editing, setEditing] = useState(false); // raw-view record editor (edit + Copy for NS1)
   const [payload, setPayload] = useState<{ provenance: Provenance; body: Record<string, unknown> } | null>(null);
@@ -117,7 +123,7 @@ export function Ns1Explorer() {
     return () => {
       alive = false;
     };
-  }, [zone]);
+  }, [zone, recordsRefresh]);
 
   // Default landing record: within the primary zone with nothing selected, jump to the ACTIVE
   // steering record (resolved from live.rte.ie), or DEFAULT_RECORD if the active one can't be
@@ -249,12 +255,10 @@ export function Ns1Explorer() {
         </div>
 
         {recent.length > 0 && (
-          <div style={{ marginTop: '0.6rem' }}>
-            <span className="muted" style={{ marginRight: '0.4rem' }}>
-              Recent:
-            </span>
+          <div className="chip-wrap" style={{ marginTop: '0.6rem', alignItems: 'center' }}>
+            <span className="muted">Recent:</span>
             {recent.map((r) => (
-              <Link key={`${r.zone}/${r.domain}/${r.type}`} className="chip" to={`/explorer/${r.zone}/${r.domain}/${r.type}`} style={{ marginRight: '0.3rem' }}>
+              <Link key={`${r.zone}/${r.domain}/${r.type}`} className="chip" to={`/explorer/${r.zone}/${r.domain}/${r.type}`}>
                 {r.domain} {r.type}
               </Link>
             ))}
@@ -264,7 +268,25 @@ export function Ns1Explorer() {
 
       {zone && (
         <div className="card">
-          <h3>Records in {zone}</h3>
+          <div className="step-head">
+            <h3 style={{ margin: 0 }}>Records in {zone}</h3>
+            {canWrite && (
+              <button className="ghost" style={{ marginLeft: 'auto' }} title="Create a new record in this zone (guarded — dry-run then confirm)"
+                onClick={() => setCreatePanel({ mode: 'create' })}>
+                ＋ Create record
+              </button>
+            )}
+          </div>
+          {canWrite && createPanel && (
+            <CreateRecordPanel
+              targetZone={zone}
+              zones={zones ?? []}
+              initialMode={createPanel.mode}
+              source={createPanel.source}
+              onClose={() => setCreatePanel(null)}
+              onDone={() => setRecordsRefresh((n) => n + 1)}
+            />
+          )}
           {recordsError ? (
             <div className="notice danger">{recordsError}</div>
           ) : records === null ? (
@@ -332,6 +354,12 @@ export function Ns1Explorer() {
                   title="Edit the record JSON and copy an NS1-ready payload"
                 >
                   {editing ? 'Done editing' : 'Edit / Copy for NS1'}
+                </button>
+              )}
+              {canWrite && (
+                <button className="ghost" title="Clone this record's config into the test zone (guarded — dry-run then confirm)"
+                  onClick={() => setCreatePanel({ mode: 'clone', source: { zone, domain, type: type as CreatableRecordType } })}>
+                  Clone
                 </button>
               )}
               {canExplain && (

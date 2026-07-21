@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { App } from '../App';
 import { AuthProvider } from '../auth/AuthContext';
-import { VE, renderAt, stubApi } from './helpers';
+import { VE, ENGINEER, renderAt, stubApi } from './helpers';
 
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
@@ -18,6 +18,23 @@ describe('NS1 Explorer — discovery & selection', () => {
     expect(screen.getByRole('button', { name: /vod\.rte\.ie/ })).toBeInTheDocument();
     // Only CNAME records are listed — the A record is hidden.
     expect(screen.queryByRole('button', { name: /edge\.rte\.ie/ })).not.toBeInTheDocument();
+  });
+
+  it('nests a guarded create panel inside the selected zone for an engineer', async () => {
+    stubApi(ENGINEER);
+    renderAt('/explorer/rte.ie/live.rte.ie/CNAME');
+    // Create-record button in the zone card opens the panel INLINE (nested in the zone, not a new tab).
+    const create = await screen.findByRole('button', { name: /Create record/i });
+    await userEvent.click(create);
+    expect(await screen.findByRole('heading', { name: /Create record in rte\.ie/i })).toBeInTheDocument();
+  });
+
+  it('hides the write actions from a viewing engineer', async () => {
+    stubApi(VE);
+    renderAt('/explorer/rte.ie/live.rte.ie/CNAME');
+    await screen.findByText(/Records in rte.ie/);
+    expect(screen.queryByRole('button', { name: /Create record/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Clone$/i })).not.toBeInTheDocument();
   });
 
   it('renders the record addressed by the URL and tracks it as recent', async () => {

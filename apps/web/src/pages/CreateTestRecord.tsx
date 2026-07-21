@@ -1,4 +1,4 @@
-// Create / clone test record — RADAR's ONLY write to NS1, deliberately a distinct, clearly-labelled
+// Create / clone record — RADAR's ONLY write to NS1, deliberately a distinct, clearly-labelled
 // operator surface (not mixed into the read-only views). Two modes:
 //   • Create — build a record from scratch.
 //   • Clone  — copy an existing record's steering chain (e.g. livebase.nsone.rte.ie) onto the test
@@ -13,24 +13,42 @@ import type { CreatableRecordType, RecordCapability, RecordCreateResult, RecordP
 
 type Mode = 'create' | 'clone';
 
-export function CreateTestRecord() {
+export interface CreateRecordPanelProps {
+  /** The selected zone — the create target (pre-selected in the zone dropdown). */
+  targetZone: string;
+  /** Available zones for the target dropdown (from the explorer). */
+  zones?: string[];
+  initialMode?: Mode;
+  /** Clone source (from the explorer's selected record). */
+  source?: { zone: string; domain: string; type: CreatableRecordType };
+  /** Called after a successful create/clone so the parent can refresh the zone's records. */
+  onDone?: () => void;
+  /** Close the panel. */
+  onClose?: () => void;
+}
+
+// Guarded NS1 create/clone record form, nested inside the selected zone in the NS1 Explorer. Two
+// modes: Create (from scratch) and Clone (copy an existing record's steering chain, cross-zone).
+// Flow: fill → Preview (pure dry-run, exact NS1 request) → Confirm & create. Server-guarded:
+// engineer-only, default-off, allow-list + protected denylist. Nothing is written until Confirm.
+export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDone, onClose }: CreateRecordPanelProps) {
   const { hasPermission } = useAuth();
   const canWrite = hasPermission('ns1.record.create');
 
   const [cap, setCap] = useState<RecordCapability | null>(null);
-  const [mode, setMode] = useState<Mode>('create');
+  const [mode, setMode] = useState<Mode>(initialMode ?? 'create');
 
-  // Target (both modes)
-  const [zone, setZone] = useState('livetest.rte.ie');
-  const [domain, setDomain] = useState('livetest.rte.ie');
+  // Target (both modes) — defaults to the selected zone.
+  const [zone, setZone] = useState(targetZone);
+  const [domain, setDomain] = useState(targetZone);
   const [ttl, setTtl] = useState(30);
   // Create-only
   const [type, setType] = useState<CreatableRecordType>('A');
   const [answers, setAnswers] = useState('185.54.104.4');
   // Clone-only source
-  const [srcZone, setSrcZone] = useState('nsone.rte.ie');
-  const [srcDomain, setSrcDomain] = useState('livebase.nsone.rte.ie');
-  const [srcType, setSrcType] = useState<CreatableRecordType>('CNAME');
+  const [srcZone, setSrcZone] = useState(source?.zone ?? 'nsone.rte.ie');
+  const [srcDomain, setSrcDomain] = useState(source?.domain ?? 'livebase.nsone.rte.ie');
+  const [srcType, setSrcType] = useState<CreatableRecordType>(source?.type ?? 'CNAME');
   const [ttlOverride, setTtlOverride] = useState(true);
 
   const [plan, setPlan] = useState<RecordPlan | null>(null);
@@ -57,25 +75,26 @@ export function CreateTestRecord() {
   }
   async function confirmCreate() {
     setBusy(true); setError(null);
-    try { setResult(mode === 'create' ? await api.recordApply(createInput()) : await api.recordCloneApply(cloneInput())); setPlan(null); }
+    try { setResult(mode === 'create' ? await api.recordApply(createInput()) : await api.recordCloneApply(cloneInput())); setPlan(null); onDone?.(); }
     catch (e) { setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Create failed.'); }
     finally { setBusy(false); }
   }
 
-  if (!canWrite) return <div className="page"><h1>Create test record</h1><div className="notice danger">You do not have permission to create records (engineer only).</div></div>;
+  if (!canWrite) return null;
 
   const field = (label: string, node: React.ReactNode) => (
     <label className="field" style={{ display: 'block', marginBottom: '0.6rem' }}><span style={{ display: 'block', fontSize: '0.75rem' }} className="muted">{label}</span>{node}</label>
   );
 
   return (
-    <div className="page ctr">
+    <div className="ctr ns1-create-panel">
       <div className="section-head" style={{ alignItems: 'center' }}>
-        <h1 style={{ margin: 0 }}>Create test record <span className="badge warn">WRITE · NS1</span></h1>
-        <div className="rv-viewtoggle" role="tablist">
+        <h3 style={{ margin: 0 }}>Create record in {targetZone} <span className="badge warn">WRITE · NS1</span></h3>
+        <div className="rv-viewtoggle" role="tablist" style={{ marginLeft: '0.5rem' }}>
           <button role="tab" aria-selected={mode === 'create'} className={mode === 'create' ? 'on' : ''} onClick={() => { setMode('create'); invalidate(); }}>Create</button>
           <button role="tab" aria-selected={mode === 'clone'} className={mode === 'clone' ? 'on' : ''} onClick={() => { setMode('clone'); invalidate(); }}>Clone existing</button>
         </div>
+        {onClose && <button className="ghost" style={{ marginLeft: 'auto' }} onClick={onClose}>Close</button>}
       </div>
       <div className="notice warn">
         This is RADAR’s <b>only</b> write to NS1. It’s engineer-gated, audited, default-off, and restricted to an <b>allow-list</b> — a slip can’t touch a live record. <b>Nothing is sent until you press Confirm & create.</b>
@@ -102,7 +121,9 @@ export function CreateTestRecord() {
             </>
           )}
           <h2 style={{ marginTop: mode === 'clone' ? '0.5rem' : 0 }}>Target (created)</h2>
-          {field('Zone', <input value={zone} onChange={(e) => set(setZone)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />)}
+          {field('Zone', zones && zones.length
+            ? <select value={zone} onChange={(e) => set(setZone)(e.target.value)}>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</select>
+            : <input value={zone} onChange={(e) => set(setZone)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />)}
           {field('Record name (domain)', <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />)}
           {mode === 'create' && field('Type', (
             <select value={type} onChange={(e) => set(setType)(e.target.value as CreatableRecordType)}>
