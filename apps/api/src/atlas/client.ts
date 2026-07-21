@@ -29,7 +29,7 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
     return {
       isp: m.isp, asn: m.asn, measurementId: null, covered: false,
       note: 'No RIPE Atlas probe coverage for this ISP.',
-      probeCount: 0, resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, platforms: {}, pools: {}, edgeTtl: null, apexTtl: null, honoursLowTtl: null, observedAt: null, samples: [],
+      probeCount: 0, resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, platforms: {}, pools: {}, edgeTtl: null, apexTtl: null, recordTtl: null, honoursLowTtl: null, observedAt: null, samples: [],
     };
   }
   const samples: ResolverSample[] = [];
@@ -40,6 +40,7 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
   const pools: Record<string, number> = {};
   const edgeTtls: number[] = [];
   const apexTtls: number[] = [];
+  const recordTtls: number[] = [];
   let latest = 0;
 
   for (const r of results) {
@@ -65,8 +66,9 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
         for (const v of s.vips) if (/^\d+\.\d+\.\d+\.\d+$/.test(v)) inc(pools, vipPrefix(v));
         if (s.edgeTtl !== null) edgeTtls.push(s.edgeTtl);
         if (s.apexTtl !== null) apexTtls.push(s.apexTtl);
+        if (s.recordTtl !== null) recordTtls.push(s.recordTtl);
       }
-      samples.push({ probeId: prb, resolver, public: pub, platform: s.platform, target: s.target, vips: s.vips, apexTtl: s.apexTtl, edgeTtl: s.edgeTtl, observedAt: iso(e.time ?? when) });
+      samples.push({ probeId: prb, resolver, public: pub, platform: s.platform, target: s.target, vips: s.vips, apexTtl: s.apexTtl, recordTtl: s.recordTtl, edgeTtl: s.edgeTtl, observedAt: iso(e.time ?? when) });
     }
   }
 
@@ -77,7 +79,7 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
     probeCount: probes.size, resolverCount: resolvers.size,
     ispResolverCount: resolvers.size - publicResolvers.size, publicResolverCount: publicResolvers.size,
     platforms, pools,
-    edgeTtl: edge, apexTtl: range(apexTtls),
+    edgeTtl: edge, apexTtl: range(apexTtls), recordTtl: range(recordTtls),
     honoursLowTtl: edge ? edge.max <= honourTtlThreshold : null,
     observedAt: iso(latest), samples,
   };

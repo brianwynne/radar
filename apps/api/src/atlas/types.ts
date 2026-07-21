@@ -21,7 +21,9 @@ export interface ResolverSample {
   platform: string | null;
   target: string | null;
   vips: string[];
+  /** apex = live.rte.ie pointer TTL; record = NS1 record TTL (shed-relevant); edge = liveedge A TTL. */
   apexTtl: number | null;
+  recordTtl: number | null;
   edgeTtl: number | null;
   observedAt: string | null;
 }
@@ -47,6 +49,8 @@ export interface ResolverIspView {
   /** Observed edge (liveedge A) TTL range. A max well above what we set = the resolver caps/floors. */
   edgeTtl: { min: number; max: number } | null;
   apexTtl: { min: number; max: number } | null;
+  /** Observed NS1-record (livebase/live) TTL range — the shed-relevant one. */
+  recordTtl: { min: number; max: number } | null;
   /** True when every observed edge TTL is ≤ the honour threshold (resolvers respect the low TTL). */
   honoursLowTtl: boolean | null;
   observedAt: string | null;

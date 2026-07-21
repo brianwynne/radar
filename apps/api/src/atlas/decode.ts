@@ -94,9 +94,12 @@ export interface ChainSummary {
   target: string | null;
   /** The A-record addresses returned (the pool/VIPs). */
   vips: string[];
-  /** TTL on the first CNAME (the queried apex, e.g. live.rte.ie) as the resolver served it. */
+  /** TTL on the queried-apex CNAME (live.rte.ie) — the mode-switch pointer. */
   apexTtl: number | null;
-  /** TTL on the final A record — the low, fast-changing edge TTL (the "will they honour it" one). */
+  /** TTL on the NS1-record CNAME (*.nsone.rte.ie) — governs the SHED / platform decision. */
+  recordTtl: number | null;
+  /** TTL on the final A record (the Cloudflare-LB/edge value). A-RECORD ONLY — null when the
+   *  result carries no A section (we never report a CNAME's TTL as the edge TTL). */
   edgeTtl: number | null;
   /** Smallest TTL anywhere in the chain. */
   minTtl: number | null;
@@ -130,7 +133,9 @@ export function isPublicResolver(addr: string): boolean {
   return PUBLIC_PREFIXES.some((p) => addr.startsWith(p));
 }
 
-/** Summarise a decoded chain into platform + the TTLs we care about. */
+/** Summarise a decoded chain into platform + the three distinct TTLs. Each hop is a separate RR
+ *  cached independently by the resolver, so its TTL reflects that hop's own cache state — we must
+ *  read each by its OWNER name, never by position, and never report a CNAME's TTL as the edge. */
 export function summarizeChain(rrs: DnsRR[]): ChainSummary {
   const hops = rrs
     .filter((r) => r.type === 5 || r.type === 1)
@@ -140,12 +145,16 @@ export function summarizeChain(rrs: DnsRR[]): ChainSummary {
   const target = cnames.length ? cnames[cnames.length - 1].data : (aRecords[0]?.name ?? null);
   const platform = target ? platformOf(target) : aRecords.length ? platformOf(aRecords[0].data) : null;
   const ttls = hops.map((h) => h.ttl);
+  // The NS1-record CNAME is the hop OWNED by the *.nsone.rte.ie name (its TTL governs the shed /
+  // platform decision). The apex is the top CNAME (the queried name). Edge is the delivery A only.
+  const recordHop = cnames.find((c) => /\.nsone\./i.test(c.name));
   return {
     platform,
     target,
     vips: aRecords.map((a) => a.data),
-    apexTtl: cnames[0]?.ttl ?? aRecords[0]?.ttl ?? null,
-    edgeTtl: aRecords.length ? aRecords[0].ttl : (cnames[cnames.length - 1]?.ttl ?? null),
+    apexTtl: cnames[0]?.ttl ?? null,
+    recordTtl: recordHop?.ttl ?? null,
+    edgeTtl: aRecords.length ? aRecords[0].ttl : null, // A-record ONLY — never a CNAME TTL
     minTtl: ttls.length ? Math.min(...ttls) : null,
     hops,
   };

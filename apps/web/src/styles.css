@@ -420,3 +420,6 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-samples li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .rv-resolver { min-width: 8rem; }
 .rv-samples li.rv-public { opacity: 0.65; }
+.rv-metric-note { font-size: 0.68rem; color: var(--ink-soft); }
+.rv-group-head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); font-weight: 700; padding-top: 0.2rem; }
+.rv-public-group { margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--line); opacity: 0.85; }

@@ -9,6 +9,8 @@ import { useAuth } from '../auth/AuthContext';
 import { colorFor } from '../steering/platforms';
 import type { ResolverCheck, ResolverIspView, ResolverSnapshot } from '../api/types';
 
+const ttlRange = (r: { min: number; max: number } | null): string => (r ? (r.min === r.max ? `${r.max}s` : `${r.min}–${r.max}s`) : '—');
+
 const ago = (iso: string | null): string => {
   if (!iso) return '—';
   const s = Math.max(0, Math.floor((Date.now() - Date.parse(iso)) / 1000));
@@ -44,9 +46,14 @@ function IspCard({ v }: { v: ResolverIspView }) {
         ))}
       </div>
       <div className="rv-meta">
-        <div className="rv-metric">
+        <div className="rv-metric" title="TTL on the NS1 record (livebase/live) — the one that governs how fast a shed change reaches this ISP">
+          <span className="rv-metric-k">record TTL</span>
+          <span className="rv-metric-v mono">{ttlRange(v.recordTtl)}</span>
+          <span className="muted rv-metric-note">NS1 · shed</span>
+        </div>
+        <div className="rv-metric" title="TTL on the liveedge A record (Cloudflare LB) — governs DC/pool re-selection; a good proxy for low-TTL honouring">
           <span className="rv-metric-k">edge TTL</span>
-          <span className="rv-metric-v mono">{v.edgeTtl ? (v.edgeTtl.min === v.edgeTtl.max ? `${v.edgeTtl.max}s` : `${v.edgeTtl.min}–${v.edgeTtl.max}s`) : '—'}</span>
+          <span className="rv-metric-v mono">{ttlRange(v.edgeTtl)}</span>
           {v.honoursLowTtl !== null && <span className={`badge badge-sm ${v.honoursLowTtl ? 'ok' : 'warn'}`}>{v.honoursLowTtl ? 'honoured' : 'floored'}</span>}
         </div>
         <div className="rv-metric">
@@ -54,24 +61,37 @@ function IspCard({ v }: { v: ResolverIspView }) {
           {pools.length ? pools.map(([pool, n]) => <span key={pool} className="rv-pool mono">{pool}.x · {n}</span>) : <span className="muted">—</span>}
         </div>
       </div>
-      {v.samples.length > 0 && (
-        <>
-          <button className="linklike" onClick={() => setOpen((o) => !o)}>{open ? 'hide resolvers' : `${v.samples.length} resolver answers`}</button>
-          {open && (
-            <ul className="rv-samples">
-              {v.samples.map((s, i) => (
-                <li key={`${s.probeId}-${i}`} className={s.public ? 'rv-public' : ''}>
-                  <span className="mono rv-resolver">{s.resolver}</span>
-                  {s.public && <span className="badge neutral badge-sm" title="A public resolver the probe uses — not the ISP's own">public</span>}
-                  <span className="platform-dot" style={{ background: colorFor(s.platform ?? 'Unclassified') }} />{s.platform ?? '?'}
-                  <span className="muted mono">{s.target}</span>
-                  <span className="muted mono">apex {s.apexTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
+      {v.samples.length > 0 && (() => {
+        const isp = v.samples.filter((s) => !s.public);
+        const pub = v.samples.filter((s) => s.public);
+        const row = (s: typeof v.samples[number], i: number) => (
+          <li key={`${s.probeId}-${i}`}>
+            <span className="mono rv-resolver">{s.resolver}</span>
+            <span className="platform-dot" style={{ background: colorFor(s.platform ?? 'Unclassified') }} />{s.platform ?? '?'}
+            <span className="muted mono">{s.target}</span>
+            <span className="muted mono">rec {s.recordTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s</span>
+          </li>
+        );
+        return (
+          <>
+            <button className="linklike" onClick={() => setOpen((o) => !o)}>{open ? 'hide resolvers' : `${v.samples.length} resolver answers`}</button>
+            {open && (
+              <>
+                <ul className="rv-samples">
+                  <li className="rv-group-head">On-net · {v.isp} resolvers ({isp.length})</li>
+                  {isp.map(row)}
+                </ul>
+                {pub.length > 0 && (
+                  <ul className="rv-samples rv-public-group">
+                    <li className="rv-group-head">Public resolvers ({pub.length}) — not {v.isp}’s own</li>
+                    {pub.map(row)}
+                  </ul>
+                )}
+              </>
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }

@@ -983,6 +983,7 @@ export interface ResolverSample {
   target: string | null;
   vips: string[];
   apexTtl: number | null;
+  recordTtl: number | null;
   edgeTtl: number | null;
   observedAt: string | null;
 }
@@ -1000,6 +1001,7 @@ export interface ResolverIspView {
   pools: Record<string, number>;
   edgeTtl: { min: number; max: number } | null;
   apexTtl: { min: number; max: number } | null;
+  recordTtl: { min: number; max: number } | null;
   honoursLowTtl: boolean | null;
   observedAt: string | null;
   samples: ResolverSample[];
