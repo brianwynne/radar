@@ -21,6 +21,16 @@ describe('Resolver reader tab', () => {
     expect(screen.getByText(/No RIPE Atlas probe coverage/i)).toBeInTheDocument(); // Three gap
   });
 
+  it('badges every resolver TTL honoured / not honoured (inflaters flagged)', async () => {
+    stubApi(NOC);
+    await openResolvers();
+    await userEvent.click((await screen.findAllByRole('button', { name: /resolver answers/i }))[0]);
+    // On-net + public resolvers respect the published record TTL → honoured.
+    expect((await screen.findAllByText('TTL honoured')).length).toBeGreaterThan(0);
+    // The probe-local Docker resolver (127.0.0.11) serves 377s > published → not honoured.
+    expect(screen.getByText('TTL not honoured')).toBeInTheDocument();
+  });
+
   it('hides the engineer controls from a viewer', async () => {
     stubApi(NOC);
     await openResolvers();

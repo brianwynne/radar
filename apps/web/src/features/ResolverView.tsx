@@ -83,21 +83,34 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
         const isp = v.samples.filter((s) => !s.public && !s.local);
         const pub = v.samples.filter((s) => s.public);
         const loc = v.samples.filter((s) => s.local);
-        const verdictBadge = (s: typeof v.samples[number]) => {
-          if (!s.ttlVerdict) return null;
-          const cls = s.ttlVerdict === 'honours' ? 'ok' : s.ttlVerdict === 'inflates' ? 'warn' : s.ttlVerdict === 'caps' ? 'neutral' : '';
-          const label = s.ttlVerdict === 'honours' ? 'honours' : s.ttlVerdict === 'caps' ? `caps ~${s.recordTtl}s` : s.ttlVerdict === 'inflates' ? `inflates ${s.recordTtl}s` : '? undetermined';
-          return <span className={`badge badge-sm ${cls}`} title={s.ttlVerdict === 'undetermined' ? 'Too few fresh samples to be certain — run/extend the burst.' : 'Verdict from this resolver’s MAX served TTL vs RTÉ’s published TTL.'}>{label}</span>;
-        };
         const isBurst = v.samples.some((s) => s.obs !== undefined);
+        // RTÉ's published record TTL = the max served by the non-local (reference + on-net) resolvers,
+        // which pass it through. A resolver serving LONGER than this inflates it → not honoured.
+        const refRec = v.samples.filter((s) => !s.local && s.recordTtl != null).map((s) => s.recordTtl as number);
+        const publishedRec = refRec.length ? Math.max(...refRec) : Math.max(0, ...v.samples.map((s) => s.recordTtl ?? 0));
+        // A record is HONOURED unless it's served longer than published (inflation). In burst mode the
+        // verdict is authoritative; in baseline a single value > published is still definitive inflation.
+        const honouredBadge = (s: typeof v.samples[number]) => {
+          if (s.recordTtl == null) return <span className="badge badge-sm" title="No record TTL observed yet.">TTL ?</span>;
+          const notHonoured = s.ttlVerdict === 'inflates' || s.recordTtl > publishedRec + 5;
+          const detail = isBurst && s.ttlVerdict === 'caps' ? ' (caps)' : '';
+          return (
+            <span className={`badge badge-sm ${notHonoured ? 'warn' : 'ok'}`}
+              title={notHonoured
+                ? `Serves the NS1 record at ${s.recordTtl}s — LONGER than RTÉ's published ${publishedRec}s, holding the steering decision beyond intent.`
+                : `Respects RTÉ's published ${publishedRec}s record TTL (does not serve it longer).${detail ? ' Serves a shorter TTL (caps) — still honoured.' : ''}`}>
+              {notHonoured ? 'TTL not honoured' : 'TTL honoured'}{detail}
+            </span>
+          );
+        };
         const row = (s: typeof v.samples[number], i: number) => (
           <li key={`${s.resolver}-${i}`}>
             <span className="mono rv-resolver">{s.resolver}</span>
             <span className="platform-dot" style={{ background: colorFor(s.platform ?? 'Unclassified') }} />{s.platform ?? '?'}
             <span className="muted mono">{s.target}</span>
             {s.obs !== undefined
-              ? <><span className="muted mono">max rec {s.recordTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s · {s.obs}×</span>{verdictBadge(s)}</>
-              : <span className="muted mono">rec {s.recordTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s</span>}
+              ? <><span className="muted mono">max rec {s.recordTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s · {s.obs}×</span>{honouredBadge(s)}</>
+              : <><span className="muted mono">rec {s.recordTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s</span>{honouredBadge(s)}</>}
           </li>
         );
         return (
