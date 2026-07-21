@@ -71,7 +71,9 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
   // CNAME records in the selected SOURCE zone (clone mode) — the source-record dropdown.
   const [srcRecords, setSrcRecords] = useState<string[]>([]);
   const [snaps, setSnaps] = useState<SnapshotSummary[]>([]); // when the "Snapshots" source is chosen
-  const [tgtRecords, setTgtRecords] = useState<string[]>([]); // target-zone records → name datalist
+  const [tgtRecords, setTgtRecords] = useState<string[]>([]); // target-zone records → name dropdown
+  const [refresh, setRefresh] = useState(0); // bump to force a zone-records refetch
+  const bump = () => setRefresh((n) => n + 1);
 
   useEffect(() => {
     if (!canWrite) return;
@@ -96,7 +98,7 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
       setTgtRecords((Array.isArray(zoneObj.records) ? zoneObj.records : []).map((x) => (x as { domain?: string }).domain ?? '').filter(Boolean));
     }).catch(() => { if (live) setTgtRecords([]); });
     return () => { live = false; };
-  }, [zone]);
+  }, [zone, refresh]);
 
   // Load a snapshot's captured record body as the clone source.
   async function selectSnapshot(id: string) {
@@ -123,7 +125,7 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
       .catch(() => { if (live) setSrcRecords([]); });
     return () => { live = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, supplied, srcZone]);
+  }, [mode, supplied, srcZone, refresh]);
 
   async function toggleGate(enabled: boolean) {
     setGateBusy(true); setGateError(null);
@@ -158,7 +160,7 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
       setResult(editedBody
         ? await api.recordCloneApply({ record: editedBody, target: editTarget() })
         : mode === 'create' ? await api.recordApply(createInput()) : await api.recordCloneApply(cloneInput()));
-      setPlan(null); onDone?.();
+      setPlan(null); bump(); onDone?.();
     } catch (e) { setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Create failed.'); }
     finally { setBusy(false); }
   }
@@ -215,7 +217,7 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
             <>
               <h2 style={{ marginTop: 0 }}>Source (cloned from)</h2>
               {field('Source', (
-                <select value={srcZone} onChange={(e) => setShape(setSrcZone)(e.target.value)}>
+                <select value={srcZone} onChange={(e) => { setShape(setSrcZone)(e.target.value); bump(); }}>
                   <option value={SNAP_ZONE}>📷 Snapshots</option>
                   {(zones ?? []).map((z) => <option key={z} value={z}>{z}</option>)}
                 </select>
@@ -238,7 +240,7 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
           )}
           <h2 style={{ marginTop: !supplied && mode === 'clone' ? '0.5rem' : 0 }}>Target (created)</h2>
           {field('Zone', zones && zones.length
-            ? <select value={zone} onChange={(e) => set(setZone)(e.target.value)}>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</select>
+            ? <select value={zone} onChange={(e) => { set(setZone)(e.target.value); bump(); }}>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</select>
             : <input value={zone} onChange={(e) => set(setZone)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />)}
           {field('Record name (domain)', tgtRecords.length ? (
             <>
