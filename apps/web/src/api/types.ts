@@ -1261,8 +1261,10 @@ export interface FastlyConnectionTestResponse { result: FastlyConnectionTestResu
 export interface Ns1ConnectionSettings {
   connector: 'ns1'; mode: 'mock' | 'live'; apiBase: string; keyConfigured: boolean; keySetAt: string | null;
   updatedBy: string | null; updatedAt: string | null; source: 'database' | 'environment'; live: boolean; masterKeyAvailable: boolean; degraded: string | null;
+  // Write key (guarded create/clone path)
+  writeEnabled: boolean; writeAllow: string[]; writeKeyConfigured: boolean; writeKeySetAt: string | null; writeLive: boolean;
 }
 export interface Ns1ConnectionResponse { settings: Ns1ConnectionSettings }
-export interface Ns1ConnectionUpdate { mode?: 'mock' | 'live'; apiBase?: string | null; key?: string; clearKey?: boolean }
+export interface Ns1ConnectionUpdate { mode?: 'mock' | 'live'; apiBase?: string | null; key?: string; clearKey?: boolean; writeKey?: string; clearWriteKey?: boolean }
 export interface Ns1ConnectionTestResult { ok: boolean; source: string; error?: string; summary?: { zones: number } }
 export interface Ns1ConnectionTestResponse { result: Ns1ConnectionTestResult }

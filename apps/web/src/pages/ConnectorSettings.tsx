@@ -588,6 +588,8 @@ function Ns1ConnectorForm() {
   const [apiBase, setApiBase] = useState('');
   const [key, setKey] = useState('');
   const [clearKey, setClearKey] = useState(false);
+  const [writeKey, setWriteKey] = useState('');
+  const [clearWriteKey, setClearWriteKey] = useState(false);
 
   const hydrate = useCallback((s: Ns1ConnectionSettings) => {
     setView(s);
@@ -595,6 +597,8 @@ function Ns1ConnectorForm() {
     setApiBase(s.apiBase);
     setKey('');
     setClearKey(false);
+    setWriteKey('');
+    setClearWriteKey(false);
   }, []);
 
   const load = useCallback(async () => {
@@ -616,6 +620,8 @@ function Ns1ConnectorForm() {
     const body: Ns1ConnectionUpdate = { mode, apiBase: apiBase.trim() || null };
     if (clearKey) body.clearKey = true;
     else if (key.trim().length > 0) body.key = key.trim();
+    if (clearWriteKey) body.clearWriteKey = true;
+    else if (writeKey.trim().length > 0) body.writeKey = writeKey.trim();
     try {
       hydrate((await api.ns1ConnectionUpdate(body)).settings);
       setSaved(true);
@@ -641,7 +647,7 @@ function Ns1ConnectorForm() {
         <h2>NS1 (steering source)</h2>
         {view && <span className={`badge ${view.live ? 'ok' : 'neutral'}`}>{view.live ? 'LIVE' : 'MOCK'}</span>}
       </div>
-      <p className="muted">RADAR reads IBM NS1 Connect configuration read-only to explain steering. Live mode needs a <strong>read-only</strong> NS1 API key with view access to the zones you want explained. RADAR never writes to NS1.</p>
+      <p className="muted">RADAR reads IBM NS1 Connect configuration read-only to explain steering. Live mode needs a <strong>read-only</strong> NS1 API key with view access to the zones you want explained. A separate, optional <strong>write key</strong> powers the guarded create/clone-record path (test zone only).</p>
       {loading ? <div className="center-note">Loading…</div> : (
         <>
           {view && !view.masterKeyAvailable && (
@@ -666,6 +672,19 @@ function Ns1ConnectorForm() {
             {view?.keyConfigured && (
               <div className="field-row"><label className="switch"><input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} /> Clear the stored key</label></div>
             )}
+            <label className="field"><span>Write key <span className="muted">(write-only — create/clone path)</span> {view?.writeKeyConfigured && <span className="badge ok badge-sm">configured</span>}</span>
+              <input type="password" autoComplete="off" value={writeKey} disabled={clearWriteKey} onChange={(e) => setWriteKey(e.target.value)}
+                placeholder={view?.writeKeyConfigured ? '•••••••• configured — leave blank to keep' : 'not configured (optional)'} />
+            </label>
+            {view && (
+              <div className="muted" style={{ fontSize: '0.78rem', marginTop: '-0.2rem', marginBottom: '0.5rem' }}>
+                Write path: <span className={`badge badge-sm ${view.writeEnabled ? (view.writeLive ? 'ok' : 'warn') : 'neutral'}`}>{view.writeEnabled ? (view.writeLive ? 'LIVE' : 'enabled · needs key + live mode') : 'disabled (NS1_WRITE_ENABLED off)'}</span>
+                {view.writeAllow.length > 0 && <> · allow-list: {view.writeAllow.map((a) => <span key={a} className="chip mono" style={{ marginRight: '0.25rem' }}>{a}</span>)}</>}
+              </div>
+            )}
+            {view?.writeKeyConfigured && (
+              <div className="field-row"><label className="switch"><input type="checkbox" checked={clearWriteKey} onChange={(e) => setClearWriteKey(e.target.checked)} /> Clear the stored write key</label></div>
+            )}
             <div className="actions">
               <button className="btn primary" onClick={() => void save()}>Save</button>
               <button className="btn" onClick={() => void runTest()}>Test connection</button>
@@ -682,8 +701,11 @@ function Ns1ConnectorForm() {
 
           {view && (
             <div className="card">
-              <div className="kv"><span>Key configured</span><span>{view.keyConfigured ? 'yes' : 'no'}</span></div>
-              <div className="kv"><span>Key set at</span><span>{view.keySetAt ?? '—'}</span></div>
+              <div className="kv"><span>Read key configured</span><span>{view.keyConfigured ? 'yes' : 'no'}</span></div>
+              <div className="kv"><span>Read key set at</span><span>{view.keySetAt ?? '—'}</span></div>
+              <div className="kv"><span>Write key configured</span><span>{view.writeKeyConfigured ? 'yes' : 'no'}</span></div>
+              <div className="kv"><span>Write key set at</span><span>{view.writeKeySetAt ?? '—'}</span></div>
+              <div className="kv"><span>Write path</span><span>{view.writeEnabled ? (view.writeLive ? 'live' : 'enabled (needs key + live)') : 'disabled'}</span></div>
               <div className="kv"><span>Last updated by</span><span>{view.updatedBy ?? '—'}</span></div>
               <div className="kv"><span>Effective</span><span>{view.live ? 'live' : 'mock'}</span></div>
             </div>

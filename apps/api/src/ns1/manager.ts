@@ -8,19 +8,21 @@
 // mock|live. No new migration. RADAR remains READ-ONLY to NS1.
 import { createNs1Client } from './index.js';
 import { ReconfigurableNs1ReadClient } from './reconfigurable-client.js';
+import { createNs1RecordWriter, ReconfigurableNs1RecordWriter, type Ns1RecordWriter } from './record-writer.js';
 import type { Ns1Config, RadarMode } from './config.js';
 import { ConnectorManagerError, type AuditSink } from '../cloudvision/manager.js';
 import type { SecretBox } from '../security/secret-box.js';
 import type { ConnectorSettingsRecord, ConnectorSettingsRepository } from '@radar/data';
 
 const CONNECTOR = 'ns1';
+const WRITE_CONNECTOR = 'ns1-write'; // the WRITE key lives in its own settings row (its own credential)
 const MASK_SENTINELS = new Set(['••••••••', '********', '(configured)', '(unchanged)']);
 
 export interface Ns1SettingsView {
   connector: 'ns1';
   mode: RadarMode;
   apiBase: string;
-  /** Whether a key is configured — the key itself is NEVER returned. */
+  /** Whether the READ key is configured — the key itself is NEVER returned. */
   keyConfigured: boolean;
   keySetAt: string | null;
   updatedBy: string | null;
@@ -30,14 +32,27 @@ export interface Ns1SettingsView {
   live: boolean;
   masterKeyAvailable: boolean;
   degraded: string | null;
+  // ---- WRITE key (the guarded create/clone path) ----
+  /** Whether the guarded write path is enabled at all (env NS1_WRITE_ENABLED — the safety gate). */
+  writeEnabled: boolean;
+  /** The allow-list of record names that may be created (env NS1_WRITE_ALLOW). */
+  writeAllow: string[];
+  /** Whether a WRITE key is configured — never returned. */
+  writeKeyConfigured: boolean;
+  writeKeySetAt: string | null;
+  /** True when the write path is fully live (enabled + mode live + a decryptable write key). */
+  writeLive: boolean;
 }
 
 export interface Ns1SettingsInput {
   mode?: RadarMode;
   apiBase?: string | null;
-  /** Write-only. Omitted/blank ⇒ retain the stored key; non-empty ⇒ replace it. */
+  /** Write-only. Omitted/blank ⇒ retain the stored READ key; non-empty ⇒ replace it. */
   key?: string;
   clearKey?: boolean;
+  /** Write-only. The WRITE key (create/clone). Omitted/blank ⇒ retain; non-empty ⇒ replace. */
+  writeKey?: string;
+  clearWriteKey?: boolean;
 }
 
 interface ManagerLogger { info: (o: unknown, m?: string) => void; warn: (o: unknown, m?: string) => void; error: (o: unknown, m?: string) => void }
@@ -59,7 +74,9 @@ export class Ns1ConnectorManager {
   private readonly logger?: ManagerLogger;
   private readonly fetchImpl?: typeof fetch;
   private persisted: ConnectorSettingsRecord | null = null;
+  private persistedWrite: ConnectorSettingsRecord | null = null;
   private readonly client: ReconfigurableNs1ReadClient;
+  private readonly writer: ReconfigurableNs1RecordWriter;
 
   constructor(deps: Ns1ManagerDeps) {
     this.base = deps.baseConfig;
@@ -69,17 +86,23 @@ export class Ns1ConnectorManager {
     this.logger = deps.logger;
     this.fetchImpl = deps.fetchImpl;
     this.client = new ReconfigurableNs1ReadClient(createNs1Client(this.base, { fetchImpl: this.fetchImpl }));
+    this.writer = new ReconfigurableNs1RecordWriter(createNs1RecordWriter(this.base, this.fetchImpl));
   }
 
   async init(): Promise<void> {
     if (this.repo) {
       try { this.persisted = await this.repo.get(CONNECTOR); }
       catch (err) { this.logger?.warn({ code: err instanceof Error ? err.name : 'error' }, 'ns1: failed to load persisted settings'); }
+      try { this.persistedWrite = await this.repo.get(WRITE_CONNECTOR); }
+      catch (err) { this.logger?.warn({ code: err instanceof Error ? err.name : 'error' }, 'ns1: failed to load write-key settings'); }
     }
     this.applyToClient();
+    this.applyToWriter();
   }
 
   getClient(): ReconfigurableNs1ReadClient { return this.client; }
+  /** The stable record writer — its inner is rebuilt when the write key / mode changes. */
+  getRecordWriter(): Ns1RecordWriter { return this.writer; }
 
   /** Effective connector state for provenance and snapshot labels — reflects the live⇄mock
    *  swaps the manager applies at runtime, unlike the startup config. No key exposed. */
@@ -126,6 +149,30 @@ export class Ns1ConnectorManager {
     return !!this.base.apiKey;
   }
 
+  private writeKeyConfigured(): boolean {
+    if (this.persistedWrite) return !!(this.persistedWrite.tokenCiphertext && this.persistedWrite.tokenNonce && this.persistedWrite.tokenTag);
+    return !!this.base.writeApiKey;
+  }
+
+  /** The ONE place the WRITE key is decrypted. Returns undefined if none/undecryptable. */
+  private resolveWriteKey(): string | undefined {
+    const w = this.persistedWrite;
+    if (w && w.tokenCiphertext && w.tokenNonce && w.tokenTag) {
+      if (!this.secretBox) return undefined;
+      try { return this.secretBox.open({ ciphertext: w.tokenCiphertext, nonce: w.tokenNonce, tag: w.tokenTag }); }
+      catch { return undefined; }
+    }
+    return this.persistedWrite ? undefined : this.base.writeApiKey; // env fallback only when no DB row
+  }
+
+  /** Rebuild the record writer's inner from the effective mode/baseUrl + the resolved write key. The
+   *  env NS1_WRITE_ENABLED gate and allow-list always come from base config. */
+  private applyToWriter(): void {
+    const e = this.resolveEffective();
+    const cfg: Ns1Config = { ...this.base, mode: e.mode, baseUrl: e.baseUrl, writeApiKey: this.resolveWriteKey() };
+    this.writer.setInner(createNs1RecordWriter(cfg, this.fetchImpl));
+  }
+
   getSettingsView(): Ns1SettingsView {
     const e = this.resolveEffective();
     const s = this.persisted;
@@ -141,6 +188,11 @@ export class Ns1ConnectorManager {
       live: e.source === 'ns1',
       masterKeyAvailable: !!this.secretBox,
       degraded: e.degraded,
+      writeEnabled: this.base.writeEnabled,
+      writeAllow: this.base.writeAllow,
+      writeKeyConfigured: this.writeKeyConfigured(),
+      writeKeySetAt: this.persistedWrite?.tokenSetAt ? this.persistedWrite.tokenSetAt.toISOString() : null,
+      writeLive: this.base.writeEnabled && e.mode === 'live' && !!this.resolveWriteKey(),
     };
   }
 
@@ -148,6 +200,9 @@ export class Ns1ConnectorManager {
     if (!this.repo) throw new ConnectorManagerError('ENDPOINT_REQUIRED', 'Connector settings persistence is not configured.');
     if (input.key !== undefined && MASK_SENTINELS.has(input.key.trim())) {
       throw new ConnectorManagerError('INVALID_TOKEN_VALUE', 'The masked placeholder is not a valid key value.');
+    }
+    if (input.writeKey !== undefined && MASK_SENTINELS.has(input.writeKey.trim())) {
+      throw new ConnectorManagerError('INVALID_TOKEN_VALUE', 'The masked placeholder is not a valid write-key value.');
     }
     const cur = this.persisted;
     const mode: RadarMode = input.mode ?? (cur?.mode as RadarMode) ?? this.base.mode;
@@ -174,13 +229,29 @@ export class Ns1ConnectorManager {
       tokenCiphertext: sealed?.ciphertext, tokenNonce: sealed?.nonce, tokenTag: sealed?.tag,
     });
 
+    // The WRITE key lives in its own settings row (its own credential); handled independently.
+    const suppliedWrite = input.writeKey?.trim() ?? '';
+    const writeAction: 'retain' | 'replace' | 'clear' = input.clearWriteKey ? 'clear' : suppliedWrite.length > 0 ? 'replace' : 'retain';
+    if (writeAction === 'replace' && !this.secretBox) {
+      throw new ConnectorManagerError('MASTER_KEY_UNAVAILABLE', 'Cannot store an NS1 write key: the runtime master key is not available.');
+    }
+    if (writeAction !== 'retain') {
+      const sealedWrite = writeAction === 'replace' ? this.secretBox!.seal(suppliedWrite) : undefined;
+      this.persistedWrite = await this.repo.upsert({
+        connector: WRITE_CONNECTOR, enabled: true, mode, endpoint: apiBase, verifyTls: true, edgeDeviceIds: null,
+        updatedBy: actor.subject ?? null, tokenAction: writeAction,
+        tokenCiphertext: sealedWrite?.ciphertext, tokenNonce: sealedWrite?.nonce, tokenTag: sealedWrite?.tag,
+      });
+    }
+
     await this.audit?.record({
       actorSubject: actor.subject, actorRoles: actor.roles, action: 'connector.settings.updated',
       resourceType: 'connector', resourceKey: CONNECTOR, outcome: 'success', correlationId: actor.correlationId,
-      details: { mode, apiBaseConfigured: !!apiBase, tokenAction },
+      details: { mode, apiBaseConfigured: !!apiBase, tokenAction, writeKeyAction: writeAction },
     });
 
     this.applyToClient();
+    this.applyToWriter();
     return this.getSettingsView();
   }
 

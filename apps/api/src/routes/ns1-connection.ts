@@ -17,9 +17,12 @@ const updateSchema = z
     apiBase: z.string().max(500).nullable().optional(),
     key: z.string().max(8000).optional(),
     clearKey: z.boolean().optional(),
+    writeKey: z.string().max(8000).optional(),
+    clearWriteKey: z.boolean().optional(),
   })
   .strict()
-  .refine((b) => !(b.clearKey && b.key !== undefined && b.key.trim().length > 0), { message: 'Provide either a new key or clearKey, not both.' });
+  .refine((b) => !(b.clearKey && b.key !== undefined && b.key.trim().length > 0), { message: 'Provide either a new key or clearKey, not both.' })
+  .refine((b) => !(b.clearWriteKey && b.writeKey !== undefined && b.writeKey.trim().length > 0), { message: 'Provide either a new write key or clearWriteKey, not both.' });
 
 const ERROR_STATUS: Record<ConnectorManagerError['code'], number> = {
   MASTER_KEY_UNAVAILABLE: 409, ENDPOINT_REQUIRED: 400, TOKEN_REQUIRED: 400, ENDPOINT_INSECURE: 400, INVALID_TOKEN_VALUE: 400,

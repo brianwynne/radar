@@ -205,3 +205,16 @@ export function createNs1RecordWriter(cfg: Ns1Config, fetchImpl: typeof fetch = 
     ? new HttpNs1RecordWriter(cfg, fetchImpl)
     : new DisabledNs1RecordWriter(cfg);
 }
+
+/** A stable Ns1RecordWriter forwarding to a swappable inner writer, so the NS1 connector manager can
+ *  rebuild the writer (new write key / enabled state) at runtime without re-wiring the route. */
+export class ReconfigurableNs1RecordWriter implements Ns1RecordWriter {
+  constructor(private inner: Ns1RecordWriter) {}
+  setInner(inner: Ns1RecordWriter): void { this.inner = inner; }
+  writeEnabled(): boolean { return this.inner.writeEnabled(); }
+  allowList(): string[] { return this.inner.allowList(); }
+  plan(input: CreateRecordInput): RecordPlan { return this.inner.plan(input); }
+  apply(input: CreateRecordInput): Promise<CreateResult> { return this.inner.apply(input); }
+  planClone(target: CloneTarget, source: unknown): RecordPlan { return this.inner.planClone(target, source); }
+  applyClone(target: CloneTarget, source: unknown): Promise<CreateResult> { return this.inner.applyClone(target, source); }
+}

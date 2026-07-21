@@ -10,7 +10,9 @@ import type { Ns1ReadClient } from '../ns1/client.js';
 import type { AuditSink } from '../cloudvision/manager.js';
 
 export interface Ns1WriteRoutesOptions {
-  writer: Ns1RecordWriter;
+  /** A fixed writer, or a provider that returns the current writer (so runtime key/mode changes on
+   *  the Integrations page take effect without re-wiring). */
+  writer: Ns1RecordWriter | (() => Ns1RecordWriter);
   /** Read client — used to fetch the SOURCE record for a clone (GET-only). */
   readClient?: Ns1ReadClient;
   audit?: AuditSink;
@@ -30,11 +32,12 @@ const cloneBody = z.object({
 const schema = (summary: string, description: string) => ({ tags: ['ns1'], summary, description, security: [{ bearerAuth: [] }] });
 
 export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (app, opts) => {
+  const getWriter = (): Ns1RecordWriter => (typeof opts.writer === 'function' ? opts.writer() : opts.writer);
   // Capability + allow-list, so the UI can show what's writable before anyone tries.
   app.get(
     '/ns1/records/capability',
     { preHandler: requirePermission('ns1.record.create'), schema: schema('Create-record capability', 'Engineer-only. Whether the guarded NS1 create path is enabled, and the allow-list of names that may be created. No credentials.') },
-    async () => ({ writeEnabled: opts.writer.writeEnabled(), allowList: opts.writer.allowList() }),
+    async () => ({ writeEnabled: getWriter().writeEnabled(), allowList: getWriter().allowList() }),
   );
 
   // DRY-RUN: validate + build the exact NS1 request. Never writes.
@@ -44,7 +47,7 @@ export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (
     async (req, reply) => {
       const parsed = createBody.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ error: 'invalid input', detail: parsed.error.issues.map((i) => i.message) });
-      return opts.writer.plan(parsed.data as CreateRecordInput);
+      return getWriter().plan(parsed.data as CreateRecordInput);
     },
   );
 
@@ -58,7 +61,7 @@ export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (
       const input = parsed.data as CreateRecordInput;
       const actor = { actorSubject: req.principal?.subject, actorRoles: req.principal?.roles, correlationId: req.id };
       try {
-        const result = await opts.writer.apply(input);
+        const result = await getWriter().apply(input);
         await opts.audit?.record({ ...actor, action: 'ns1.record.create', resourceType: 'ns1-record', resourceKey: `${input.domain}/${input.type}`, outcome: 'success', details: { zone: input.zone, domain: input.domain, type: input.type, ttl: input.ttl, answers: input.answers } });
         return result;
       } catch (err) {
@@ -81,7 +84,7 @@ export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (
       const { source, target } = parsed.data;
       try {
         const src = await opts.readClient.getRecord(source.zone, source.domain, source.type, req.id);
-        return opts.writer.planClone(target as CloneTarget, src);
+        return getWriter().planClone(target as CloneTarget, src);
       } catch (err) {
         return reply.code(502).send({ error: 'source read failed', message: err instanceof Error ? err.message : 'could not read source record' });
       }
@@ -105,7 +108,7 @@ export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (
         return reply.code(502).send({ error: 'source read failed', message: err instanceof Error ? err.message : 'could not read source record' });
       }
       try {
-        const result = await opts.writer.applyClone(target as CloneTarget, src);
+        const result = await getWriter().applyClone(target as CloneTarget, src);
         await opts.audit?.record({ ...actor, action: 'ns1.record.clone', resourceType: 'ns1-record', resourceKey: `${target.domain}/${source.type}`, outcome: 'success', details: { source: `${source.domain}/${source.type}`, target: target.domain, zone: target.zone, ttl: target.ttl } });
         return result;
       } catch (err) {

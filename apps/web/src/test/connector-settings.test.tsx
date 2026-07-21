@@ -128,10 +128,11 @@ describe('Integrations Token Management', () => {
     const card = within(heading.closest('.connector-section') as HTMLElement);
 
     fireEvent.change(await card.findByRole('combobox'), { target: { value: 'live' } }); // mode → live
-    fireEvent.change(card.getByPlaceholderText(/not configured/i), { target: { value: 'ns1-readonly-key' } });
+    fireEvent.change(card.getByPlaceholderText('not configured'), { target: { value: 'ns1-readonly-key' } }); // read key (exact; write key is "…(optional)")
+    fireEvent.change(card.getByPlaceholderText(/not configured \(optional\)/i), { target: { value: 'ns1-write-key' } }); // write key
     fireEvent.click(card.getByRole('button', { name: 'Save' }));
     await screen.findByText(/Saved/i);
-    expect(putBody('/ns1/connection')).toMatchObject({ mode: 'live', key: 'ns1-readonly-key' });
+    expect(putBody('/ns1/connection')).toMatchObject({ mode: 'live', key: 'ns1-readonly-key', writeKey: 'ns1-write-key' });
 
     fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
     expect(await screen.findByText(/Connection OK.*12 zones/i)).toBeInTheDocument();

@@ -216,8 +216,15 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(dnsRoutes, { prefix: '/api/v1/dns', client: ns1Client, ns1: config.ns1, ns1Connection: deps.ns1Manager });
   await app.register(snapshotRoutes, { prefix: '/api/v1', client: ns1Client, ns1: config.ns1, database: deps.database, ns1Connection: deps.ns1Manager });
   await app.register(ns1ConnectionRoutes, { prefix: '/api/v1', manager: deps.ns1Manager });
-  // Guarded NS1 create-record path (dry-run + confirm). RADAR's only write to NS1; default-off.
-  await app.register(ns1WriteRoutes, { prefix: '/api/v1', writer: deps.ns1RecordWriter ?? createNs1RecordWriter(config.ns1), readClient: ns1Client, audit: deps.database?.audit });
+  // Guarded NS1 create-record path (dry-run + confirm). RADAR's only write to NS1; default-off. The
+  // writer comes from the NS1 manager so a write key set on the Integrations page takes effect live;
+  // reads (clone source) use the manager's read client. Tests may inject a fixed writer.
+  await app.register(ns1WriteRoutes, {
+    prefix: '/api/v1',
+    writer: deps.ns1RecordWriter ?? (deps.ns1Manager ? () => deps.ns1Manager!.getRecordWriter() : createNs1RecordWriter(config.ns1)),
+    readClient: ns1Client,
+    audit: deps.database?.audit,
+  });
   await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });
   await app.register(changeDetectionRoutes, { prefix: '/api/v1', service: deps.changeDetection });
   await app.register(liveSteeringRoutes, { prefix: '/api/v1', store: deps.steeringStore });

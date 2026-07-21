@@ -21,7 +21,7 @@ const NAV = [
   // Hidden from the nav — routes remain, still reachable by URL.
   // { to: '/validation/ns1', label: 'NS1 Validation', perm: 'ns1.detail.read', end: false },
   // { to: '/activity', label: 'Activity', perm: 'audit.read', end: false },
-  // { to: '/network/connection', label: 'Integrations', perm: 'connector.manage', end: false },
+  { to: '/network/connection', label: 'Integrations', perm: 'connector.manage', end: false },
   // { to: '/settings', label: 'Settings', perm: 'mapping.manage', end: false },
 ];
 

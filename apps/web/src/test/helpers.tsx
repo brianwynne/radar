@@ -371,7 +371,7 @@ let fastlyConnectionState: Record<string, unknown> = { ...defaultFastlyConnectio
 const defaultAkamaiConnection = { connector: 'akamai', enabled: false, cpCodes: [] as string[], cpNames: {} as Record<string, string>, s3: { bucket: '', region: 'us-east-1', prefix: '', accessKeyId: '', pollIntervalSeconds: 30 }, windowSeconds: 300, secretConfigured: false, secretSetAt: null, updatedBy: null, updatedAt: null, source: 'environment', masterKeyAvailable: true, connected: false, degraded: null };
 let akamaiConnectionState: Record<string, unknown> = { ...defaultAkamaiConnection };
 
-const defaultNs1Connection = { connector: 'ns1', mode: 'mock', apiBase: 'https://api.nsone.net/v1', keyConfigured: false, keySetAt: null, updatedBy: null, updatedAt: null, source: 'environment', live: false, masterKeyAvailable: true, degraded: null };
+const defaultNs1Connection = { connector: 'ns1', mode: 'mock', apiBase: 'https://api.nsone.net/v1', keyConfigured: false, keySetAt: null, updatedBy: null, updatedAt: null, source: 'environment', live: false, masterKeyAvailable: true, degraded: null, writeEnabled: false, writeAllow: ['livetest.rte.ie', '*.livetest.rte.ie'], writeKeyConfigured: false, writeKeySetAt: null, writeLive: false };
 let ns1ConnectionState: Record<string, unknown> = { ...defaultNs1Connection };
 
 export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } = {}): void {
@@ -435,7 +435,8 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
           const b = JSON.parse(String(init.body ?? '{}')) as Record<string, unknown>;
           const mode = (b.mode ?? ns1ConnectionState.mode) as string;
           const keyConfigured = b.clearKey ? false : b.key ? true : (ns1ConnectionState.keyConfigured as boolean);
-          ns1ConnectionState = { ...ns1ConnectionState, mode, apiBase: b.apiBase !== undefined ? b.apiBase : ns1ConnectionState.apiBase, keyConfigured, live: mode === 'live' && keyConfigured, source: 'database' };
+          const writeKeyConfigured = b.clearWriteKey ? false : b.writeKey ? true : (ns1ConnectionState.writeKeyConfigured as boolean);
+          ns1ConnectionState = { ...ns1ConnectionState, mode, apiBase: b.apiBase !== undefined ? b.apiBase : ns1ConnectionState.apiBase, keyConfigured, writeKeyConfigured, live: mode === 'live' && keyConfigured, source: 'database' };
         }
         body = { settings: ns1ConnectionState };
       }
