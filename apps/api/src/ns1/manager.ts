@@ -165,11 +165,12 @@ export class Ns1ConnectorManager {
     return this.persistedWrite ? undefined : this.base.writeApiKey; // env fallback only when no DB row
   }
 
-  /** The write GATE — controlled SOLELY by the create-panel switch (the persisted 'ns1-write' row's
-   *  `enabled`). Defaults OFF: a fresh install (no persisted row) is off regardless of env, so writes
-   *  are inert until an engineer explicitly turns the switch on. */
+  /** The write GATE — EPHEMERAL and in-memory. Defaults OFF and resets to OFF on every restart, so
+   *  writes are always inert until an engineer explicitly flips the switch this session. NOT persisted
+   *  (the write key is; the gate is not) — a safety default so a stale "on" can never linger. */
+  private writeGate = false;
   private effectiveWriteEnabled(): boolean {
-    return this.persistedWrite ? this.persistedWrite.enabled : false;
+    return this.writeGate;
   }
 
   /** Rebuild the record writer's inner from the effective mode/baseUrl + write key + gate. The
@@ -182,12 +183,9 @@ export class Ns1ConnectorManager {
 
   /** Toggle the write gate (NS1_WRITE_ENABLED) at runtime — persisted, audited, rebuilds the writer. */
   async setWriteEnabled(enabled: boolean, actor: { subject?: string; roles?: string[]; correlationId?: string }): Promise<Ns1SettingsView> {
-    if (!this.repo) throw new ConnectorManagerError('ENDPOINT_REQUIRED', 'Connector settings persistence is not configured.');
-    this.persistedWrite = await this.repo.upsert({
-      connector: WRITE_CONNECTOR, enabled, mode: (this.persisted?.mode ?? this.base.mode) as RadarMode,
-      endpoint: this.persisted?.endpoint ?? null, verifyTls: true, edgeDeviceIds: null,
-      updatedBy: actor.subject ?? null, tokenAction: 'retain',
-    });
+    // The gate is EPHEMERAL: flip the in-memory flag only. It is deliberately NOT persisted, so it
+    // resets to OFF on every restart and can never linger "on" across sessions or page loads.
+    this.writeGate = enabled;
     await this.audit?.record({ actorSubject: actor.subject, actorRoles: actor.roles, action: 'connector.settings.updated', resourceType: 'connector', resourceKey: WRITE_CONNECTOR, outcome: 'success', correlationId: actor.correlationId, details: { writeEnabled: enabled } });
     this.applyToWriter();
     return this.getSettingsView();

@@ -14,6 +14,7 @@ import type { CreatableRecordType, RecordCapability, RecordCreateResult, RecordP
 
 type Mode = 'create' | 'clone';
 const SNAP_ZONE = '__snapshots__'; // pseudo source-zone: pick a snapshot as the clone source
+const NEW_NAME = '__new__'; // record-name dropdown sentinel: type a brand-new name
 
 export interface CreateRecordPanelProps {
   /** The selected zone — the create target (pre-selected in the zone dropdown). */
@@ -48,7 +49,7 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
   const [domain, setDomain] = useState(targetZone);
   const [ttl, setTtl] = useState(30);
   // Create-only
-  const [type, setType] = useState<CreatableRecordType>('A');
+  const [type] = useState<CreatableRecordType>('CNAME'); // only CNAME records are creatable
   const [answers, setAnswers] = useState('185.54.104.4');
   // Clone-only source
   const [srcZone, setSrcZone] = useState(source?.zone ?? 'nsone.rte.ie');
@@ -194,7 +195,7 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
       {cap && (
         <div className="ctr-gate">
           <label className="switch" title="Enable/disable the guarded NS1 write path (NS1_WRITE_ENABLED). Persisted + audited.">
-            <input type="checkbox" checked={cap.writeEnabled} disabled={gateBusy} onChange={(e) => toggleGate(e.target.checked)} /> Enable NS1 writes <span className="mono muted">(NS1_WRITE_ENABLED)</span>
+            <input type="checkbox" checked={cap.writeEnabled} disabled={gateBusy} onChange={(e) => toggleGate(e.target.checked)} /> Enable NS1 writes <span className="mono muted">(resets to off on restart)</span>
           </label>
           {cap.writeEnabled && cap.writeReady === false && (
             <span className="muted" style={{ fontSize: '0.78rem' }}> · gate on, but NS1 isn’t live with a write key — set it on <b>Integrations</b>. Confirm will be refused until then.</span>
@@ -239,18 +240,21 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
           {field('Zone', zones && zones.length
             ? <select value={zone} onChange={(e) => set(setZone)(e.target.value)}>{zones.map((z) => <option key={z} value={z}>{z}</option>)}</select>
             : <input value={zone} onChange={(e) => set(setZone)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />)}
-          {field('Record name (domain)', (
+          {field('Record name (domain)', tgtRecords.length ? (
             <>
-              <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder="livetest.rte.ie" list="ctr-tgt-records" />
-              <datalist id="ctr-tgt-records">{tgtRecords.map((d) => <option key={d} value={d} />)}</datalist>
+              <select value={tgtRecords.includes(domain) ? domain : NEW_NAME} onChange={(e) => { const v = e.target.value; set(setDomain)(v === NEW_NAME ? '' : v); }}>
+                <option value={NEW_NAME}>＋ New record name…</option>
+                {tgtRecords.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+              {!tgtRecords.includes(domain) && (
+                <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder="new.livetest.rte.ie" style={{ marginTop: '0.3rem' }} autoFocus />
+              )}
             </>
+          ) : (
+            <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />
           ))}
-          {!supplied && mode === 'create' && field('Type', (
-            <select value={type} onChange={(e) => setShape(setType)(e.target.value as CreatableRecordType)}>
-              <option value="A">A</option><option value="AAAA">AAAA</option><option value="CNAME">CNAME</option>
-            </select>
-          ))}
-          {!supplied && mode === 'create' && field(type === 'CNAME' ? 'Target (one hostname)' : 'Answers (space/comma-separated)', <input value={answers} onChange={(e) => setShape(setAnswers)(e.target.value)} className="mono" placeholder={type === 'CNAME' ? 'liveedge.rte.ie' : '185.54.104.4 185.54.105.4'} />)}
+          {!supplied && mode === 'create' && field('Type', <input value="CNAME" readOnly className="mono" style={{ width: '8rem' }} title="Only CNAME records are creatable" />)}
+          {!supplied && mode === 'create' && field('Target (one hostname)', <input value={answers} onChange={(e) => setShape(setAnswers)(e.target.value)} className="mono" placeholder="liveedge.rte.ie" />)}
           {!supplied && mode === 'clone' && (
             <label className="switch" style={{ display: 'block', marginBottom: '0.5rem' }} title="Override the cloned TTL (e.g. drop to 30s to test faster steering)">
               <input type="checkbox" checked={ttlOverride} onChange={(e) => set(setTtlOverride)(e.target.checked)} /> Override TTL (else inherit the source’s)
