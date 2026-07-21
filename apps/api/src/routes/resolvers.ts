@@ -31,6 +31,16 @@ export const resolverRoutes: FastifyPluginAsync<ResolverRoutesOptions> = async (
     },
   );
 
+  let idCache: { at: number; snap: Awaited<ReturnType<ResolverManager['identity']>> } | null = null;
+  app.get(
+    '/network/resolvers/identity',
+    { preHandler: requirePermission('topology.summary.read'), schema: schema('ISP recursive-resolver identity (whoami + ECS)', "Each ISP's ACTUAL recursive resolvers behind the CPE forwarders (revealed via whoami.ds.akahelp.net), and the EDNS Client Subnet they forward — which governs how precisely NS1 can steer them. Read from the recurring whoami measurements; cached briefly.") },
+    async () => {
+      if (!idCache || now() - idCache.at > ttl) idCache = { at: now(), snap: await opts.manager.identity() };
+      return idCache.snap;
+    },
+  );
+
   app.post(
     '/network/resolvers/check',
     { preHandler: requirePermission('connector.manage'), schema: schema('Check resolvers now', 'Fire a one-off RIPE Atlas DNS measurement per covered ISP and return the handles to poll. Spends Atlas credits (user-initiated).') },

@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.js';
 import { createAtlasManager, loadAtlasConfig } from '../src/atlas/index.js';
 import { MockAtlasManager } from '../src/atlas/mock.js';
 import type { ResolverManager, ResolverSnapshot } from '../src/atlas/index.js';
+import type { ResolverIdentitySnapshot } from '../src/atlas/types.js';
 
 const mockManager = () => new MockAtlasManager(loadAtlasConfig({ ATLAS_ENABLED: 'true', ATLAS_MODE: 'mock' }));
 
@@ -89,5 +90,44 @@ describe('resolver-reader route', () => {
     const viewer = await app('NOC_VIEWER');
     expect((await viewer.inject({ method: 'POST', url: '/api/v1/network/resolvers/polling', payload: { enabled: false } })).statusCode).toBe(403);
     await viewer.close();
+  });
+});
+
+describe('resolver-identity route', () => {
+  it('401 when unauthenticated', async () => {
+    const a = await app('NOC_VIEWER', undefined, false);
+    expect((await a.inject({ url: '/api/v1/network/resolvers/identity' })).statusCode).toBe(401);
+    await a.close();
+  });
+
+  it('returns per-ISP real recursives split into ISP-own vs public-via-CPE, with the ECS verdict', async () => {
+    const a = await app('NOC_VIEWER');
+    const body = (await a.inject({ url: '/api/v1/network/resolvers/identity' })).json() as ResolverIdentitySnapshot;
+    const eir = body.isps.find((i) => i.isp === 'Eir')!;
+    expect(eir.covered).toBe(true);
+    expect(eir.ispResolverCount).toBe(1);
+    expect(eir.publicResolverCount).toBe(1);
+    expect(eir.resolvers[0]).toMatchObject({ public: false }); // own listed first
+    expect(eir.sendsEcs).toBe(true); // Eir's own recursive forwards ECS /24
+    expect(eir.ecsPrefixes).toContain(24);
+    await a.close();
+  });
+
+  it('flags Three as a no-coverage gap (no fabricated resolvers)', async () => {
+    const a = await app('NOC_VIEWER');
+    const body = (await a.inject({ url: '/api/v1/network/resolvers/identity' })).json() as ResolverIdentitySnapshot;
+    const three = body.isps.find((i) => i.isp === 'Three')!;
+    expect(three.covered).toBe(false);
+    expect(three.resolvers).toEqual([]);
+    await a.close();
+  });
+
+  it('disabled manager returns an honest empty identity, never mock', async () => {
+    const disabled = createAtlasManager(loadAtlasConfig({}));
+    const a = await app('NOC_VIEWER', disabled);
+    const body = (await a.inject({ url: '/api/v1/network/resolvers/identity' })).json() as ResolverIdentitySnapshot;
+    expect(body.provenance.source).toBe('disabled');
+    expect(body.isps).toEqual([]);
+    await a.close();
   });
 });

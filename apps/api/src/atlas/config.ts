@@ -23,6 +23,9 @@ export interface AtlasConfig {
   /** Edge (liveedge A) TTL at/below which a resolver is deemed to honour the low TTL. */
   honourTtlThreshold: number;
   measurements: AtlasIspMeasurement[];
+  /** whoami (whoami.ds.akahelp.net TXT) measurements — reveal each ISP's REAL recursive resolvers
+   *  behind the CPE forwarders, and the ECS they forward (which governs steering precision). */
+  whoamiMeasurements: AtlasIspMeasurement[];
 }
 
 const KEY_SECRET = '/run/secrets/atlas_api_key';
@@ -33,6 +36,16 @@ const DEFAULT_MEASUREMENTS: AtlasIspMeasurement[] = [
   { isp: 'Sky', asn: 5607, measurementId: 192119191 },
   { isp: 'Virgin/LG', asn: 6830, measurementId: 192119193 },
   { isp: 'Vodafone', asn: 15502, measurementId: 192119194 },
+  { isp: 'Three', asn: 13280, measurementId: null },
+];
+
+// whoami (whoami.ds.akahelp.net TXT) measurements — reveal each ISP's REAL recursive resolver IPs
+// behind the CPE forwarders, plus the ECS they send. Created 2026-07-20.
+const DEFAULT_WHOAMI_MEASUREMENTS: AtlasIspMeasurement[] = [
+  { isp: 'Eir', asn: 5466, measurementId: 192320576 },
+  { isp: 'Sky', asn: 5607, measurementId: 192320577 },
+  { isp: 'Virgin/LG', asn: 6830, measurementId: 192320578 },
+  { isp: 'Vodafone', asn: 15502, measurementId: 192320579 },
   { isp: 'Three', asn: 13280, measurementId: null },
 ];
 
@@ -49,6 +62,7 @@ const schema = z.object({
   // the low TTL upward (30 + a small margin for jitter).
   ATLAS_HONOUR_TTL_THRESHOLD: z.coerce.number().int().positive().max(3600).default(35),
   ATLAS_MEASUREMENTS: z.string().optional(),
+  ATLAS_WHOAMI_MEASUREMENTS: z.string().optional(),
 });
 
 function readSecretFile(path: string): string | undefined {
@@ -83,6 +97,18 @@ export function loadAtlasConfig(env: NodeJS.ProcessEnv = process.env): AtlasConf
     if (!m.success) throw new Error(`RIPE Atlas configuration: invalid ATLAS_MEASUREMENTS: ${m.error.issues.map((i) => i.message).join('; ')}`);
     measurements = m.data;
   }
+  let whoamiMeasurements = DEFAULT_WHOAMI_MEASUREMENTS;
+  if (p.ATLAS_WHOAMI_MEASUREMENTS) {
+    let raw: unknown;
+    try {
+      raw = JSON.parse(p.ATLAS_WHOAMI_MEASUREMENTS);
+    } catch (err) {
+      throw new Error(`RIPE Atlas configuration: ATLAS_WHOAMI_MEASUREMENTS is not valid JSON: ${err instanceof Error ? err.message : 'parse error'}`, { cause: err });
+    }
+    const m = measurementSchema.safeParse(raw);
+    if (!m.success) throw new Error(`RIPE Atlas configuration: invalid ATLAS_WHOAMI_MEASUREMENTS: ${m.error.issues.map((i) => i.message).join('; ')}`);
+    whoamiMeasurements = m.data;
+  }
 
   const base: AtlasConfig = {
     enabled: p.ATLAS_ENABLED,
@@ -91,6 +117,7 @@ export function loadAtlasConfig(env: NodeJS.ProcessEnv = process.env): AtlasConf
     target: p.ATLAS_TARGET,
     honourTtlThreshold: p.ATLAS_HONOUR_TTL_THRESHOLD,
     measurements,
+    whoamiMeasurements,
   };
 
   if (!p.ATLAS_ENABLED || p.ATLAS_MODE === 'mock') return base;

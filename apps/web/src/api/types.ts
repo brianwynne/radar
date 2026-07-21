@@ -1019,6 +1019,27 @@ export interface ResolverSnapshot {
 export interface ResolverCheck { isp: string; asn: number; measurementId: number }
 export interface ResolverCheckStart { checks: ResolverCheck[]; startedAt: string }
 export interface ResolverCheckResult { snapshot: ResolverSnapshot; pending: boolean }
+// ---- Resolver identity (whoami + ECS): the ISP's ACTUAL recursive resolvers behind CPE forwarders
+export interface ResolverIdentityEntry { resolver: string; public: boolean; probeCount: number; ecs: string | null; ecsPrefix: number | null }
+export interface ResolverIspIdentity {
+  isp: string;
+  asn: number;
+  covered: boolean;
+  note?: string;
+  resolverCount: number;
+  ispResolverCount: number;
+  publicResolverCount: number;
+  resolvers: ResolverIdentityEntry[];
+  sendsEcs: boolean;
+  ecsPrefixes: number[];
+  observedAt: string | null;
+}
+export interface ResolverIdentitySnapshot {
+  provenance: { source: 'ripe-atlas' | 'mock' | 'disabled'; synthetic: boolean; readOnly: true; informationalOnly: true; notice?: string; retrievedAt: string };
+  isps: ResolverIspIdentity[];
+  observedAt: string | null;
+  warnings: string[];
+}
 export interface NetworkInterfacesResponse { provenance: NetworkProvenance; count: number; items: NetworkInterface[] }
 export interface NetworkLinkGroupsResponse { provenance: NetworkProvenance; count: number; items: LinkGroup[] }
 export interface NetworkBgpPeersResponse { provenance: NetworkProvenance; count: number; items: BgpPeer[] }

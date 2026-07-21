@@ -423,3 +423,20 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-metric-note { font-size: 0.68rem; color: var(--ink-soft); }
 .rv-group-head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); font-weight: 700; padding-top: 0.2rem; }
 .rv-public-group { margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--line); opacity: 0.85; }
+
+/* Steering / Resolver-identity view toggle */
+.rv-viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.rv-viewtoggle button { border: 0; background: transparent; color: var(--ink-soft); font: inherit; font-size: 0.78rem; padding: 0.25rem 0.7rem; cursor: pointer; }
+.rv-viewtoggle button + button { border-left: 1px solid var(--line); }
+.rv-viewtoggle button.on { background: var(--accent); color: #fff; font-weight: 650; }
+.rv-explain { font-size: 0.8rem; line-height: 1.5; }
+
+/* Resolver identity (whoami + ECS) */
+.rv-ecs-head { display: flex; align-items: center; gap: 0.55rem; flex-wrap: wrap; font-size: 0.78rem; }
+.rv-idlist { list-style: none; margin: 0.1rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.rv-idrow { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.82rem; padding: 0.3rem 0.4rem; border-radius: 6px; background: var(--panel-2, rgba(127,127,127,0.06)); }
+.rv-idrow.bogus { background: rgba(210, 150, 40, 0.1); }
+.rv-idip { font-weight: 650; }
+.rv-idprobes { font-size: 0.72rem; }
+.rv-idecs { font-size: 0.78rem; color: var(--accent); }
+.rv-idrow .muted.rv-idecs { color: var(--ink-soft); }

@@ -3,7 +3,7 @@
 import type { AtlasConfig } from './config.js';
 import type { AtlasResolverClient } from './client.js';
 import type { ResolverCheck, ResolverManager } from './manager.js';
-import type { ResolverIspView, ResolverSnapshot } from './types.js';
+import type { ResolverIdentitySnapshot, ResolverIspView, ResolverSnapshot } from './types.js';
 
 const OBS = '2026-07-20T22:00:00.000Z';
 
@@ -31,6 +31,31 @@ function mockSnapshot(cfg: AtlasConfig, pollingEnabled: boolean): ResolverSnapsh
   };
 }
 
+function mockIdentity(): ResolverIdentitySnapshot {
+  const isp = (isp: string, asn: number, resolvers: { resolver: string; public: boolean; probeCount: number; ecs: string | null; ecsPrefix: number | null }[]) => {
+    const own = resolvers.filter((r) => !r.public);
+    return {
+      isp, asn, covered: true, resolverCount: resolvers.length,
+      ispResolverCount: own.length, publicResolverCount: resolvers.length - own.length,
+      resolvers,
+      sendsEcs: own.some((r) => r.ecs !== null),
+      ecsPrefixes: [...new Set(own.map((r) => r.ecsPrefix).filter((x): x is number => x !== null))].sort((a, b) => a - b),
+      observedAt: OBS,
+    };
+  };
+  return {
+    provenance: { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, notice: 'Synthetic resolver-identity data.', retrievedAt: new Date().toISOString() },
+    observedAt: OBS, warnings: [],
+    isps: [
+      isp('Eir', 5466, [{ resolver: '2001:bb0:0:200::11', public: false, probeCount: 5, ecs: '51.171.0.0/24', ecsPrefix: 24 }, { resolver: '162.158.37.194', public: true, probeCount: 1, ecs: '2001:bb6::/56', ecsPrefix: 56 }]),
+      isp('Sky', 5607, [{ resolver: '90.207.238.97', public: false, probeCount: 4, ecs: '90.207.0.0/20', ecsPrefix: 20 }]),
+      isp('Virgin/LG', 6830, [{ resolver: '81.17.242.1', public: false, probeCount: 3, ecs: null, ecsPrefix: null }]),
+      isp('Vodafone', 15502, [{ resolver: '2a02:8080::53', public: false, probeCount: 3, ecs: '2a02:8080::/32', ecsPrefix: 32 }]),
+      { isp: 'Three', asn: 13280, covered: false, note: 'No RIPE Atlas probe coverage for this ISP.', resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, resolvers: [], sendsEcs: false, ecsPrefixes: [], observedAt: null },
+    ],
+  };
+}
+
 /** Mock manager — flips the polling flag locally and returns the synthetic snapshot. */
 export class MockAtlasManager implements ResolverManager {
   private enabled = true;
@@ -40,6 +65,7 @@ export class MockAtlasManager implements ResolverManager {
   async checkNow() { return { checks: [{ isp: 'Eir', asn: 5466, measurementId: 900001 }, { isp: 'Sky', asn: 5607, measurementId: 900002 }] as ResolverCheck[], startedAt: new Date().toISOString() }; }
   async checkResults(_checks: ResolverCheck[]) { return { snapshot: mockSnapshot(this.cfg, this.enabled), pending: false }; }
   async setPolling(enabled: boolean) { this.enabled = enabled; return { pollingEnabled: this.enabled }; }
+  async identity() { return mockIdentity(); }
 }
 
 export class MockAtlasClient implements AtlasResolverClient {

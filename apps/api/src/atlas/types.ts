@@ -67,3 +67,40 @@ export interface ResolverSnapshot {
   /** Whether the 6-hourly recurring baseline is running (credits) or paused. */
   pollingEnabled?: boolean;
 }
+
+// ---- Resolver identity (whoami) — the ISP's ACTUAL upstream resolvers + ECS behaviour ----------
+export interface ResolverIdentityEntry {
+  /** The real recursive resolver IP (behind any CPE forwarder). */
+  resolver: string;
+  /** True when this real resolver is a public one (e.g. a CPE forwarding to Cloudflare/Google),
+   *  not the ISP's own recursive. */
+  public: boolean;
+  /** How many probes reach the ISP via this resolver. */
+  probeCount: number;
+  /** The EDNS Client Subnet this resolver forwards to NS1 (e.g. "51.171.0.0/24"), or null. */
+  ecs: string | null;
+  ecsPrefix: number | null;
+}
+export interface ResolverIspIdentity {
+  isp: string;
+  asn: number;
+  covered: boolean;
+  note?: string;
+  resolverCount: number;
+  /** Of resolverCount, how many are the ISP's own recursives vs public resolvers reached via a CPE. */
+  ispResolverCount: number;
+  publicResolverCount: number;
+  /** Distinct real upstream resolvers, ISP's own first then public, each most-probes-first. */
+  resolvers: ResolverIdentityEntry[];
+  /** True if any of the ISP's OWN resolvers forward ECS → NS1 can steer per-subnet. */
+  sendsEcs: boolean;
+  /** Distinct ECS source-prefix lengths observed on the ISP's OWN resolvers (finer = more precise). */
+  ecsPrefixes: number[];
+  observedAt: string | null;
+}
+export interface ResolverIdentitySnapshot {
+  provenance: AtlasProvenance;
+  isps: ResolverIspIdentity[];
+  observedAt: string | null;
+  warnings: string[];
+}

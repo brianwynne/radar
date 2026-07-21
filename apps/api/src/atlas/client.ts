@@ -2,9 +2,9 @@
 // measurements, decodes each resolver's answer, and aggregates per ISP. The API key is sent in the
 // Authorization header and never logged. Aggregation is a pure function (buildIspView) so it is
 // unit-tested against real captured results.
-import { isPublicResolver, parseDnsAbuf, summarizeChain } from './decode.js';
+import { isPublicResolver, parseDnsAbuf, parseWhoami, summarizeChain } from './decode.js';
 import type { AtlasConfig, AtlasIspMeasurement } from './config.js';
-import type { ResolverIspView, ResolverSample, ResolverSnapshot } from './types.js';
+import type { ResolverIspIdentity, ResolverIspView, ResolverSample, ResolverSnapshot } from './types.js';
 
 export interface AtlasResolverClient {
   getSnapshot(): Promise<ResolverSnapshot>;
@@ -121,4 +121,45 @@ export class DisabledAtlasClient implements AtlasResolverClient {
   async getSnapshot(): Promise<ResolverSnapshot> {
     return { provenance: provenance('disabled', 'RIPE Atlas resolver reader is disabled.'), isps: [], observedAt: null, target: this.cfg.target, warnings: [] };
   }
+}
+
+/** Aggregate one ISP's whoami results into its distinct REAL upstream resolvers + ECS behaviour.
+ *  Pierces CPE forwarders: the `ns` value is the actual recursive resolver, the `ecs` value is the
+ *  client-subnet it forwards to NS1 (which governs steering precision). Pure. */
+export function buildIdentityView(m: AtlasIspMeasurement, results: AtlasResult[]): ResolverIspIdentity {
+  if (m.measurementId === null) {
+    return { isp: m.isp, asn: m.asn, covered: false, note: 'No RIPE Atlas probe coverage for this ISP.', resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, resolvers: [], sendsEcs: false, ecsPrefixes: [], observedAt: null };
+  }
+  // resolver IP -> { probes, ecs, ecsPrefix }
+  const byResolver = new Map<string, { probes: Set<number>; ecs: string | null; ecsPrefix: number | null }>();
+  let latest = 0;
+  for (const r of results) {
+    const prb = r.prb_id ?? -1;
+    if ((r.timestamp ?? 0) > latest) latest = r.timestamp ?? 0;
+    const entries = r.resultset && r.resultset.length ? r.resultset : r.result ? [{ result: r.result }] : [];
+    for (const e of entries) {
+      const abuf = e.result?.abuf;
+      if (!abuf) continue;
+      const w = parseWhoami(parseDnsAbuf(abuf));
+      if (!w.ns) continue;
+      let rec = byResolver.get(w.ns);
+      if (!rec) { rec = { probes: new Set(), ecs: null, ecsPrefix: null }; byResolver.set(w.ns, rec); }
+      rec.probes.add(prb);
+      if (w.ecs && !rec.ecs) { rec.ecs = w.ecs; rec.ecsPrefix = w.ecsPrefix; }
+    }
+  }
+  const resolvers = [...byResolver.entries()]
+    .map(([resolver, v]) => ({ resolver, public: isPublicResolver(resolver), probeCount: v.probes.size, ecs: v.ecs, ecsPrefix: v.ecsPrefix }))
+    // ISP's own recursives first, then public; within each, most-probes-first.
+    .sort((a, b) => Number(a.public) - Number(b.public) || b.probeCount - a.probeCount);
+  const own = resolvers.filter((r) => !r.public);
+  const ecsPrefixes = [...new Set(own.map((r) => r.ecsPrefix).filter((x): x is number => x !== null))].sort((a, b) => a - b);
+  return {
+    isp: m.isp, asn: m.asn, covered: true,
+    resolverCount: resolvers.length,
+    ispResolverCount: own.length, publicResolverCount: resolvers.length - own.length,
+    resolvers,
+    sendsEcs: own.some((r) => r.ecs !== null),
+    ecsPrefixes, observedAt: iso(latest),
+  };
 }

@@ -4,9 +4,9 @@
 // back on). READ-heavy; the only writes are creating/stopping RADAR's own measurements. The API
 // key is sent in the Authorization header and never returned. State is in-memory in v1 (re-seeds
 // from config on restart) — persistence is a follow-on.
-import { buildIspView } from './client.js';
+import { buildIdentityView, buildIspView } from './client.js';
 import type { AtlasConfig, AtlasIspMeasurement } from './config.js';
-import type { ResolverSnapshot } from './types.js';
+import type { ResolverIdentitySnapshot, ResolverSnapshot } from './types.js';
 
 export interface ResolverCheck { isp: string; asn: number; measurementId: number }
 export interface ResolverManager {
@@ -15,6 +15,8 @@ export interface ResolverManager {
   checkResults(checks: ResolverCheck[]): Promise<{ snapshot: ResolverSnapshot; pending: boolean }>;
   setPolling(enabled: boolean): Promise<{ pollingEnabled: boolean }>;
   pollingEnabled(): boolean;
+  /** The ISP's ACTUAL recursive resolvers (behind CPE forwarders) + their ECS behaviour. */
+  identity(): Promise<ResolverIdentitySnapshot>;
 }
 
 const dnsDefinition = (target: string, description: string, interval?: number) => ({
@@ -110,6 +112,21 @@ export class HttpAtlasManager implements ResolverManager {
     return { snapshot, pending };
   }
 
+  async identity(): Promise<ResolverIdentitySnapshot> {
+    const warnings: string[] = [];
+    const isps = await Promise.all(this.cfg.whoamiMeasurements.map(async (m) => {
+      if (m.measurementId === null) return buildIdentityView(m, []);
+      try {
+        return buildIdentityView(m, (await this.latest(m.measurementId)) as never);
+      } catch (err) {
+        warnings.push(`${m.isp}: ${err instanceof Error ? err.message : 'fetch failed'}`);
+        return buildIdentityView(m, []);
+      }
+    }));
+    const observedAt = isps.map((i) => i.observedAt).filter((x): x is string => !!x).sort().at(-1) ?? null;
+    return { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, retrievedAt: new Date().toISOString() }, isps, observedAt, warnings };
+  }
+
   async setPolling(enabled: boolean): Promise<{ pollingEnabled: boolean }> {
     if (enabled === this.enabled) return { pollingEnabled: this.enabled };
     if (!enabled) {
@@ -136,4 +153,7 @@ export class DisabledResolverManager implements ResolverManager {
   async checkNow() { return { checks: [], startedAt: new Date().toISOString() }; }
   async checkResults() { return { snapshot: this.empty(), pending: false }; }
   async setPolling() { return { pollingEnabled: false }; }
+  async identity(): Promise<ResolverIdentitySnapshot> {
+    return { provenance: { source: 'disabled', synthetic: false, readOnly: true, informationalOnly: true, notice: 'RIPE Atlas resolver reader is not connected.', retrievedAt: new Date().toISOString() }, isps: [], observedAt: null, warnings: [] };
+  }
 }

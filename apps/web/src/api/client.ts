@@ -21,7 +21,7 @@ import type {
   NetworkPathResponse,
   NetworkPathsResponse,
   NetworkStatusResponse,
-  ResolverSnapshot, ResolverCheckStart, ResolverCheck, ResolverCheckResult,
+  ResolverSnapshot, ResolverCheckStart, ResolverCheck, ResolverCheckResult, ResolverIdentitySnapshot,
   NetworkDevicesResponse,
   NetworkInterfacesResponse,
   NetworkLinkGroupsResponse,
@@ -214,6 +214,7 @@ export const api = {
   // CloudVision network telemetry (read-only, informational).
   networkStatus: () => request<NetworkStatusResponse>('/api/v1/network/status'),
   resolvers: () => request<ResolverSnapshot>('/api/v1/network/resolvers'),
+  resolverIdentity: () => request<ResolverIdentitySnapshot>('/api/v1/network/resolvers/identity'),
   resolverCheck: () => request<ResolverCheckStart>('/api/v1/network/resolvers/check', { method: 'POST' }),
   resolverCheckResults: (checks: ResolverCheck[]) =>
     request<ResolverCheckResult>('/api/v1/network/resolvers/check/results', { method: 'POST', body: JSON.stringify({ checks }) }),

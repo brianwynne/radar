@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { colorFor } from '../steering/platforms';
-import type { ResolverCheck, ResolverIspView, ResolverSnapshot } from '../api/types';
+import type { ResolverCheck, ResolverIspIdentity, ResolverIdentitySnapshot, ResolverIspView, ResolverSnapshot } from '../api/types';
 
 const ttlRange = (r: { min: number; max: number } | null): string => (r ? (r.min === r.max ? `${r.max}s` : `${r.min}–${r.max}s`) : '—');
 
@@ -96,6 +96,68 @@ function IspCard({ v }: { v: ResolverIspView }) {
   );
 }
 
+// ECS is what lets NS1 steer a resolver's users by their real subnet. No ECS → NS1 sees only the
+// resolver's own IP, so the ENTIRE ISP behind it gets one steering answer. Finer prefix = tighter.
+function ecsVerdict(v: ResolverIspIdentity): { label: string; cls: string; detail: string } {
+  if (!v.sendsEcs) return { label: 'No ECS', cls: 'warn', detail: 'whole-ISP — NS1 steers every user behind these resolvers as one' };
+  const v4 = v.ecsPrefixes.filter((p) => p <= 32);
+  const finest = Math.max(...v.ecsPrefixes);
+  const precise = v4.length ? Math.max(...v4) >= 24 : finest >= 48;
+  return {
+    label: `ECS ✓ /${v.ecsPrefixes.join(', /')}`,
+    cls: precise ? 'ok' : 'neutral',
+    detail: precise ? 'per-subnet — NS1 can steer users individually' : 'coarse subnet — partial per-user steering',
+  };
+}
+const isBogusResolver = (ip: string): boolean =>
+  /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.|::1$|fe80:|fc|fd)/i.test(ip);
+
+function IdentityCard({ v }: { v: ResolverIspIdentity }) {
+  if (!v.covered) {
+    return (
+      <div className="rv-card uncovered">
+        <div className="rv-head"><span className="rv-isp">{v.isp}</span><span className="rv-asn">AS{v.asn}</span></div>
+        <div className="rv-nocov">{v.note ?? 'No RIPE Atlas probe coverage.'}</div>
+      </div>
+    );
+  }
+  const ecs = ecsVerdict(v);
+  const own = v.resolvers.filter((r) => !r.public);
+  const pub = v.resolvers.filter((r) => r.public);
+  const row = (r: typeof v.resolvers[number]) => (
+    <li key={r.resolver} className={isBogusResolver(r.resolver) ? 'rv-idrow bogus' : 'rv-idrow'}>
+      <span className="mono rv-idip">{r.resolver}</span>
+      {isBogusResolver(r.resolver) && <span className="badge warn badge-sm" title="A private/loopback address as the upstream resolver usually means the probe's own forwarder answered — not a real recursive.">forwarder?</span>}
+      <span className="muted rv-idprobes">{r.probeCount} probe{r.probeCount === 1 ? '' : 's'}</span>
+      {r.ecs
+        ? <span className="mono rv-idecs" title="EDNS Client Subnet this resolver forwards to NS1">→ {r.ecs}</span>
+        : <span className="muted rv-idecs">no ECS</span>}
+    </li>
+  );
+  return (
+    <div className="rv-card">
+      <div className="rv-head">
+        <span className="rv-isp">{v.isp}</span><span className="rv-asn">AS{v.asn}</span>
+        <span className="rv-count muted">{v.ispResolverCount} own{v.publicResolverCount > 0 ? ` · ${v.publicResolverCount} public` : ''}</span>
+      </div>
+      <div className="rv-ecs-head">
+        <span className={`badge ${ecs.cls}`}>{ecs.label}</span>
+        <span className="muted">{ecs.detail}</span>
+      </div>
+      <ul className="rv-idlist">
+        <li className="rv-group-head">On-net · {v.isp} recursives ({own.length})</li>
+        {own.length ? own.map(row) : <li className="muted rv-idrow">None seen — every probe here forwarded to a public resolver.</li>}
+      </ul>
+      {pub.length > 0 && (
+        <ul className="rv-idlist rv-public-group">
+          <li className="rv-group-head">Public resolvers via CPE ({pub.length}) — not {v.isp}’s own</li>
+          {pub.map(row)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function ResolverView() {
   const { hasPermission } = useAuth();
   const canManage = hasPermission('connector.manage');
@@ -105,6 +167,19 @@ export function ResolverView() {
   const [checking, setChecking] = useState(false);
   const [checkNote, setCheckNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [view, setView] = useState<'steering' | 'identity'>('steering');
+  const [ident, setIdent] = useState<ResolverIdentitySnapshot | null>(null);
+  const [identState, setIdentState] = useState<'idle' | 'loading' | 'error'>('idle');
+
+  useEffect(() => {
+    if (view !== 'identity' || ident || identState === 'loading') return;
+    let live = true;
+    setIdentState('loading');
+    api.resolverIdentity()
+      .then((s) => { if (live) { setIdent(s); setIdentState('idle'); } })
+      .catch(() => { if (live) setIdentState('error'); });
+    return () => { live = false; };
+  }, [view, ident, identState]);
 
   useEffect(() => {
     let live = true;
@@ -163,7 +238,15 @@ export function ResolverView() {
           <span className={`badge ${mode === 'ripe-atlas' ? 'ok' : mode === 'mock' ? 'warn' : 'neutral'}`}>
             {mode === 'ripe-atlas' ? 'LIVE · RIPE Atlas' : mode === 'mock' ? 'MOCK · SYNTHETIC' : 'DISABLED'}
           </span>
-          <span className="muted">What each ISP’s own resolvers return for <b className="mono">{snap.target}</b> · baseline {ago(snap.observedAt)}</span>
+          <div className="rv-viewtoggle" role="tablist">
+            <button role="tab" aria-selected={view === 'steering'} className={view === 'steering' ? 'on' : ''} onClick={() => setView('steering')}>Steering</button>
+            <button role="tab" aria-selected={view === 'identity'} className={view === 'identity' ? 'on' : ''} onClick={() => setView('identity')}>Resolver identity</button>
+          </div>
+          <span className="muted">
+            {view === 'steering'
+              ? <>What each ISP’s resolvers return for <b className="mono">{snap.target}</b> · baseline {ago(snap.observedAt)}</>
+              : <>The ISP’s <b>real recursive resolvers</b> + how precisely NS1 can steer them{ident ? ` · ${ago(ident.observedAt)}` : ''}</>}
+          </span>
         </div>
         <div className="rv-bar-r">
           {canManage && (
@@ -176,14 +259,35 @@ export function ResolverView() {
       </div>
       {checkNote && <div className="notice info rv-note">{checking && <span className="rv-spin" />}{checkNote}</div>}
       {error && <div className="notice danger">{error}</div>}
-      {snap.warnings.map((w, i) => <div key={i} className="notice warn">{w}</div>)}
 
-      {snap.isps.length === 0 ? (
-        <div className="notice info">{snap.provenance.notice ?? 'No resolver data — the RIPE Atlas connector is not connected.'}{canManage && ' Turn on 6h polling or run a check to populate it.'}</div>
+      {view === 'steering' ? (
+        <>
+          {snap.warnings.map((w, i) => <div key={i} className="notice warn">{w}</div>)}
+          {snap.isps.length === 0 ? (
+            <div className="notice info">{snap.provenance.notice ?? 'No resolver data — the RIPE Atlas connector is not connected.'}{canManage && ' Turn on 6h polling or run a check to populate it.'}</div>
+          ) : (
+            <div className="rv-grid">
+              {snap.isps.map((v) => <IspCard key={v.isp} v={v} />)}
+            </div>
+          )}
+        </>
       ) : (
-        <div className="rv-grid">
-          {snap.isps.map((v) => <IspCard key={v.isp} v={v} />)}
-        </div>
+        <>
+          <div className="notice info rv-explain">
+            These are each ISP’s <b>actual recursive resolvers</b> — the shared caches the whole ISP sits behind, revealed via <span className="mono">whoami.ds.akahelp.net</span> (the only query that survives the CPE→recursive→probe path; <span className="mono">live.rte.ie</span> arrives with the upstream already stripped).
+            The <span className="mono">192.168.x</span>/loopback addresses in <b>Steering</b> are home-router forwarders <i>in front of</i> these; their TTLs only matter where they cache longer than the recursive above. NS1 steers by the <b>ECS</b> each recursive sends — no ECS means the whole ISP gets one answer. ECS shown is the resolver’s general policy (a good proxy for what NS1 sees).
+          </div>
+          {identState === 'loading' && <span className="muted">Loading resolver identity…</span>}
+          {identState === 'error' && <div className="notice danger">Could not load resolver identity.</div>}
+          {ident && (ident.warnings.map((w, i) => <div key={i} className="notice warn">{w}</div>))}
+          {ident && (ident.isps.length === 0 ? (
+            <div className="notice info">{ident.provenance.notice ?? 'No resolver-identity data — the RIPE Atlas connector is not connected.'}</div>
+          ) : (
+            <div className="rv-grid">
+              {ident.isps.map((v) => <IdentityCard key={v.isp} v={v} />)}
+            </div>
+          ))}
+        </>
       )}
     </div>
   );

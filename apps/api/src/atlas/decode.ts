@@ -75,6 +75,17 @@ export function parseDnsAbuf(b64: string): DnsRR[] {
       } else if (type === 1 && rdlength === 4) {
         data = `${buf[p]}.${buf[p + 1]}.${buf[p + 2]}.${buf[p + 3]}`;
         p += rdlength;
+      } else if (type === 16) {
+        // TXT: one or more <len><bytes> character-strings within rdlength (e.g. "ns 2001:…").
+        const end = p + rdlength;
+        const parts: string[] = [];
+        while (p < end && p < buf.length) {
+          const l = buf[p++];
+          parts.push(buf.subarray(p, p + l).toString('latin1'));
+          p += l;
+        }
+        data = parts.join(' ');
+        p = end;
       } else {
         data = `type${type}`;
         p += rdlength;
@@ -126,7 +137,17 @@ const PUBLIC_RESOLVERS = new Set([
   '94.140.14.14', '94.140.15.15', // AdGuard
   '76.76.2.0', '76.76.10.0', // ControlD
 ]);
-const PUBLIC_PREFIXES = ['45.90.28.', '45.90.30.', '149.112.', '2001:4860:4860', '2606:4700:4700', '2620:fe::'];
+// Anycast front IPs above; below are the EGRESS ranges public resolvers query authoritatives FROM
+// (what whoami.ds.akahelp.net reports as `ns`). A CPE can forward to a public resolver, so the real
+// resolver revealed by whoami is a public EGRESS even when the probe's dst_addr looked private.
+const PUBLIC_PREFIXES = [
+  '45.90.28.', '45.90.30.', '149.112.', '2620:fe::',
+  // Cloudflare (1.1.1.1) egress: 172.64.0.0/13, 162.158.0.0/15, 2400:cb00::/32, 2606:4700::/32.
+  '172.64.', '172.65.', '172.66.', '172.67.', '172.68.', '172.69.', '172.70.', '172.71.',
+  '162.158.', '162.159.', '2400:cb00', '2606:4700',
+  // Google (8.8.8.8) egress + anycast, Quad9.
+  '2001:4860:4860', '2001:4860:4801', '74.125.', '172.253.',
+];
 export function isPublicResolver(addr: string): boolean {
   if (!addr) return false;
   if (PUBLIC_RESOLVERS.has(addr)) return true;
@@ -158,4 +179,40 @@ export function summarizeChain(rrs: DnsRR[]): ChainSummary {
     minTtl: ttls.length ? Math.min(...ttls) : null,
     hops,
   };
+}
+
+// ---- Resolver identity (whoami) ----------------------------------------------------------------
+// A whoami query (whoami.ds.akahelp.net TXT) returns TXT records revealing the ACTUAL upstream
+// recursive resolver ("ns <ip>") and the EDNS Client Subnet it forwarded ("ecs <subnet>"). This
+// pierces the home-router/CPE forwarder to show the ISP's real resolver + how precisely NS1 can
+// steer it. Values may be absent (a resolver that sends no ECS → ecs null).
+export interface WhoamiAnswer {
+  /** The real recursive resolver's IP as seen by the authoritative. */
+  ns: string | null;
+  /** The EDNS Client Subnet the resolver forwarded (e.g. "51.171.0.0/24"), or null if none. */
+  ecs: string | null;
+  /** The ECS source-prefix length (24, 56, …), or null. Finer = more precise steering. */
+  ecsPrefix: number | null;
+}
+
+export function parseWhoami(rrs: DnsRR[]): WhoamiAnswer {
+  let ns: string | null = null;
+  let ecs: string | null = null;
+  for (const r of rrs) {
+    if (r.type !== 16) continue; // TXT only
+    const sp = r.data.indexOf(' ');
+    const key = (sp === -1 ? r.data : r.data.slice(0, sp)).toLowerCase();
+    const val = sp === -1 ? '' : r.data.slice(sp + 1).trim();
+    if (key === 'ns' && !ns && val) ns = val;
+    if (key === 'ecs' && !ecs && val) ecs = val;
+  }
+  let ecsNorm: string | null = null;
+  let ecsPrefix: number | null = null;
+  if (ecs) {
+    // akahelp reports "<subnet>/<scope>/<source>" or "<subnet>/<prefix>"; keep subnet + first prefix.
+    const m = ecs.match(/^([0-9a-f:.]+)\/(\d+)/i);
+    if (m) { ecsNorm = `${m[1]}/${m[2]}`; ecsPrefix = Number(m[2]); }
+    else ecsNorm = ecs;
+  }
+  return { ns, ecs: ecsNorm, ecsPrefix };
 }
