@@ -4,7 +4,7 @@
 // back on). READ-heavy; the only writes are creating/stopping RADAR's own measurements. The API
 // key is sent in the Authorization header and never returned. State is in-memory in v1 (re-seeds
 // from config on restart) — persistence is a follow-on.
-import { buildIdentityView, buildIspView } from './client.js';
+import { buildBurstIsp, buildIdentityView, buildIspView } from './client.js';
 import type { AtlasConfig, AtlasIspMeasurement } from './config.js';
 import type { ResolverIdentitySnapshot, ResolverSnapshot } from './types.js';
 
@@ -44,12 +44,24 @@ export class HttpAtlasManager implements ResolverManager {
     const j = await r.json();
     return Array.isArray(j) ? j : [];
   }
-  private async createOneOff(m: AtlasIspMeasurement): Promise<number | null> {
-    const body = { definitions: [dnsDefinition(this.cfg.target, `RADAR resolver check (on-demand) — ${this.cfg.target} via ${m.isp} (AS${m.asn})`)], probes: [{ type: 'asn', value: m.asn, requested: 10 }], is_oneoff: true };
+  // ALL results so far (not just the latest run) — burst aggregation needs every sample per resolver.
+  private async allResults(id: number): Promise<unknown[]> {
+    const r = await this.fetchImpl(`${this.cfg.endpoint}/measurements/${id}/results/?format=json`, { headers: { Authorization: `Key ${this.cfg.apiKey}` } });
+    if (!r.ok) throw new Error(`RIPE Atlas ${r.status} for measurement ${id}`);
+    const j = await r.json();
+    return Array.isArray(j) ? j : [];
+  }
+  // A short high-cadence BURST: a recurring measurement (60s interval) that auto-stops after ~11 min,
+  // oversampling the 300s cache cycle so each resolver's MAX served TTL = its true set-TTL.
+  private async createBurst(m: AtlasIspMeasurement): Promise<number | null> {
+    const stopTime = Math.floor(Date.now() / 1000) + this.burstWindowSecs;
+    const body = { definitions: [dnsDefinition(this.cfg.target, `RADAR TTL burst — ${this.cfg.target} via ${m.isp} (AS${m.asn})`, 60)], probes: [{ type: 'asn', value: m.asn, requested: 20 }], is_oneoff: false, stop_time: stopTime };
     const r = await this.fetchImpl(`${this.cfg.endpoint}/measurements/`, { method: 'POST', headers: this.auth(), body: JSON.stringify(body) });
     const j = (await r.json().catch(() => ({}))) as { measurements?: number[] };
     return j.measurements?.[0] ?? null;
   }
+  private readonly burstWindowSecs = 660; // ~11 min → ~11 samples per resolver
+  private readonly burstTargetRuns = 8;    // consider a burst "done" once this many runs have landed
   private async createRecurring(m: AtlasIspMeasurement): Promise<number | null> {
     const body = { definitions: [dnsDefinition(this.cfg.target, `RADAR resolver reader — ${this.cfg.target} via ${m.isp} (AS${m.asn})`, 21600)], probes: [{ type: 'asn', value: m.asn, requested: 20 }], is_oneoff: false };
     const r = await this.fetchImpl(`${this.cfg.endpoint}/measurements/`, { method: 'POST', headers: this.auth(), body: JSON.stringify(body) });
@@ -90,7 +102,7 @@ export class HttpAtlasManager implements ResolverManager {
     const covered = this.measurements.filter((m) => m.asn && this.hasCoverage(m));
     const checks: ResolverCheck[] = [];
     for (const m of covered) {
-      const id = await this.createOneOff(m);
+      const id = await this.createBurst(m);
       if (id !== null) checks.push({ isp: m.isp, asn: m.asn, measurementId: id });
     }
     return { checks, startedAt: new Date().toISOString() };
@@ -100,14 +112,28 @@ export class HttpAtlasManager implements ResolverManager {
     return this.cfg.measurements.find((x) => x.isp === m.isp)?.measurementId !== null;
   }
 
+  // Aggregate a BURST: fetch ALL runs per ISP, collapse to per-resolver MAX (set-TTL) + verdicts.
+  // Pending until every covered ISP has ≥ burstTargetRuns distinct runs (or the frontend times out).
   async checkResults(checks: ResolverCheck[]): Promise<{ snapshot: ResolverSnapshot; pending: boolean }> {
     const warnings: string[] = [];
-    const measurements: AtlasIspMeasurement[] = checks.map((c) => ({ isp: c.isp, asn: c.asn, measurementId: c.measurementId }));
-    // Include the no-coverage ISPs (e.g. Three) so the on-demand view is complete.
-    for (const m of this.cfg.measurements) if (m.measurementId === null && !measurements.some((x) => x.isp === m.isp)) measurements.push({ ...m });
-    const { isps, observedAt } = await this.build(measurements, warnings);
-    const pending = isps.some((i) => i.covered && i.samples.length === 0);
-    const snapshot: ResolverSnapshot = { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, notice: 'On-demand check', retrievedAt: new Date().toISOString() }, isps, observedAt, target: this.cfg.target, warnings, pollingEnabled: this.enabled };
+    const covered = checks.map((c) => ({ m: { isp: c.isp, asn: c.asn, measurementId: c.measurementId } as AtlasIspMeasurement }));
+    let pending = false;
+    const isps = await Promise.all(covered.map(async ({ m }) => {
+      try {
+        const results = (await this.allResults(m.measurementId as number)) as never[];
+        const runs = new Set((results as { timestamp?: number }[]).map((r) => r.timestamp ?? 0)).size;
+        if (runs < this.burstTargetRuns) pending = true;
+        return buildBurstIsp(m, results);
+      } catch (err) {
+        warnings.push(`${m.isp}: ${err instanceof Error ? err.message : 'fetch failed'}`);
+        pending = true;
+        return buildBurstIsp(m, []);
+      }
+    }));
+    // Include the no-coverage ISPs (e.g. Three) so the view is complete.
+    for (const m of this.cfg.measurements) if (m.measurementId === null && !isps.some((i) => i.isp === m.isp)) isps.push(buildBurstIsp({ ...m }, []));
+    const observedAt = isps.map((i) => i.observedAt).filter((x): x is string => !!x).sort().at(-1) ?? null;
+    const snapshot: ResolverSnapshot = { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, notice: 'TTL burst check — per-resolver set-TTL (max over ~11 min)', retrievedAt: new Date().toISOString() }, isps, observedAt, target: this.cfg.target, warnings, pollingEnabled: this.enabled };
     if (isps.some((i) => i.covered && i.samples.length > 0)) this.lastCheck = snapshot; // seed the baseline with real data
     return { snapshot, pending };
   }

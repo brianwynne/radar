@@ -2,12 +2,14 @@
 // resolving live.rte.ie (measurement 192116677).
 import { describe, it, expect } from 'vitest';
 import { isProbeLocalResolver, isPublicResolver, parseDnsAbuf, summarizeChain } from '../src/atlas/decode.js';
-import { buildIspView } from '../src/atlas/client.js';
+import { buildBurstIsp, buildIspView } from '../src/atlas/client.js';
 
 // REAL capture: Virgin/LG probe 1015795 via 127.0.0.11 (Docker's embedded DNS) INFLATING the TTL to
 // 377s on live.rte.ie + livebase, and 39s on the edge — above RTÉ's published 300/30. A real
 // recursive never does this; this is why probe-local resolvers must be excluded from the headline.
 const INFLATED_377 = 'eRKBgAABAAYAAAAABGxpdmUDcnRlAmllAAABAAHADAAFAAEAAAF5ABEIbGl2ZWJhc2UFbnNvbmXAEcApAAUAAQAAAXkACwhsaXZlZWRnZcARwEYAAQABAAAAJwAEuTZoDMBGAAEAAQAAACcABLk2aAjARgABAAEAAAAnAAS5NmgEwEYAAQABAAAAJwAEuTZoAA==';
+// REAL fresh capture: record 300 / edge 30 — RTÉ's authoritative published TTLs.
+const PUBLISHED_300 = 'tkeBgAABAAYAAAAABGxpdmUDcnRlAmllAAABAAHADAAFAAEAAAEsABEIbGl2ZWJhc2UFbnNvbmXAEcApAAUAAQAAASwACwhsaXZlZWRnZcARwEYAAQABAAAAHgAEuTZpAMBGAAEAAQAAAB4ABLk2aQzARgABAAEAAAAeAAS5NmkEwEYAAQABAAAAHgAEuTZpCA==';
 
 // Eir probe 27252, resolver serving a cached answer: live.rte.ie → livebase → liveedge → 4× A
 // (185.54.105.x). TTLs as served: apex CNAME 88, livebase CNAME 53, A 27.
@@ -108,5 +110,42 @@ describe('buildIspView — steering verdict keyed on the NS1-record TTL (not the
     expect(v.steeringImpeded).toBe(false);
     // The local resolver is still recorded (drill-down) but flagged.
     expect(v.samples.find((s) => s.resolver === '127.0.0.11')?.local).toBe(true);
+  });
+});
+
+describe('buildBurstIsp — per-resolver MAX (set-TTL) + honour/cap/inflate verdicts', () => {
+  const m = { isp: 'Virgin/LG', asn: 6830, measurementId: 192119193 };
+  // 5 burst runs; each resolver appears each run so obs accumulates.
+  const runs = [0, 60, 120, 180, 240].map((dt) => ({
+    prb_id: 1, timestamp: 1_700_000_000 + dt,
+    resultset: [
+      { dst_addr: '8.8.8.8', result: { abuf: PUBLISHED_300 } },        // public reference → published 300
+      { dst_addr: '89.101.251.230', result: { abuf: PUBLISHED_300 } }, // ISP recursive, honours 300
+      { dst_addr: '10.9.9.9', result: { abuf: EIR_CACHED } },          // ISP recursive, max 53 over 5 obs → caps
+      { dst_addr: '127.0.0.11', result: { abuf: INFLATED_377 } },      // Docker local, 377 → inflates (excluded)
+    ],
+  }));
+
+  it('collapses to per-resolver max and judges each against the published TTL', () => {
+    const v = buildBurstIsp(m, runs);
+    const by = (r: string) => v.samples.find((s) => s.resolver === r)!;
+    expect(by('89.101.251.230')).toMatchObject({ recordTtl: 300, obs: 5, ttlVerdict: 'honours' });
+    expect(by('10.9.9.9')).toMatchObject({ recordTtl: 53, obs: 5, ttlVerdict: 'caps' }); // confidently capped (5 obs)
+    expect(by('127.0.0.11')).toMatchObject({ local: true, recordTtl: 377, ttlVerdict: 'inflates' });
+    // Headline reflects the ISP recursives only (public + local excluded).
+    expect(v.ispResolverCount).toBe(2);
+    expect(v.publicResolverCount).toBe(1);
+    expect(v.localResolverCount).toBe(1);
+    expect(v.recordTtl).toEqual({ min: 53, max: 300 }); // spread of ISP set-TTLs
+    expect(v.steeringWindowSecs).toBe(300);
+  });
+
+  it('will NOT assert a cap from too few samples — verdict is undetermined', () => {
+    // Same capped resolver but only 2 runs → below the confidence threshold.
+    const few = runs.slice(0, 2);
+    const v = buildBurstIsp(m, few);
+    expect(v.samples.find((s) => s.resolver === '10.9.9.9')).toMatchObject({ obs: 2, ttlVerdict: 'undetermined' });
+    // A resolver caught at the published value is still 'honours' even with few samples.
+    expect(v.samples.find((s) => s.resolver === '89.101.251.230')?.ttlVerdict).toBe('honours');
   });
 });

@@ -987,6 +987,9 @@ export interface ResolverSample {
   recordTtl: number | null;
   edgeTtl: number | null;
   observedAt: string | null;
+  /** Burst mode: sample count for this resolver (recordTtl/edgeTtl are the MAX = set-TTL) + verdict. */
+  obs?: number;
+  ttlVerdict?: 'honours' | 'caps' | 'inflates' | 'undetermined';
 }
 export interface ResolverIspView {
   isp: string;

@@ -29,6 +29,10 @@ export interface ResolverSample {
   recordTtl: number | null;
   edgeTtl: number | null;
   observedAt: string | null;
+  /** Burst mode only: how many times this resolver was sampled (recordTtl/edgeTtl are then the MAX
+   *  seen = the resolver's set-TTL), and the verdict vs RTÉ's published TTL. */
+  obs?: number;
+  ttlVerdict?: 'honours' | 'caps' | 'inflates' | 'undetermined';
 }
 
 /** Aggregated resolver view for one ISP. */

@@ -67,7 +67,13 @@ export class MockAtlasManager implements ResolverManager {
   pollingEnabled() { return this.enabled; }
   async snapshot() { return mockSnapshot(this.cfg, this.enabled); }
   async checkNow() { return { checks: [{ isp: 'Eir', asn: 5466, measurementId: 900001 }, { isp: 'Sky', asn: 5607, measurementId: 900002 }] as ResolverCheck[], startedAt: new Date().toISOString() }; }
-  async checkResults(_checks: ResolverCheck[]) { return { snapshot: mockSnapshot(this.cfg, this.enabled), pending: false }; }
+  async checkResults(_checks: ResolverCheck[]) {
+    // A synthetic BURST result: samples carry per-resolver max (set-TTL) + obs + verdict.
+    const snap = mockSnapshot(this.cfg, this.enabled);
+    snap.provenance = { ...snap.provenance, notice: 'TTL burst check — per-resolver set-TTL (mock)' };
+    for (const i of snap.isps) i.samples = i.samples.map((s, idx) => ({ ...s, recordTtl: idx === 0 ? 300 : 60, edgeTtl: 30, obs: 11, ttlVerdict: idx === 0 ? 'honours' : 'caps' }));
+    return { snapshot: snap, pending: false };
+  }
   async setPolling(enabled: boolean) { this.enabled = enabled; return { pollingEnabled: this.enabled }; }
   async identity() { return mockIdentity(); }
 }

@@ -83,12 +83,20 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
         const isp = v.samples.filter((s) => !s.public && !s.local);
         const pub = v.samples.filter((s) => s.public);
         const loc = v.samples.filter((s) => s.local);
+        const verdictBadge = (s: typeof v.samples[number]) => {
+          if (!s.ttlVerdict) return null;
+          const cls = s.ttlVerdict === 'honours' ? 'ok' : s.ttlVerdict === 'inflates' ? 'warn' : s.ttlVerdict === 'caps' ? 'neutral' : '';
+          const label = s.ttlVerdict === 'honours' ? 'honours' : s.ttlVerdict === 'caps' ? `caps ~${s.recordTtl}s` : s.ttlVerdict === 'inflates' ? `inflates ${s.recordTtl}s` : '? undetermined';
+          return <span className={`badge badge-sm ${cls}`} title={s.ttlVerdict === 'undetermined' ? 'Too few fresh samples to be certain — run/extend the burst.' : 'Verdict from this resolver’s MAX served TTL vs RTÉ’s published TTL.'}>{label}</span>;
+        };
         const row = (s: typeof v.samples[number], i: number) => (
-          <li key={`${s.probeId}-${i}`}>
+          <li key={`${s.resolver}-${i}`}>
             <span className="mono rv-resolver">{s.resolver}</span>
             <span className="platform-dot" style={{ background: colorFor(s.platform ?? 'Unclassified') }} />{s.platform ?? '?'}
             <span className="muted mono">{s.target}</span>
-            <span className="muted mono">rec {s.recordTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s</span>
+            {s.obs !== undefined
+              ? <><span className="muted mono">max rec {s.recordTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s · {s.obs}×</span>{verdictBadge(s)}</>
+              : <span className="muted mono">rec {s.recordTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s</span>}
           </li>
         );
         return (
@@ -218,18 +226,19 @@ export function ResolverView() {
   const covered = useMemo(() => (snap?.isps ?? []).filter((i) => i.covered).length, [snap]);
 
   async function checkNow() {
-    setChecking(true); setCheckNote('Firing measurements from each ISP…'); setError(null);
+    setChecking(true); setCheckNote('Starting an ~11-min TTL burst from each ISP (a query every 60s, to catch each resolver fresh)…'); setError(null);
     try {
       const { checks } = await api.resolverCheck();
       const start = Date.now();
-      // Poll until every covered ISP has reported, or ~3 min.
+      // A burst runs ~11 min; poll every 30s, accumulating per-resolver max, until done or ~13 min.
       for (;;) {
-        await new Promise((r) => setTimeout(r, 12000));
+        await new Promise((r) => setTimeout(r, 30000));
         const { snapshot, pending } = await api.resolverCheckResults(checks as ResolverCheck[]);
         setSnap(snapshot);
-        if (!pending) { setCheckNote(`Fresh check complete — ${covered} ISPs.`); break; }
-        if (Date.now() - start > 180000) { setCheckNote('Still measuring — showing what has reported so far.'); break; }
-        setCheckNote('Waiting for probes to report…');
+        const mins = Math.round((Date.now() - start) / 60000);
+        if (!pending) { setCheckNote(`Burst complete — per-resolver set-TTL established across ${covered} ISPs.`); break; }
+        if (Date.now() - start > 780000) { setCheckNote('Burst window elapsed — showing per-resolver set-TTL from the samples gathered.'); break; }
+        setCheckNote(`Sampling resolvers… ${mins}m elapsed (max-TTL per resolver sharpens as fresh fetches land).`);
       }
     } catch (e: unknown) {
       setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Check failed.');
