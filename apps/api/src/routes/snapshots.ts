@@ -99,6 +99,13 @@ export const snapshotRoutes: FastifyPluginAsync<SnapshotRouteOptions> = async (a
     return { count: items.length, snapshots: items.map(summary) };
   });
 
+  // All snapshots (newest first) — used to pick a snapshot as a create/clone source.
+  app.get('/snapshots', { preHandler: requirePermission('snapshot.read'), schema: doc('List all snapshots') }, async (req, reply) => {
+    if (!requireDb(database, req, reply)) return reply;
+    const items = await database.snapshots.list({ resourceKind: 'record', limit: 200 });
+    return { count: items.length, snapshots: items.map(summary) };
+  });
+
   // Detail — a single snapshot (with payloads).
   app.get('/snapshots/:snapshotId', { preHandler: requirePermission('snapshot.read'), schema: doc('Get a snapshot') }, async (req, reply) => {
     if (!requireDb(database, req, reply)) return reply;

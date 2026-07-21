@@ -65,6 +65,7 @@ import type {
   RecordResponse,
   SnapshotCaptureResponse,
   SnapshotDetail,
+  SnapshotSummary,
   SnapshotHistory,
   ZoneResponse,
   ZonesResponse,
@@ -130,6 +131,7 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(label ? { label } : {}),
     }),
+  allSnapshots: () => request<{ count: number; snapshots: SnapshotSummary[] }>('/api/v1/snapshots'),
   snapshot: (id: string) => request<{ snapshot: SnapshotDetail }>(`/api/v1/snapshots/${enc(id)}`),
   renameSnapshot: (id: string, label: string | null) =>
     request<{ snapshot: SnapshotDetail }>(`/api/v1/snapshots/${enc(id)}`, { method: 'PATCH', body: JSON.stringify({ label }) }),

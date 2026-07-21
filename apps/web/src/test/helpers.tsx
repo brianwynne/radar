@@ -498,6 +498,7 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;
       else if (p.endsWith('/api/v1/audit')) body = AUDIT_LIST_BODY;
+      else if (p.endsWith('/api/v1/snapshots')) body = { count: 2, snapshots: SNAPSHOT_HISTORY.snapshots };
       else if (p.endsWith('/snapshots/compare')) body = COMPARE_BODY;
       else if (p.endsWith('/compare-current')) body = COMPARE_CURRENT_BODY;
       else if (/\/ns1\/zones\/[^/]+\/[^/]+\/[^/]+\/snapshots$/.test(p)) {
