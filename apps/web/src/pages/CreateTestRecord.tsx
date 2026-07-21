@@ -55,11 +55,20 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDo
   const [result, setResult] = useState<RecordCreateResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [gateBusy, setGateBusy] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!canWrite) return;
     api.recordCapability().then(setCap).catch(() => setCap(null));
   }, [canWrite]);
+
+  async function toggleGate(enabled: boolean) {
+    setGateBusy(true); setGateError(null);
+    try { setCap(await api.recordSetWriteEnabled(enabled)); }
+    catch (e) { setGateError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not change the write gate.'); }
+    finally { setGateBusy(false); }
+  }
 
   // Any edit invalidates a prior preview/result so you can never confirm a stale plan.
   const invalidate = () => { setPlan(null); setResult(null); setError(null); };
@@ -97,11 +106,22 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDo
         {onClose && <button className="ghost" style={{ marginLeft: 'auto' }} onClick={onClose}>Close</button>}
       </div>
       <div className="notice warn">
-        This is RADAR’s <b>only</b> write to NS1. It’s engineer-gated, audited, default-off, and restricted to an <b>allow-list</b> — a slip can’t touch a live record. <b>Nothing is sent until you press Confirm & create.</b>
+        This is RADAR’s <b>only</b> write to NS1. It’s engineer-gated, audited, and restricted to an <b>allow-list</b> — a slip can’t touch a live record. <b>Nothing is sent until you press Confirm & create.</b>
       </div>
 
+      {cap && (
+        <div className="ctr-gate">
+          <label className="switch" title="Enable/disable the guarded NS1 write path (NS1_WRITE_ENABLED). Persisted + audited.">
+            <input type="checkbox" checked={cap.writeEnabled} disabled={gateBusy} onChange={(e) => toggleGate(e.target.checked)} /> Enable NS1 writes <span className="mono muted">(NS1_WRITE_ENABLED)</span>
+          </label>
+          {cap.writeEnabled && cap.writeReady === false && (
+            <span className="muted" style={{ fontSize: '0.78rem' }}> · gate on, but NS1 isn’t live with a write key — set it on <b>Integrations</b>. Confirm will be refused until then.</span>
+          )}
+          {gateError && <span className="notice danger" style={{ padding: '0.1rem 0.4rem' }}>{gateError}</span>}
+        </div>
+      )}
       {cap && !cap.writeEnabled && (
-        <div className="notice danger">The create path is <b>disabled</b> on the server (<span className="mono">NS1_WRITE_ENABLED</span> is off, or NS1 isn’t live with a write key). You can still preview the exact request, but Confirm will be refused.</div>
+        <div className="notice info" style={{ marginTop: '0.4rem' }}>The write path is <b>off</b>. Flip the switch above to enable it. You can still preview the exact request; Confirm is refused while off.</div>
       )}
       {cap && <div className="muted" style={{ fontSize: '0.8rem', margin: '0.3rem 0 0.8rem' }}>Allow-list: {cap.allowList.map((a) => <span key={a} className="chip mono" style={{ marginRight: '0.3rem' }}>{a}</span>)}</div>}
 

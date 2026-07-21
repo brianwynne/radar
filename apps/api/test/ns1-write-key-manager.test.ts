@@ -34,17 +34,18 @@ describe('NS1 manager — write key', () => {
   it('stores the write key in its own row and drives the record writer live', async () => {
     const m = make();
     await m.init();
-    expect(m.getRecordWriter().writeEnabled()).toBe(false); // no key + not live yet
+    expect(m.getRecordWriter().writeEnabled()).toBe(true);  // gate on (env NS1_WRITE_ENABLED)
+    expect(m.getRecordWriter().writeReady()).toBe(false);   // but not live + no key yet
 
     const view = await m.updateSettings({ mode: 'live', apiBase: 'https://api.nsone.net/v1', key: 'read-key', writeKey: 'write-key' }, actor);
     expect(view.writeKeyConfigured).toBe(true);
     expect(view.writeKeySetAt).not.toBeNull();
-    expect(view.writeEnabled).toBe(true); // env gate
+    expect(view.writeEnabled).toBe(true); // gate
     expect(view.writeLive).toBe(true);    // enabled + live + write key
     expect(view.writeAllow).toEqual(['livetest.rte.ie', '*.livetest.rte.ie']);
 
     const w = m.getRecordWriter();
-    expect(w.writeEnabled()).toBe(true);
+    expect(w.writeReady()).toBe(true);    // now live + key
     expect(w.plan({ zone: 'livetest.rte.ie', domain: 'x.livetest.rte.ie', type: 'A', answers: ['203.0.113.1'], ttl: 30 }).allowed).toBe(true);
     // Guards still apply through the writer — a prod target is blocked.
     expect(w.plan({ zone: 'nsone.rte.ie', domain: 'livebase.nsone.rte.ie', type: 'CNAME', answers: ['liveedge.rte.ie'], ttl: 30 }).allowed).toBe(false);
@@ -54,12 +55,24 @@ describe('NS1 manager — write key', () => {
     const m = make();
     await m.init();
     await m.updateSettings({ mode: 'live', apiBase: 'https://api.nsone.net/v1', key: 'read-key', writeKey: 'write-key' }, actor);
-    expect(m.getRecordWriter().writeEnabled()).toBe(true);
+    expect(m.getRecordWriter().writeReady()).toBe(true);
 
     const view = await m.updateSettings({ clearWriteKey: true }, actor);
     expect(view.writeKeyConfigured).toBe(false);
     expect(view.writeLive).toBe(false);
+    expect(m.getRecordWriter().writeReady()).toBe(false); // no key → not ready
+  });
+
+  it('toggles the write gate at runtime (persisted, drives writeEnabled)', async () => {
+    const m = make();
+    await m.init();
+    expect(m.getRecordWriter().writeEnabled()).toBe(true); // env default on
+    const off = await m.setWriteEnabled(false, actor);
+    expect(off.writeEnabled).toBe(false);
     expect(m.getRecordWriter().writeEnabled()).toBe(false);
+    const on = await m.setWriteEnabled(true, actor);
+    expect(on.writeEnabled).toBe(true);
+    expect(m.getRecordWriter().writeEnabled()).toBe(true);
   });
 
   it('never returns either key in the settings view', async () => {

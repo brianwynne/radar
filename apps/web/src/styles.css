@@ -458,6 +458,7 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .ns1-create-panel { margin-top: 0.8rem; padding: 0.85rem; border: 1px solid var(--accent, var(--line)); border-radius: 10px; background: rgba(120,130,255,0.05); }
 .ns1-create-panel .section-head { flex-wrap: wrap; gap: 0.5rem; }
 .ns1-create-panel .grid.cols-2 { gap: 0.8rem; }
+.ctr-gate { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0 0.2rem; padding: 0.4rem 0.55rem; border-radius: 8px; background: rgba(127,127,127,0.08); }
 
 /* Steering / Resolver-identity view toggle */
 .rv-viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }

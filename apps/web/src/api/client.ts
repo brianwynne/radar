@@ -223,6 +223,7 @@ export const api = {
     request<{ pollingEnabled: boolean }>('/api/v1/network/resolvers/polling', { method: 'POST', body: JSON.stringify({ enabled }) }),
   // Guarded NS1 create-record (dry-run + confirm)
   recordCapability: () => request<RecordCapability>('/api/v1/ns1/records/capability'),
+  recordSetWriteEnabled: (enabled: boolean) => request<RecordCapability>('/api/v1/ns1/records/write-enabled', { method: 'POST', body: JSON.stringify({ enabled }) }),
   recordPlan: (input: CreateRecordInput) => request<RecordPlan>('/api/v1/ns1/records/plan', { method: 'POST', body: JSON.stringify(input) }),
   recordApply: (input: CreateRecordInput) => request<RecordCreateResult>('/api/v1/ns1/records/apply', { method: 'POST', body: JSON.stringify(input) }),
   recordClonePlan: (input: CloneRecordInput) => request<RecordPlan>('/api/v1/ns1/records/clone/plan', { method: 'POST', body: JSON.stringify(input) }),

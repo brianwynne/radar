@@ -15,6 +15,8 @@ export interface Ns1WriteRoutesOptions {
   writer: Ns1RecordWriter | (() => Ns1RecordWriter);
   /** Read client — used to fetch the SOURCE record for a clone (GET-only). */
   readClient?: Ns1ReadClient;
+  /** Toggle the NS1_WRITE_ENABLED gate at runtime (persisted + audited by the manager). */
+  setWriteEnabled?: (enabled: boolean, actor: { subject?: string; roles?: string[]; correlationId?: string }) => Promise<unknown>;
   audit?: AuditSink;
 }
 
@@ -36,8 +38,21 @@ export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (
   // Capability + allow-list, so the UI can show what's writable before anyone tries.
   app.get(
     '/ns1/records/capability',
-    { preHandler: requirePermission('ns1.record.create'), schema: schema('Create-record capability', 'Engineer-only. Whether the guarded NS1 create path is enabled, and the allow-list of names that may be created. No credentials.') },
-    async () => ({ writeEnabled: getWriter().writeEnabled(), allowList: getWriter().allowList() }),
+    { preHandler: requirePermission('ns1.record.create'), schema: schema('Create-record capability', 'Engineer-only. The write gate state, whether writes are actually ready (gate + live + key), and the allow-list of names that may be created. No credentials.') },
+    async () => ({ writeEnabled: getWriter().writeEnabled(), writeReady: getWriter().writeReady(), allowList: getWriter().allowList() }),
+  );
+
+  // Toggle the NS1_WRITE_ENABLED gate at runtime (engineer-only, persisted + audited).
+  app.post(
+    '/ns1/records/write-enabled',
+    { preHandler: requirePermission('ns1.record.create'), schema: schema('Toggle the write gate', 'Engineer-only. Enables/disables the guarded NS1 write path (NS1_WRITE_ENABLED). Persisted + audited.') },
+    async (req, reply) => {
+      if (!opts.setWriteEnabled) return reply.code(503).send({ error: 'write-gate management unavailable' });
+      const parsed = z.object({ enabled: z.boolean() }).safeParse(req.body);
+      if (!parsed.success) return reply.code(400).send({ error: 'invalid input' });
+      await opts.setWriteEnabled(parsed.data.enabled, { subject: req.principal?.subject, roles: req.principal?.roles, correlationId: req.id });
+      return { writeEnabled: getWriter().writeEnabled(), writeReady: getWriter().writeReady(), allowList: getWriter().allowList() };
+    },
   );
 
   // DRY-RUN: validate + build the exact NS1 request. Never writes.

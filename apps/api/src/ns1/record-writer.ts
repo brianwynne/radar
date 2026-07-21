@@ -42,7 +42,10 @@ export interface CreateResult {
 }
 
 export interface Ns1RecordWriter {
+  /** The write GATE (NS1_WRITE_ENABLED) — toggleable at runtime. */
   writeEnabled(): boolean;
+  /** Gate ON *and* live mode *and* a write key — i.e. writes will actually succeed. */
+  writeReady(): boolean;
   allowList(): string[];
   plan(input: CreateRecordInput): RecordPlan;
   apply(input: CreateRecordInput): Promise<CreateResult>;
@@ -159,7 +162,8 @@ export function planCloneRecord(cfg: Ns1Config, target: CloneTarget, source: unk
 /** Live writer — PUTs to NS1 only for an allowed plan. Isolated from the read client. */
 export class HttpNs1RecordWriter implements Ns1RecordWriter {
   constructor(private readonly cfg: Ns1Config, private readonly fetchImpl: typeof fetch = fetch) {}
-  writeEnabled(): boolean { return this.cfg.writeEnabled && this.cfg.mode === 'live' && !!this.cfg.writeApiKey; }
+  writeEnabled(): boolean { return this.cfg.writeEnabled; }
+  writeReady(): boolean { return this.cfg.writeEnabled && this.cfg.mode === 'live' && !!this.cfg.writeApiKey; }
   allowList(): string[] { return this.cfg.writeAllow; }
   plan(input: CreateRecordInput): RecordPlan { return planCreate(this.cfg, input); }
   planClone(target: CloneTarget, source: unknown): RecordPlan { return planCloneRecord(this.cfg, target, source); }
@@ -192,7 +196,8 @@ export class HttpNs1RecordWriter implements Ns1RecordWriter {
 /** Not-enabled writer — plan still works (pure dry-run), apply always refuses. */
 export class DisabledNs1RecordWriter implements Ns1RecordWriter {
   constructor(private readonly cfg: Ns1Config) {}
-  writeEnabled(): boolean { return false; }
+  writeEnabled(): boolean { return this.cfg.writeEnabled; }
+  writeReady(): boolean { return false; }
   allowList(): string[] { return this.cfg.writeAllow; }
   plan(input: CreateRecordInput): RecordPlan { return planCreate(this.cfg, input); }
   planClone(target: CloneTarget, source: unknown): RecordPlan { return planCloneRecord(this.cfg, target, source); }
@@ -200,10 +205,10 @@ export class DisabledNs1RecordWriter implements Ns1RecordWriter {
   async applyClone(): Promise<CreateResult> { throw new Ns1WriteError('Record creation is not enabled.', true); }
 }
 
+// Always the HTTP writer — the pure planCreate/planClone guards handle "not enabled / not live / no
+// key" (so the gate is readable and dry-runs work regardless), and apply() re-checks before any PUT.
 export function createNs1RecordWriter(cfg: Ns1Config, fetchImpl: typeof fetch = fetch): Ns1RecordWriter {
-  return cfg.writeEnabled && cfg.mode === 'live' && cfg.writeApiKey
-    ? new HttpNs1RecordWriter(cfg, fetchImpl)
-    : new DisabledNs1RecordWriter(cfg);
+  return new HttpNs1RecordWriter(cfg, fetchImpl);
 }
 
 /** A stable Ns1RecordWriter forwarding to a swappable inner writer, so the NS1 connector manager can
@@ -212,6 +217,7 @@ export class ReconfigurableNs1RecordWriter implements Ns1RecordWriter {
   constructor(private inner: Ns1RecordWriter) {}
   setInner(inner: Ns1RecordWriter): void { this.inner = inner; }
   writeEnabled(): boolean { return this.inner.writeEnabled(); }
+  writeReady(): boolean { return this.inner.writeReady(); }
   allowList(): string[] { return this.inner.allowList(); }
   plan(input: CreateRecordInput): RecordPlan { return this.inner.plan(input); }
   apply(input: CreateRecordInput): Promise<CreateResult> { return this.inner.apply(input); }

@@ -1061,7 +1061,7 @@ export interface RecordCreateResult {
   provenance: { source: 'ns1'; readOnly: false; write: true; notice: string; appliedAt: string };
   record: unknown;
 }
-export interface RecordCapability { writeEnabled: boolean; allowList: string[] }
+export interface RecordCapability { writeEnabled: boolean; writeReady?: boolean; allowList: string[] }
 export interface CloneRecordInput {
   source: { zone: string; domain: string; type: CreatableRecordType };
   target: { zone: string; domain: string; ttl?: number };

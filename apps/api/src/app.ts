@@ -223,6 +223,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
     prefix: '/api/v1',
     writer: deps.ns1RecordWriter ?? (deps.ns1Manager ? () => deps.ns1Manager!.getRecordWriter() : createNs1RecordWriter(config.ns1)),
     readClient: ns1Client,
+    setWriteEnabled: deps.ns1Manager ? (enabled, actor) => deps.ns1Manager!.setWriteEnabled(enabled, actor) : undefined,
     audit: deps.database?.audit,
   });
   await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });

@@ -490,6 +490,10 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
         body = { settings: connectionState };
       }
       else if (p.endsWith('/ns1/config')) body = { mode: 'mock', synthetic: true, readOnly: true, disclaimer: 'SYNTHETIC / MOCK' };
+      else if (p.endsWith('/ns1/records/write-enabled')) { const b = JSON.parse(String(init?.body ?? '{}')) as { enabled?: boolean }; body = { writeEnabled: !!b.enabled, writeReady: !!b.enabled, allowList: ['livetest.rte.ie', '*.livetest.rte.ie'] }; }
+      else if (p.endsWith('/ns1/records/capability')) body = { writeEnabled: true, writeReady: true, allowList: ['livetest.rte.ie', '*.livetest.rte.ie'] };
+      else if (p.endsWith('/ns1/records/clone/plan') || p.endsWith('/ns1/records/plan')) body = { allowed: true, blockedReason: null, target: { zone: 'livetest.rte.ie', domain: 'livetest.rte.ie', type: 'A' }, request: { method: 'PUT', path: '/zones/livetest.rte.ie/livetest.rte.ie/A', body: {} }, warnings: [] };
+      else if (p.endsWith('/ns1/records/clone/apply') || p.endsWith('/ns1/records/apply')) body = { created: true, provenance: { source: 'ns1', readOnly: false, write: true, notice: 'Created.', appliedAt: '2026-07-21T00:00:00Z' }, record: { id: 'r1' } };
       else if (p.endsWith('/ns1/active-record')) body = { provenance: PROV, entry: 'live.rte.ie', target: 'live.rte.ie', active: { zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }, filterCount: 2, warnings: [] };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;

@@ -165,12 +165,31 @@ export class Ns1ConnectorManager {
     return this.persistedWrite ? undefined : this.base.writeApiKey; // env fallback only when no DB row
   }
 
-  /** Rebuild the record writer's inner from the effective mode/baseUrl + the resolved write key. The
-   *  env NS1_WRITE_ENABLED gate and allow-list always come from base config. */
+  /** The write GATE (NS1_WRITE_ENABLED) — the persisted 'ns1-write' row's `enabled` when present
+   *  (toggleable at runtime), else the env base config. */
+  private effectiveWriteEnabled(): boolean {
+    return this.persistedWrite ? this.persistedWrite.enabled : this.base.writeEnabled;
+  }
+
+  /** Rebuild the record writer's inner from the effective mode/baseUrl + write key + gate. The
+   *  allow-list always comes from base config. */
   private applyToWriter(): void {
     const e = this.resolveEffective();
-    const cfg: Ns1Config = { ...this.base, mode: e.mode, baseUrl: e.baseUrl, writeApiKey: this.resolveWriteKey() };
+    const cfg: Ns1Config = { ...this.base, mode: e.mode, baseUrl: e.baseUrl, writeApiKey: this.resolveWriteKey(), writeEnabled: this.effectiveWriteEnabled() };
     this.writer.setInner(createNs1RecordWriter(cfg, this.fetchImpl));
+  }
+
+  /** Toggle the write gate (NS1_WRITE_ENABLED) at runtime — persisted, audited, rebuilds the writer. */
+  async setWriteEnabled(enabled: boolean, actor: { subject?: string; roles?: string[]; correlationId?: string }): Promise<Ns1SettingsView> {
+    if (!this.repo) throw new ConnectorManagerError('ENDPOINT_REQUIRED', 'Connector settings persistence is not configured.');
+    this.persistedWrite = await this.repo.upsert({
+      connector: WRITE_CONNECTOR, enabled, mode: (this.persisted?.mode ?? this.base.mode) as RadarMode,
+      endpoint: this.persisted?.endpoint ?? null, verifyTls: true, edgeDeviceIds: null,
+      updatedBy: actor.subject ?? null, tokenAction: 'retain',
+    });
+    await this.audit?.record({ actorSubject: actor.subject, actorRoles: actor.roles, action: 'connector.settings.updated', resourceType: 'connector', resourceKey: WRITE_CONNECTOR, outcome: 'success', correlationId: actor.correlationId, details: { writeEnabled: enabled } });
+    this.applyToWriter();
+    return this.getSettingsView();
   }
 
   getSettingsView(): Ns1SettingsView {
@@ -188,11 +207,11 @@ export class Ns1ConnectorManager {
       live: e.source === 'ns1',
       masterKeyAvailable: !!this.secretBox,
       degraded: e.degraded,
-      writeEnabled: this.base.writeEnabled,
+      writeEnabled: this.effectiveWriteEnabled(),
       writeAllow: this.base.writeAllow,
       writeKeyConfigured: this.writeKeyConfigured(),
       writeKeySetAt: this.persistedWrite?.tokenSetAt ? this.persistedWrite.tokenSetAt.toISOString() : null,
-      writeLive: this.base.writeEnabled && e.mode === 'live' && !!this.resolveWriteKey(),
+      writeLive: this.effectiveWriteEnabled() && e.mode === 'live' && !!this.resolveWriteKey(),
     };
   }
 
