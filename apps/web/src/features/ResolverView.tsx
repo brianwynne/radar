@@ -89,6 +89,7 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
           const label = s.ttlVerdict === 'honours' ? 'honours' : s.ttlVerdict === 'caps' ? `caps ~${s.recordTtl}s` : s.ttlVerdict === 'inflates' ? `inflates ${s.recordTtl}s` : '? undetermined';
           return <span className={`badge badge-sm ${cls}`} title={s.ttlVerdict === 'undetermined' ? 'Too few fresh samples to be certain — run/extend the burst.' : 'Verdict from this resolver’s MAX served TTL vs RTÉ’s published TTL.'}>{label}</span>;
         };
+        const isBurst = v.samples.some((s) => s.obs !== undefined);
         const row = (s: typeof v.samples[number], i: number) => (
           <li key={`${s.resolver}-${i}`}>
             <span className="mono rv-resolver">{s.resolver}</span>
@@ -104,6 +105,11 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
             <button className="linklike" onClick={() => setOpen((o) => !o)}>{open ? 'hide resolvers' : `${v.samples.length} resolver answers`}</button>
             {open && (
               <>
+                <div className="rv-samples-note muted">
+                  {isBurst
+                    ? <><b>max</b> = the highest TTL each resolver served across the burst = the TTL it <b>sets</b> (verdict vs RTÉ’s published {ttlRange(v.recordTtl)} record / edge).</>
+                    : <>Point-in-time TTLs — each <b>counts down</b> from RTÉ’s published <b>300s record / 30s edge</b> as the resolver’s cache ages (300→0), so lower = fetched longer ago; record and edge count down independently. The <b>max</b> (≈300/30) is what they honour. Run <b>Check resolvers now</b> for each resolver’s definitive set-TTL.</>}
+                </div>
                 <ul className="rv-samples">
                   <li className="rv-group-head">On-net · {v.isp} recursives ({isp.length})</li>
                   {isp.map(row)}

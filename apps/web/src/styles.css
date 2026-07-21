@@ -438,6 +438,7 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-metric-note { font-size: 0.68rem; color: var(--ink-soft); }
 .rv-group-head { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-soft); font-weight: 700; padding-top: 0.2rem; }
 .rv-public-group { margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--line); opacity: 0.85; }
+.rv-samples-note { font-size: 0.72rem; line-height: 1.45; margin: 0.35rem 0 0.2rem; padding: 0.35rem 0.5rem; border-radius: 6px; background: rgba(127,127,127,0.08); }
 
 /* Steering / Resolver-identity view toggle */
 .rv-viewtoggle { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
