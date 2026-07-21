@@ -98,7 +98,7 @@ export function CreateTestRecord() {
                   <option value="A">A</option><option value="AAAA">AAAA</option><option value="CNAME">CNAME</option>
                 </select>
               ))}
-              <div className="muted" style={{ fontSize: '0.72rem', marginBottom: '0.6rem' }}>The source’s answers + steering filter chain are copied to the target.</div>
+              <div className="muted" style={{ fontSize: '0.72rem', marginBottom: '0.6rem' }}>Reads the source record (any zone) and <b>copies</b> its answers + steering filter chain into the target zone below — a cross-zone copy, not NS1’s same-zone clone.</div>
             </>
           )}
           <h2 style={{ marginTop: mode === 'clone' ? '0.5rem' : 0 }}>Target (created)</h2>

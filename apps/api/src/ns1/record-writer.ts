@@ -123,9 +123,10 @@ const CLONEABLE = ['answers', 'filters', 'regions', 'meta', 'use_client_subnet',
 
 export interface CloneTarget { zone: string; domain: string; ttl?: number }
 
-/** Build the plan for cloning `source` (a raw NS1 record) to a new target name. Pure — retargets the
- *  record and runs the SAME target guards as a create (allow-list, protected denylist, in-zone). The
- *  answers/filters are inherited from the source, so only the TARGET is guarded. */
+/** Build the plan for copying `source` (a raw NS1 record, read from ANY zone) onto a new target.
+ *  This is a CROSS-ZONE copy — the source's answers/filters/meta are retargeted to the chosen target
+ *  zone+name — NOT NS1's native clone (which is same-zone only). Pure; runs the SAME target guards as
+ *  a create (allow-list, protected denylist, in-zone). Only the TARGET is guarded. */
 export function planCloneRecord(cfg: Ns1Config, target: CloneTarget, source: unknown): RecordPlan {
   const zone = host(target.zone);
   const domain = host(target.domain);
