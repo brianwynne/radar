@@ -361,8 +361,6 @@ export function NetworkTelemetry() {
           <div className="stat">{formatBps(t.summary?.totalTransitThroughputBps)}</div>
           <CapacityBreakdown links={transitLinks} totalBps={transitCapacityBps} />
         </div>
-        <div className="card"><div className="muted">Operational headroom</div><div className="stat">{formatBps(t.summary?.operationalHeadroomBps)}</div></div>
-        <div className="card"><div className="muted">Operational capacity</div><div className="stat">{formatBps(t.summary?.operationalCapacityBps)}</div></div>
         <div className="card"><div className="muted">Unhealthy links</div><div className="stat">{num(t.summary?.unhealthyLinks)}</div></div>
         <div className="card"><div className="muted">Unhealthy BGP peers</div><div className="stat">{num(t.summary?.unhealthyBgpPeers)}</div></div>
         <div className="card"><div className="muted">Devices / interfaces</div><div className="stat">{num(t.summary?.deviceCount)} / {num(t.summary?.interfaceCount)}</div></div>
