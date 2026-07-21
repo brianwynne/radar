@@ -28,9 +28,11 @@ const createBody = z.object({
   ttl: z.coerce.number().int().min(1).max(604800),
 });
 const cloneBody = z.object({
-  source: z.object({ zone: z.string().min(1).max(253), domain: z.string().min(1).max(253), type: z.enum(['A', 'AAAA', 'CNAME']) }),
+  // Either read the source from NS1 (source ref) OR supply an edited record body directly (record).
+  source: z.object({ zone: z.string().min(1).max(253), domain: z.string().min(1).max(253), type: z.enum(['A', 'AAAA', 'CNAME']) }).optional(),
+  record: z.record(z.string(), z.unknown()).optional(),
   target: z.object({ zone: z.string().min(1).max(253), domain: z.string().min(1).max(253), ttl: z.coerce.number().int().min(1).max(604800).optional() }),
-});
+}).refine((b) => !!b.source || !!b.record, { message: 'Provide either a source record reference or an edited record body.' });
 const schema = (summary: string, description: string) => ({ tags: ['ns1'], summary, description, security: [{ bearerAuth: [] }] });
 
 export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (app, opts) => {
@@ -95,10 +97,11 @@ export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (
     async (req, reply) => {
       const parsed = cloneBody.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ error: 'invalid input', detail: parsed.error.issues.map((i) => i.message) });
-      if (!opts.readClient) return reply.code(503).send({ error: 'read client unavailable' });
-      const { source, target } = parsed.data;
+      const { source, record, target } = parsed.data;
       try {
-        const src = await opts.readClient.getRecord(source.zone, source.domain, source.type, req.id);
+        // An edited record body is used as-is; otherwise read the source from NS1.
+        const src = record ?? (opts.readClient ? await opts.readClient.getRecord(source!.zone, source!.domain, source!.type, req.id) : null);
+        if (src === null) return reply.code(503).send({ error: 'read client unavailable' });
         return getWriter().planClone(target as CloneTarget, src);
       } catch (err) {
         return reply.code(502).send({ error: 'source read failed', message: err instanceof Error ? err.message : 'could not read source record' });
@@ -113,23 +116,24 @@ export const ns1WriteRoutes: FastifyPluginAsync<Ns1WriteRoutesOptions> = async (
     async (req, reply) => {
       const parsed = cloneBody.safeParse(req.body);
       if (!parsed.success) return reply.code(400).send({ error: 'invalid input', detail: parsed.error.issues.map((i) => i.message) });
-      if (!opts.readClient) return reply.code(503).send({ error: 'read client unavailable' });
-      const { source, target } = parsed.data;
+      const { source, record, target } = parsed.data;
       const actor = { actorSubject: req.principal?.subject, actorRoles: req.principal?.roles, correlationId: req.id };
+      const srcLabel = source ? `${source.domain}/${source.type}` : 'edited';
       let src: unknown;
       try {
-        src = await opts.readClient.getRecord(source.zone, source.domain, source.type, req.id);
+        src = record ?? (opts.readClient ? await opts.readClient.getRecord(source!.zone, source!.domain, source!.type, req.id) : null);
+        if (src === null) return reply.code(503).send({ error: 'read client unavailable' });
       } catch (err) {
         return reply.code(502).send({ error: 'source read failed', message: err instanceof Error ? err.message : 'could not read source record' });
       }
       try {
         const result = await getWriter().applyClone(target as CloneTarget, src);
-        await opts.audit?.record({ ...actor, action: 'ns1.record.clone', resourceType: 'ns1-record', resourceKey: `${target.domain}/${source.type}`, outcome: 'success', details: { source: `${source.domain}/${source.type}`, target: target.domain, zone: target.zone, ttl: target.ttl } });
+        await opts.audit?.record({ ...actor, action: 'ns1.record.clone', resourceType: 'ns1-record', resourceKey: `${target.domain}`, outcome: 'success', details: { source: srcLabel, target: target.domain, zone: target.zone, ttl: target.ttl } });
         return result;
       } catch (err) {
         const blocked = err instanceof Ns1WriteError && err.blocked;
         const message = err instanceof Error ? err.message : 'clone failed';
-        await opts.audit?.record({ ...actor, action: 'ns1.record.clone', resourceType: 'ns1-record', resourceKey: `${target.domain}/${source.type}`, outcome: blocked ? 'blocked' : 'failure', details: { source: `${source.domain}/${source.type}`, target: target.domain, reason: message } });
+        await opts.audit?.record({ ...actor, action: 'ns1.record.clone', resourceType: 'ns1-record', resourceKey: `${target.domain}`, outcome: blocked ? 'blocked' : 'failure', details: { source: srcLabel, target: target.domain, reason: message } });
         return reply.code(blocked ? 400 : 502).send({ error: blocked ? 'blocked' : 'clone failed', message });
       }
     },

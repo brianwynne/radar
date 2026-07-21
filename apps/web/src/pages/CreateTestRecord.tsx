@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { RecordFriendlyEditor } from '../features/RecordFriendlyEditor';
 import type { CreatableRecordType, RecordCapability, RecordCreateResult, RecordPlan } from '../api/types';
 
 type Mode = 'create' | 'clone';
@@ -57,6 +58,9 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDo
   const [error, setError] = useState<string | null>(null);
   const [gateBusy, setGateBusy] = useState(false);
   const [gateError, setGateError] = useState<string | null>(null);
+  // A friendly-edited record body — once set, preview/confirm use it (via the clone-with-record path).
+  const [editedBody, setEditedBody] = useState<Record<string, unknown> | null>(null);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     if (!canWrite) return;
@@ -72,20 +76,39 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDo
 
   // Any edit invalidates a prior preview/result so you can never confirm a stale plan.
   const invalidate = () => { setPlan(null); setResult(null); setError(null); };
+  // A change to the record's shape (mode / type / answers) also drops a stale friendly-edited body;
+  // target changes (zone/domain/ttl) keep it.
+  const invalidateAll = () => { invalidate(); setEditedBody(null); setEditing(false); };
   const set = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); invalidate(); };
+  const setShape = <T,>(fn: (v: T) => void) => (v: T) => { fn(v); invalidateAll(); };
   const createInput = () => ({ zone: zone.trim(), domain: domain.trim(), type, answers: answers.split(/[\s,]+/).map((a) => a.trim()).filter(Boolean), ttl: Number(ttl) });
   const cloneInput = () => ({ source: { zone: srcZone.trim(), domain: srcDomain.trim(), type: srcType }, target: { zone: zone.trim(), domain: domain.trim(), ...(ttlOverride ? { ttl: Number(ttl) } : {}) } });
+  const editTarget = () => ({ zone: zone.trim(), domain: domain.trim() }); // ttl comes from the edited body
 
   async function preview() {
     setBusy(true); setError(null); setResult(null);
-    try { setPlan(mode === 'create' ? await api.recordPlan(createInput()) : await api.recordClonePlan(cloneInput())); }
-    catch (e) { setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Preview failed.'); }
+    try {
+      setPlan(editedBody
+        ? await api.recordClonePlan({ record: editedBody, target: editTarget() })
+        : mode === 'create' ? await api.recordPlan(createInput()) : await api.recordClonePlan(cloneInput()));
+    } catch (e) { setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Preview failed.'); }
     finally { setBusy(false); }
   }
   async function confirmCreate() {
     setBusy(true); setError(null);
-    try { setResult(mode === 'create' ? await api.recordApply(createInput()) : await api.recordCloneApply(cloneInput())); setPlan(null); onDone?.(); }
-    catch (e) { setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Create failed.'); }
+    try {
+      setResult(editedBody
+        ? await api.recordCloneApply({ record: editedBody, target: editTarget() })
+        : mode === 'create' ? await api.recordApply(createInput()) : await api.recordCloneApply(cloneInput()));
+      setPlan(null); onDone?.();
+    } catch (e) { setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Create failed.'); }
+    finally { setBusy(false); }
+  }
+  // Apply friendly edits → re-preview from the edited body.
+  async function applyEdits(body: Record<string, unknown>) {
+    setEditedBody(body); setEditing(false); setBusy(true); setError(null); setResult(null);
+    try { setPlan(await api.recordClonePlan({ record: body, target: editTarget() })); }
+    catch (e) { setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Preview failed.'); }
     finally { setBusy(false); }
   }
 
@@ -100,8 +123,8 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDo
       <div className="section-head" style={{ alignItems: 'center' }}>
         <h3 style={{ margin: 0 }}>Create record in {targetZone} <span className="badge warn">WRITE · NS1</span></h3>
         <div className="rv-viewtoggle" role="tablist" style={{ marginLeft: '0.5rem' }}>
-          <button role="tab" aria-selected={mode === 'create'} className={mode === 'create' ? 'on' : ''} onClick={() => { setMode('create'); invalidate(); }}>Create</button>
-          <button role="tab" aria-selected={mode === 'clone'} className={mode === 'clone' ? 'on' : ''} onClick={() => { setMode('clone'); invalidate(); }}>Clone existing</button>
+          <button role="tab" aria-selected={mode === 'create'} className={mode === 'create' ? 'on' : ''} onClick={() => { setMode('create'); invalidateAll(); }}>Create</button>
+          <button role="tab" aria-selected={mode === 'clone'} className={mode === 'clone' ? 'on' : ''} onClick={() => { setMode('clone'); invalidateAll(); }}>Clone existing</button>
         </div>
         {onClose && <button className="ghost" style={{ marginLeft: 'auto' }} onClick={onClose}>Close</button>}
       </div>
@@ -130,10 +153,10 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDo
           {mode === 'clone' && (
             <>
               <h2 style={{ marginTop: 0 }}>Source (cloned from)</h2>
-              {field('Source zone', <input value={srcZone} onChange={(e) => set(setSrcZone)(e.target.value)} className="mono" placeholder="nsone.rte.ie" />)}
-              {field('Source record name', <input value={srcDomain} onChange={(e) => set(setSrcDomain)(e.target.value)} className="mono" placeholder="livebase.nsone.rte.ie" />)}
+              {field('Source zone', <input value={srcZone} onChange={(e) => setShape(setSrcZone)(e.target.value)} className="mono" placeholder="nsone.rte.ie" />)}
+              {field('Source record name', <input value={srcDomain} onChange={(e) => setShape(setSrcDomain)(e.target.value)} className="mono" placeholder="livebase.nsone.rte.ie" />)}
               {field('Source type', (
-                <select value={srcType} onChange={(e) => set(setSrcType)(e.target.value as CreatableRecordType)}>
+                <select value={srcType} onChange={(e) => setShape(setSrcType)(e.target.value as CreatableRecordType)}>
                   <option value="A">A</option><option value="AAAA">AAAA</option><option value="CNAME">CNAME</option>
                 </select>
               ))}
@@ -146,11 +169,11 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDo
             : <input value={zone} onChange={(e) => set(setZone)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />)}
           {field('Record name (domain)', <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />)}
           {mode === 'create' && field('Type', (
-            <select value={type} onChange={(e) => set(setType)(e.target.value as CreatableRecordType)}>
+            <select value={type} onChange={(e) => setShape(setType)(e.target.value as CreatableRecordType)}>
               <option value="A">A</option><option value="AAAA">AAAA</option><option value="CNAME">CNAME</option>
             </select>
           ))}
-          {mode === 'create' && field(type === 'CNAME' ? 'Target (one hostname)' : 'Answers (space/comma-separated)', <input value={answers} onChange={(e) => set(setAnswers)(e.target.value)} className="mono" placeholder={type === 'CNAME' ? 'liveedge.rte.ie' : '185.54.104.4 185.54.105.4'} />)}
+          {mode === 'create' && field(type === 'CNAME' ? 'Target (one hostname)' : 'Answers (space/comma-separated)', <input value={answers} onChange={(e) => setShape(setAnswers)(e.target.value)} className="mono" placeholder={type === 'CNAME' ? 'liveedge.rte.ie' : '185.54.104.4 185.54.105.4'} />)}
           {mode === 'clone' && (
             <label className="switch" style={{ display: 'block', marginBottom: '0.5rem' }} title="Override the cloned TTL (e.g. drop to 30s to test faster steering)">
               <input type="checkbox" checked={ttlOverride} onChange={(e) => set(setTtlOverride)(e.target.checked)} /> Override TTL (else inherit the source’s)
@@ -168,13 +191,23 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, onDo
               <b>Done.</b> {result.provenance.notice} <span className="muted">({new Date(result.provenance.appliedAt).toLocaleTimeString()})</span>
             </div>
           )}
-          {!plan && !result && <div className="muted">Fill the form and press <b>Preview</b> to see the exact NS1 request before anything is sent.</div>}
-          {plan && (
+          {!plan && !result && !editing && <div className="muted">Fill the form and press <b>Preview</b> to see the exact NS1 request before anything is sent.</div>}
+          {editing && plan && (
+            <RecordFriendlyEditor initial={editedBody ?? plan.request.body} onApply={applyEdits} onCancel={() => setEditing(false)} />
+          )}
+          {plan && !editing && (
             <>
               <div className={`notice ${plan.allowed ? 'ok' : 'danger'}`}>
-                {plan.allowed ? <><b>Allowed.</b> This will create <span className="mono">{plan.target.domain}</span> ({plan.target.type}).</> : <><b>Blocked.</b> {plan.blockedReason}</>}
+                {plan.allowed ? <><b>Allowed.</b> This will create <span className="mono">{plan.target.domain}</span> ({plan.target.type}){editedBody ? ' — with your edits' : ''}.</> : <><b>Blocked.</b> {plan.blockedReason}</>}
               </div>
               {plan.warnings.map((w, i) => <div key={i} className="notice warn">{w}</div>)}
+              <div className="ctr-run-actions">
+                {plan.allowed && (
+                  <button className="ghost" onClick={() => setEditing(true)} title="Edit the record in a friendly interface (answers, weights, resolved ASNs, countries) — not raw JSON">
+                    Edit record
+                  </button>
+                )}
+              </div>
               <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>Exact NS1 request</div>
               <pre className="ctr-payload mono"><b>{plan.request.method}</b> {plan.request.path}{'\n'}{JSON.stringify(plan.request.body, null, 2)}</pre>
               {plan.allowed && (

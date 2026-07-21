@@ -31,6 +31,21 @@ export const ns1AsnRoutes: FastifyPluginAsync<Ns1AsnRouteOptions> = async (app, 
   const { client, ns1, ns1Connection } = opts;
   const resolver = opts.resolver ?? createRipestatResolver();
 
+  // Generic ASN → owner resolution for the record editor (arbitrary ASN numbers, not tied to a
+  // record). GET /ns1/asn-owners?asns=1,2,3 → { source, owners: { "1": "Owner", ... } }.
+  app.get<{ Querystring: { asns?: string } }>(
+    '/asn-owners',
+    { preHandler: requirePermission('ns1.detail.read'), schema: { tags: ['ns1'], summary: 'Resolve ASN numbers to network owners', security: [{ bearerAuth: [] }] } },
+    async (req) => {
+      const asns = [...new Set((req.query.asns ?? '').split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0 && n < 4294967295))].slice(0, 256);
+      if (asns.length === 0) return { source: resolver.source, owners: {} };
+      const map = await resolver.resolve(asns);
+      const owners: Record<string, string> = {};
+      for (const [asn, holder] of map) if (holder) owners[String(asn)] = holder;
+      return { source: resolver.source, owners };
+    },
+  );
+
   app.get<{ Params: { zone: string; domain: string; type: string } }>(
     '/asn-breakdown/:zone/:domain/:type',
     { preHandler: requirePermission('ns1.detail.read'), schema: { tags: ['ns1'], summary: 'Resolve every ASN in a record to its network owner', security: [{ bearerAuth: [] }] } },

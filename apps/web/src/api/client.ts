@@ -22,7 +22,7 @@ import type {
   NetworkPathsResponse,
   NetworkStatusResponse,
   ResolverSnapshot, ResolverCheckStart, ResolverCheck, ResolverCheckResult, ResolverIdentitySnapshot,
-  CreateRecordInput, RecordPlan, RecordCreateResult, RecordCapability, CloneRecordInput,
+  CreateRecordInput, RecordPlan, RecordCreateResult, RecordCapability, CloneRecordInput, AsnOwnersResponse,
   NetworkDevicesResponse,
   NetworkInterfacesResponse,
   NetworkLinkGroupsResponse,
@@ -228,6 +228,7 @@ export const api = {
   recordApply: (input: CreateRecordInput) => request<RecordCreateResult>('/api/v1/ns1/records/apply', { method: 'POST', body: JSON.stringify(input) }),
   recordClonePlan: (input: CloneRecordInput) => request<RecordPlan>('/api/v1/ns1/records/clone/plan', { method: 'POST', body: JSON.stringify(input) }),
   recordCloneApply: (input: CloneRecordInput) => request<RecordCreateResult>('/api/v1/ns1/records/clone/apply', { method: 'POST', body: JSON.stringify(input) }),
+  asnOwners: (asns: number[]) => request<AsnOwnersResponse>(`/api/v1/ns1/asn-owners?asns=${asns.join(',')}`),
   networkDevices: () => request<NetworkDevicesResponse>('/api/v1/network/devices'),
   networkInterfaces: (q: { deviceId?: string; provider?: string; linkType?: string; status?: string; unknownOnly?: boolean } = {}) => {
     const p = new URLSearchParams();

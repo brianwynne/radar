@@ -1063,9 +1063,12 @@ export interface RecordCreateResult {
 }
 export interface RecordCapability { writeEnabled: boolean; writeReady?: boolean; allowList: string[] }
 export interface CloneRecordInput {
-  source: { zone: string; domain: string; type: CreatableRecordType };
+  /** Read the source from NS1 (ref) OR supply an edited record body directly. */
+  source?: { zone: string; domain: string; type: CreatableRecordType };
+  record?: Record<string, unknown>;
   target: { zone: string; domain: string; ttl?: number };
 }
+export interface AsnOwnersResponse { source: string; owners: Record<string, string> }
 
 export interface ResolverIdentitySnapshot {
   provenance: { source: 'ripe-atlas' | 'mock' | 'disabled'; synthetic: boolean; readOnly: true; informationalOnly: true; notice?: string; retrievedAt: string };
