@@ -73,26 +73,30 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
           <span className="rv-hop-name mono">{target}</span>
           <span className="rv-hop-role muted">alias</span>
           <span className="rv-hop-ttl mono">{ttlRange(v.apexTtl)}</span>
-          {honourBadge(honApex)}
+          <span className="rv-hop-badges">{honourBadge(honApex)}</span>
         </div>
         <div className="rv-hop-link">↓ CNAME</div>
         <div className="rv-hop rv-hop-steer" title="THE steering record — while a resolver holds this cached it won't return to NS1, so its TTL is how long NS1's steering / shed decision stays frozen.">
           <span className="rv-hop-name mono">{v.recordName ?? '*.nsone.rte.ie'}</span>
           <span className="rv-hop-role">NS1 record · steering</span>
           <span className="rv-hop-ttl mono">{ttlRange(v.recordTtl)}</span>
-          {honourBadge(honRecord)}
-          {v.steeringImpeded !== null && (
-            <span className={`badge badge-sm ${v.steeringImpeded ? 'warn' : 'ok'}`}>
-              {v.steeringImpeded ? `frozen ~${v.steeringWindowSecs}s` : `re-steers ≤${v.steeringWindowSecs}s`}
-            </span>
-          )}
+          <span className="rv-hop-badges">
+            {honourBadge(honRecord)}
+            {v.steeringImpeded !== null && (
+              <span className={`badge badge-sm ${v.steeringImpeded ? 'warn' : 'ok'}`}>
+                {v.steeringImpeded ? `frozen ~${v.steeringWindowSecs}s` : `re-steers ≤${v.steeringWindowSecs}s`}
+              </span>
+            )}
+          </span>
         </div>
         <div className="rv-hop-link">↓ CNAME</div>
         <div className="rv-hop">
           <span className="rv-hop-name mono">{v.edgeName ?? 'liveedge.rte.ie'}</span>
           <span className="rv-hop-role muted">Cloudflare LB · not steering</span>
           <span className="rv-hop-ttl mono">{ttlRange(v.edgeTtl)}</span>
-          {v.honoursLowTtl !== null && <span className={`badge badge-sm ${v.honoursLowTtl ? 'ok' : 'warn'} badge-ghost`} title={v.honoursLowTtl ? 'The ISP’s recursives serve the low edge TTL (≤35s).' : 'The ISP’s recursives floor the edge TTL UP (serve it longer than the ~30s published).'}>{v.honoursLowTtl ? 'TTL honoured' : 'TTL not honoured (floored)'}</span>}
+          <span className="rv-hop-badges">
+            {v.honoursLowTtl !== null && <span className={`badge badge-sm ${v.honoursLowTtl ? 'ok' : 'warn'} badge-ghost`} title={v.honoursLowTtl ? 'The ISP’s recursives serve the low edge TTL (≤35s).' : 'The ISP’s recursives floor the edge TTL UP (serve it longer than the ~30s published).'}>{v.honoursLowTtl ? 'TTL honoured' : 'TTL not honoured (floored)'}</span>}
+          </span>
         </div>
         {(v.vips.length > 0 || pools.length > 0) && (
           <div className="rv-hop-ips">

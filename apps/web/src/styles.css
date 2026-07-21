@@ -422,7 +422,7 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-hop-name { font-weight: 650; font-size: 0.86rem; overflow-wrap: anywhere; }
 .rv-hop-role { font-size: 0.68rem; grid-column: 1; }
 .rv-hop-ttl { grid-row: 1; grid-column: 2; font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
-.rv-hop .badge { grid-column: 2; grid-row: 2; justify-self: end; }
+.rv-hop-badges { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; gap: 0.25rem; justify-content: flex-end; align-items: center; }
 .rv-hop-steer { background: var(--panel); border-left: 3px solid var(--accent); box-shadow: var(--shadow); }
 .rv-hop-steer .rv-hop-role { color: var(--accent); font-weight: 700; }
 .rv-hop-link { font-size: 0.7rem; color: var(--ink-soft); padding-left: 0.4rem; }
