@@ -23,6 +23,7 @@ describe('parseDnsAbuf + summarizeChain', () => {
     expect(s.platform).toBe('Réalta');
     expect(s.target).toBe('liveedge.rte.ie');
     expect(s.apexTtl).toBe(88); // live.rte.ie pointer CNAME TTL
+    expect(s.recordName).toBe('livebase.nsone.rte.ie'); // current NS1 steering record name
     expect(s.recordTtl).toBe(53); // the *.nsone.rte.ie (NS1 record) CNAME TTL — shed-relevant
     expect(s.edgeTtl).toBe(27); // the liveedge A TTL (Cloudflare LB) — A-record only
     expect(s.minTtl).toBe(27);

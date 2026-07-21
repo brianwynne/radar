@@ -46,6 +46,12 @@ export interface ResolverIspView {
   platforms: Record<string, number>;
   /** VIP /24 (e.g. "185.54.104") → count — surfaces the Cloudflare CW/PW pool split. */
   pools: Record<string, number>;
+  /** Current NS1-record hostname (e.g. livebase.nsone.rte.ie) — the steering record, as observed. */
+  recordName: string | null;
+  /** Delivery/edge hostname the chain resolves to (e.g. liveedge.rte.ie). */
+  edgeName: string | null;
+  /** Distinct resolved A-record IPs from the ISP's own resolvers (the actual delivery VIPs). */
+  vips: string[];
   /** Observed edge (liveedge A) TTL range. A max well above what we set = the resolver caps/floors. */
   edgeTtl: { min: number; max: number } | null;
   apexTtl: { min: number; max: number } | null;

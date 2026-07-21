@@ -35,7 +35,7 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
     return {
       isp: m.isp, asn: m.asn, measurementId: null, covered: false,
       note: 'No RIPE Atlas probe coverage for this ISP.',
-      probeCount: 0, resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, platforms: {}, pools: {}, edgeTtl: null, apexTtl: null, recordTtl: null, steeringImpeded: null, steeringWindowSecs: null, honoursLowTtl: null, observedAt: null, samples: [],
+      probeCount: 0, resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, platforms: {}, pools: {}, recordName: null, edgeName: null, vips: [], edgeTtl: null, apexTtl: null, recordTtl: null, steeringImpeded: null, steeringWindowSecs: null, honoursLowTtl: null, observedAt: null, samples: [],
     };
   }
   const samples: ResolverSample[] = [];
@@ -47,6 +47,10 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
   const edgeTtls: number[] = [];
   const apexTtls: number[] = [];
   const recordTtls: number[] = [];
+  // The chain hostnames + resolved IPs, captured from the ISP's OWN (on-net) recursive resolvers.
+  let recordName: string | null = null;
+  let edgeName: string | null = null;
+  const vipSet = new Set<string>();
   let latest = 0;
 
   for (const r of results) {
@@ -69,10 +73,12 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
       // Headline aggregates (platform / pool / TTL) reflect the ISP's OWN resolvers only.
       if (!pub) {
         if (s.platform) inc(platforms, s.platform);
-        for (const v of s.vips) if (/^\d+\.\d+\.\d+\.\d+$/.test(v)) inc(pools, vipPrefix(v));
+        for (const v of s.vips) { if (/^\d+\.\d+\.\d+\.\d+$/.test(v)) inc(pools, vipPrefix(v)); vipSet.add(v); }
         if (s.edgeTtl !== null) edgeTtls.push(s.edgeTtl);
         if (s.apexTtl !== null) apexTtls.push(s.apexTtl);
         if (s.recordTtl !== null) recordTtls.push(s.recordTtl);
+        if (!recordName && s.recordName) recordName = s.recordName;
+        if (!edgeName && s.target) edgeName = s.target;
       }
       samples.push({ probeId: prb, resolver, public: pub, platform: s.platform, target: s.target, vips: s.vips, apexTtl: s.apexTtl, recordTtl: s.recordTtl, edgeTtl: s.edgeTtl, observedAt: iso(e.time ?? when) });
     }
@@ -86,6 +92,7 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
     probeCount: probes.size, resolverCount: resolvers.size,
     ispResolverCount: resolvers.size - publicResolvers.size, publicResolverCount: publicResolvers.size,
     platforms, pools,
+    recordName, edgeName, vips: [...vipSet].sort(),
     edgeTtl: edge, apexTtl: range(apexTtls), recordTtl: record,
     // NS1-record TTL governs steering agility (see STEER_TTL_CEILING). This is the metric that matters.
     steeringImpeded: record ? record.max > STEER_TTL_CEILING : null,

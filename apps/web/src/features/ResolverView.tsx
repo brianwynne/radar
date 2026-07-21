@@ -19,7 +19,7 @@ const ago = (iso: string | null): string => {
   return `${Math.round(s / 3600)}h ago`;
 };
 
-function IspCard({ v }: { v: ResolverIspView }) {
+function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
   const [open, setOpen] = useState(false);
   if (!v.covered) {
     return (
@@ -45,27 +45,39 @@ function IspCard({ v }: { v: ResolverIspView }) {
           </span>
         ))}
       </div>
-      <div className="rv-meta">
-        <div className="rv-metric rv-metric-primary" title="TTL on the NS1 record (*.nsone.rte.ie) — THE steering record. While a resolver holds it cached it won't return to NS1, so this is how long NS1's steering / shed decision stays frozen for this ISP.">
-          <span className="rv-metric-k">steering TTL</span>
-          <span className="rv-metric-v mono">{ttlRange(v.recordTtl)}</span>
-          <span className="muted rv-metric-note">NS1 record</span>
+      <div className="rv-chain" title={`The DNS resolution chain as served by ${v.isp}'s own on-net recursive resolvers`}>
+        <div className="rv-chain-cap muted">Chain from {v.isp}’s on-net recursive resolvers · TTLs as served</div>
+        <div className="rv-hop">
+          <span className="rv-hop-name mono">{target}</span>
+          <span className="rv-hop-role muted">alias</span>
+          <span className="rv-hop-ttl mono">{ttlRange(v.apexTtl)}</span>
+        </div>
+        <div className="rv-hop-link">↓ CNAME</div>
+        <div className="rv-hop rv-hop-steer" title="THE steering record — while a resolver holds this cached it won't return to NS1, so its TTL is how long NS1's steering / shed decision stays frozen.">
+          <span className="rv-hop-name mono">{v.recordName ?? '*.nsone.rte.ie'}</span>
+          <span className="rv-hop-role">NS1 record · steering</span>
+          <span className="rv-hop-ttl mono">{ttlRange(v.recordTtl)}</span>
           {v.steeringImpeded !== null && (
             <span className={`badge badge-sm ${v.steeringImpeded ? 'warn' : 'ok'}`}>
-              {v.steeringImpeded ? `steering frozen ~${v.steeringWindowSecs}s` : `re-steers ≤${v.steeringWindowSecs}s`}
+              {v.steeringImpeded ? `frozen ~${v.steeringWindowSecs}s` : `re-steers ≤${v.steeringWindowSecs}s`}
             </span>
           )}
         </div>
-        <div className="rv-metric" title="TTL on the liveedge A record (Cloudflare LB). A DIFFERENT layer — it only refreshes Cloudflare's pool/DC pick, NOT NS1 steering.">
-          <span className="rv-metric-k">edge TTL</span>
-          <span className="rv-metric-v mono">{ttlRange(v.edgeTtl)}</span>
-          <span className="muted rv-metric-note">Cloudflare LB · not steering</span>
+        <div className="rv-hop-link">↓ CNAME</div>
+        <div className="rv-hop">
+          <span className="rv-hop-name mono">{v.edgeName ?? 'liveedge.rte.ie'}</span>
+          <span className="rv-hop-role muted">Cloudflare LB · not steering</span>
+          <span className="rv-hop-ttl mono">{ttlRange(v.edgeTtl)}</span>
           {v.honoursLowTtl !== null && <span className={`badge badge-sm ${v.honoursLowTtl ? 'ok' : 'warn'} badge-ghost`}>{v.honoursLowTtl ? 'honoured' : 'floored'}</span>}
         </div>
-        <div className="rv-metric">
-          <span className="rv-metric-k">pools</span>
-          {pools.length ? pools.map(([pool, n]) => <span key={pool} className="rv-pool mono">{pool}.x · {n}</span>) : <span className="muted">—</span>}
-        </div>
+        {(v.vips.length > 0 || pools.length > 0) && (
+          <div className="rv-hop-ips">
+            <span className="rv-hop-link">↳ A</span>
+            {v.vips.length
+              ? v.vips.map((ip) => <span key={ip} className="rv-vip mono">{ip}</span>)
+              : pools.map(([pool, n]) => <span key={pool} className="rv-vip mono">{pool}.x·{n}</span>)}
+          </div>
+        )}
       </div>
       {v.samples.length > 0 && (() => {
         const isp = v.samples.filter((s) => !s.public);
@@ -276,7 +288,7 @@ export function ResolverView() {
             <div className="notice info">{snap.provenance.notice ?? 'No resolver data — the RIPE Atlas connector is not connected.'}{canManage && ' Turn on 6h polling or run a check to populate it.'}</div>
           ) : (
             <div className="rv-grid">
-              {snap.isps.map((v) => <IspCard key={v.isp} v={v} />)}
+              {snap.isps.map((v) => <IspCard key={v.isp} v={v} target={snap.target} />)}
             </div>
           )}
         </>

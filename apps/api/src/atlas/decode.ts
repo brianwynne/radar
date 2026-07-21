@@ -107,6 +107,8 @@ export interface ChainSummary {
   vips: string[];
   /** TTL on the queried-apex CNAME (live.rte.ie) — the mode-switch pointer. */
   apexTtl: number | null;
+  /** Owner name of the NS1-record hop (e.g. livebase.nsone.rte.ie) — the current steering record. */
+  recordName: string | null;
   /** TTL on the NS1-record CNAME (*.nsone.rte.ie) — governs the SHED / platform decision. */
   recordTtl: number | null;
   /** TTL on the final A record (the Cloudflare-LB/edge value). A-RECORD ONLY — null when the
@@ -174,6 +176,7 @@ export function summarizeChain(rrs: DnsRR[]): ChainSummary {
     target,
     vips: aRecords.map((a) => a.data),
     apexTtl: cnames[0]?.ttl ?? null,
+    recordName: recordHop?.name ?? null,
     recordTtl: recordHop?.ttl ?? null,
     edgeTtl: aRecords.length ? aRecords[0].ttl : null, // A-record ONLY — never a CNAME TTL
     minTtl: ttls.length ? Math.min(...ttls) : null,

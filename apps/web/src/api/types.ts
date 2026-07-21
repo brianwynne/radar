@@ -999,6 +999,9 @@ export interface ResolverIspView {
   publicResolverCount: number;
   platforms: Record<string, number>;
   pools: Record<string, number>;
+  recordName: string | null;
+  edgeName: string | null;
+  vips: string[];
   edgeTtl: { min: number; max: number } | null;
   apexTtl: { min: number; max: number } | null;
   recordTtl: { min: number; max: number } | null;

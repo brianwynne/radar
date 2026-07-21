@@ -413,9 +413,21 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-plat { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; font-weight: 600; border: 1px solid var(--line); border-radius: 999px; padding: 0.1rem 0.5rem; }
 .rv-meta { display: flex; flex-direction: column; gap: 0.35rem; }
 .rv-metric { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
-.rv-metric-primary { padding: 0.3rem 0.4rem; border-radius: 6px; background: rgba(120, 130, 255, 0.08); border-left: 3px solid var(--accent); }
-.rv-metric-primary .rv-metric-v { font-size: 1.02rem; }
 .badge-ghost { opacity: 0.6; font-weight: 500; }
+
+/* Resolution-chain box: live.rte.ie → NS1 record → liveedge → resolved IPs, each with its TTL */
+.rv-chain { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.6rem 0.7rem; border-radius: 8px; background: rgba(120, 130, 255, 0.07); border: 1px solid var(--line); }
+.rv-chain-cap { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.25rem; }
+.rv-hop { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.35rem 0.5rem; padding: 0.28rem 0.4rem; border-radius: 6px; }
+.rv-hop-name { font-weight: 650; font-size: 0.86rem; overflow-wrap: anywhere; }
+.rv-hop-role { font-size: 0.68rem; grid-column: 1; }
+.rv-hop-ttl { grid-row: 1; grid-column: 2; font-weight: 700; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+.rv-hop .badge { grid-column: 2; grid-row: 2; justify-self: end; }
+.rv-hop-steer { background: var(--panel); border-left: 3px solid var(--accent); box-shadow: var(--shadow); }
+.rv-hop-steer .rv-hop-role { color: var(--accent); font-weight: 700; }
+.rv-hop-link { font-size: 0.7rem; color: var(--ink-soft); padding-left: 0.4rem; }
+.rv-hop-ips { display: flex; align-items: center; gap: 0.3rem 0.4rem; flex-wrap: wrap; padding: 0.2rem 0.4rem 0; }
+.rv-vip { font-size: 0.76rem; padding: 0.05rem 0.35rem; border-radius: 4px; background: rgba(127,127,127,0.12); }
 .rv-metric-k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); min-width: 4.5rem; }
 .rv-metric-v { font-weight: 650; }
 .rv-pool { font-size: 0.76rem; color: var(--ink-soft); border: 1px dashed var(--line); border-radius: 5px; padding: 0.02rem 0.35rem; }
