@@ -18,6 +18,9 @@ export interface ResolverSample {
   resolver: string;
   /** True when `resolver` is a well-known PUBLIC resolver (Google/Quad9/…), not the ISP's own. */
   public: boolean;
+  /** True when `resolver` is the probe's OWN local/embedded resolver (Docker/CGNAT/link-local/ULA),
+   *  not the ISP's recursive — excluded from the headline (its served TTLs are unreliable). */
+  local: boolean;
   platform: string | null;
   target: string | null;
   vips: string[];
@@ -42,6 +45,8 @@ export interface ResolverIspView {
    *  aggregates below (platforms/pools/TTL) are computed from the ISP's OWN resolvers. */
   ispResolverCount: number;
   publicResolverCount: number;
+  /** Probe-local/embedded resolvers (Docker/CGNAT/…) — excluded from the headline aggregates. */
+  localResolverCount: number;
   /** platform → number of the ISP's own resolvers landing on it. */
   platforms: Record<string, number>;
   /** VIP /24 (e.g. "185.54.104") → count — surfaces the Cloudflare CW/PW pool split. */

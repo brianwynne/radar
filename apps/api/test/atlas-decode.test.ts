@@ -1,8 +1,13 @@
 // DNS abuf decoder — fixtures are REAL RIPE Atlas responses captured from Irish ISP resolvers
 // resolving live.rte.ie (measurement 192116677).
 import { describe, it, expect } from 'vitest';
-import { isPublicResolver, parseDnsAbuf, summarizeChain } from '../src/atlas/decode.js';
+import { isProbeLocalResolver, isPublicResolver, parseDnsAbuf, summarizeChain } from '../src/atlas/decode.js';
 import { buildIspView } from '../src/atlas/client.js';
+
+// REAL capture: Virgin/LG probe 1015795 via 127.0.0.11 (Docker's embedded DNS) INFLATING the TTL to
+// 377s on live.rte.ie + livebase, and 39s on the edge — above RTÉ's published 300/30. A real
+// recursive never does this; this is why probe-local resolvers must be excluded from the headline.
+const INFLATED_377 = 'eRKBgAABAAYAAAAABGxpdmUDcnRlAmllAAABAAHADAAFAAEAAAF5ABEIbGl2ZWJhc2UFbnNvbmXAEcApAAUAAQAAAXkACwhsaXZlZWRnZcARwEYAAQABAAAAJwAEuTZoDMBGAAEAAQAAACcABLk2aAjARgABAAEAAAAnAAS5NmgEwEYAAQABAAAAJwAEuTZoAA==';
 
 // Eir probe 27252, resolver serving a cached answer: live.rte.ie → livebase → liveedge → 4× A
 // (185.54.105.x). TTLs as served: apex CNAME 88, livebase CNAME 53, A 27.
@@ -48,6 +53,12 @@ describe('parseDnsAbuf + summarizeChain', () => {
     for (const own of ['86.54.11.100', '89.101.251.230', '192.168.1.1', '10.0.16.2']) expect(isPublicResolver(own)).toBe(false);
   });
 
+  it('flags probe-LOCAL resolvers (Docker/CGNAT/link-local/ULA) — not the ISP recursive', () => {
+    for (const l of ['127.0.0.11', '127.0.0.1', '::1', '100.100.100.100', '100.64.0.1', '169.254.1.1', 'fd7a:115c:a1e0::53', 'fe80::1']) expect(isProbeLocalResolver(l)).toBe(true);
+    // Real ISP recursives + a CPE on RFC1918 (192.168 / 10) are NOT probe-local — kept in the headline.
+    for (const keep of ['89.101.251.230', '8.8.8.8', '192.168.1.1', '10.0.16.2', '100.200.0.1']) expect(isProbeLocalResolver(keep)).toBe(false);
+  });
+
   it('malformed input → empty, never throws', () => {
     expect(parseDnsAbuf('not-base64-@@')).toEqual([]);
     expect(parseDnsAbuf('AAAA')).toEqual([]); // too short
@@ -80,5 +91,22 @@ describe('buildIspView — steering verdict keyed on the NS1-record TTL (not the
     // (buildIspView verdict for this shape is exercised via the mock at 300s in the route tests;
     // here we assert the summariser separates the two layers correctly.)
     expect(s.recordTtl! > 60 && s.edgeTtl! <= 35).toBe(true);
+  });
+
+  it('EXCLUDES a probe-local resolver inflating the TTL to 377s — headline reflects the ISP recursive only', () => {
+    const results = [
+      // Docker's 127.0.0.11 serving the inflated 377s chain — must NOT drive the headline.
+      { prb_id: 1015795, timestamp: 1_700_000_000, resultset: [{ dst_addr: '127.0.0.11', result: { abuf: INFLATED_377 } }] },
+      // A real Virgin recursive serving the authoritative chain (EIR_CACHED: record 53, edge 27).
+      { prb_id: 23058, timestamp: 1_700_000_100, resultset: [{ dst_addr: '89.101.251.230', result: { abuf: EIR_CACHED } }] },
+    ];
+    const v = buildIspView(m, results, 35);
+    expect(v.ispResolverCount).toBe(1);      // only the real recursive
+    expect(v.localResolverCount).toBe(1);    // the 127.0.0.11 answer, excluded
+    expect(v.recordTtl).toEqual({ min: 53, max: 53 }); // 377 excluded — not 53–377
+    expect(v.steeringWindowSecs).toBe(53);   // driven by the ISP recursive, not the inflated local one
+    expect(v.steeringImpeded).toBe(false);
+    // The local resolver is still recorded (drill-down) but flagged.
+    expect(v.samples.find((s) => s.resolver === '127.0.0.11')?.local).toBe(true);
   });
 });

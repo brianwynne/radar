@@ -979,6 +979,7 @@ export interface ResolverSample {
   probeId: number;
   resolver: string;
   public: boolean;
+  local: boolean;
   platform: string | null;
   target: string | null;
   vips: string[];
@@ -997,6 +998,7 @@ export interface ResolverIspView {
   resolverCount: number;
   ispResolverCount: number;
   publicResolverCount: number;
+  localResolverCount: number;
   platforms: Record<string, number>;
   pools: Record<string, number>;
   recordName: string | null;

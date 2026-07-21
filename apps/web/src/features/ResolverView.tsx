@@ -36,7 +36,7 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
     <div className="rv-card">
       <div className="rv-head">
         <span className="rv-isp">{v.isp}</span><span className="rv-asn">AS{v.asn}</span>
-        <span className="rv-count muted">{v.ispResolverCount} ISP resolvers{v.publicResolverCount > 0 ? ` · ${v.publicResolverCount} public` : ''} · {v.probeCount} probes</span>
+        <span className="rv-count muted">{v.ispResolverCount} ISP resolvers{v.publicResolverCount > 0 ? ` · ${v.publicResolverCount} public` : ''}{v.localResolverCount > 0 ? ` · ${v.localResolverCount} local` : ''} · {v.probeCount} probes</span>
       </div>
       <div className="rv-platforms">
         {platforms.map(([p, n]) => (
@@ -80,8 +80,9 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
         )}
       </div>
       {v.samples.length > 0 && (() => {
-        const isp = v.samples.filter((s) => !s.public);
+        const isp = v.samples.filter((s) => !s.public && !s.local);
         const pub = v.samples.filter((s) => s.public);
+        const loc = v.samples.filter((s) => s.local);
         const row = (s: typeof v.samples[number], i: number) => (
           <li key={`${s.probeId}-${i}`}>
             <span className="mono rv-resolver">{s.resolver}</span>
@@ -96,13 +97,19 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
             {open && (
               <>
                 <ul className="rv-samples">
-                  <li className="rv-group-head">On-net · {v.isp} resolvers ({isp.length})</li>
+                  <li className="rv-group-head">On-net · {v.isp} recursives ({isp.length})</li>
                   {isp.map(row)}
                 </ul>
                 {pub.length > 0 && (
                   <ul className="rv-samples rv-public-group">
                     <li className="rv-group-head">Public resolvers ({pub.length}) — not {v.isp}’s own</li>
                     {pub.map(row)}
+                  </ul>
+                )}
+                {loc.length > 0 && (
+                  <ul className="rv-samples rv-public-group">
+                    <li className="rv-group-head">Probe-local resolvers ({loc.length}) — excluded (unreliable TTLs, e.g. Docker/CGNAT)</li>
+                    {loc.map(row)}
                   </ul>
                 )}
               </>

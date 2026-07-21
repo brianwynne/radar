@@ -156,6 +156,20 @@ export function isPublicResolver(addr: string): boolean {
   return PUBLIC_PREFIXES.some((p) => addr.startsWith(p));
 }
 
+// Probe-LOCAL resolvers: the probe's OWN embedded / NAT resolver, NOT the ISP's recursive. These
+// (Docker's 127.0.0.11, Tailscale/Alibaba 100.100.100.100, CGNAT, link-local, ULA) are the source
+// of the TTL artifacts we saw — they routinely serve TTLs ABOVE authoritative (e.g. 377s / edge 300s
+// when RTÉ publishes 300 / 30), which a real recursive never does. Excluded from the ISP headline.
+export function isProbeLocalResolver(addr: string): boolean {
+  if (!addr || addr === 'probe-resolver') return false;
+  const a = addr.toLowerCase();
+  if (a === '::1' || a.startsWith('127.') || a.startsWith('169.254.') || a.startsWith('fe80:')) return true;
+  if (/^f[cd][0-9a-f]{2}:/.test(a)) return true; // ULA fc00::/7
+  // CGNAT 100.64.0.0/10 (100.64 – 100.127), incl. the common 100.100.100.100.
+  const m = /^100\.(\d+)\./.exec(a);
+  return m ? Number(m[1]) >= 64 && Number(m[1]) <= 127 : false;
+}
+
 /** Summarise a decoded chain into platform + the three distinct TTLs. Each hop is a separate RR
  *  cached independently by the resolver, so its TTL reflects that hop's own cache state — we must
  *  read each by its OWNER name, never by position, and never report a CNAME's TTL as the edge. */
