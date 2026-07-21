@@ -46,11 +46,11 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
 
   // Target (both modes) — defaults to the selected zone.
   const [zone, setZone] = useState(targetZone);
-  const [domain, setDomain] = useState(targetZone);
+  const [domain, setDomain] = useState(''); // a record UNDER the zone — never the apex; typed/picked in
   const [ttl, setTtl] = useState(30);
   // Create-only
   const [type] = useState<CreatableRecordType>('CNAME'); // only CNAME records are creatable
-  const [answers, setAnswers] = useState('185.54.104.4');
+  const [answers, setAnswers] = useState('liveedge.rte.ie'); // CNAME target (a hostname, not an IP)
   // Clone-only source
   const [srcZone, setSrcZone] = useState(source?.zone ?? 'nsone.rte.ie');
   const [srcDomain, setSrcDomain] = useState(source?.domain ?? 'livebase.nsone.rte.ie');
@@ -249,11 +249,11 @@ export function CreateRecordPanel({ targetZone, zones, initialMode, source, init
                 {tgtRecords.map((d) => <option key={d} value={d}>{d}</option>)}
               </select>
               {!tgtRecords.includes(domain) && (
-                <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder="new.livetest.rte.ie" style={{ marginTop: '0.3rem' }} autoFocus />
+                <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder={`nstest.${zone}`} style={{ marginTop: '0.3rem' }} autoFocus />
               )}
             </>
           ) : (
-            <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder="livetest.rte.ie" />
+            <input value={domain} onChange={(e) => set(setDomain)(e.target.value)} className="mono" placeholder={`nstest.${zone}`} />
           ))}
           {!supplied && mode === 'create' && field('Type', <input value="CNAME" readOnly className="mono" style={{ width: '8rem' }} title="Only CNAME records are creatable" />)}
           {!supplied && mode === 'create' && field('Target (one hostname)', <input value={answers} onChange={(e) => setShape(setAnswers)(e.target.value)} className="mono" placeholder="liveedge.rte.ie" />)}
