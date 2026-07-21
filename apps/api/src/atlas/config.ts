@@ -45,7 +45,9 @@ const schema = z.object({
   ATLAS_ENDPOINT: z.string().default('https://atlas.ripe.net/api/v2'),
   ATLAS_API_KEY: z.string().optional(),
   ATLAS_TARGET: z.string().default('live.rte.ie'),
-  ATLAS_HONOUR_TTL_THRESHOLD: z.coerce.number().int().positive().max(3600).default(60),
+  // Edge (liveedge A) TTL is 30s; a resolver honouring it returns ≤ this. Above → it caps/floors
+  // the low TTL upward (30 + a small margin for jitter).
+  ATLAS_HONOUR_TTL_THRESHOLD: z.coerce.number().int().positive().max(3600).default(35),
   ATLAS_MEASUREMENTS: z.string().optional(),
 });
 

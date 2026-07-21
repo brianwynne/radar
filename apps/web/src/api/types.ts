@@ -978,6 +978,7 @@ export interface NetworkDevicesResponse { provenance: NetworkProvenance; count: 
 export interface ResolverSample {
   probeId: number;
   resolver: string;
+  public: boolean;
   platform: string | null;
   target: string | null;
   vips: string[];
@@ -993,6 +994,8 @@ export interface ResolverIspView {
   note?: string;
   probeCount: number;
   resolverCount: number;
+  ispResolverCount: number;
+  publicResolverCount: number;
   platforms: Record<string, number>;
   pools: Record<string, number>;
   edgeTtl: { min: number; max: number } | null;

@@ -2,7 +2,7 @@
 // measurements, decodes each resolver's answer, and aggregates per ISP. The API key is sent in the
 // Authorization header and never logged. Aggregation is a pure function (buildIspView) so it is
 // unit-tested against real captured results.
-import { parseDnsAbuf, summarizeChain } from './decode.js';
+import { isPublicResolver, parseDnsAbuf, summarizeChain } from './decode.js';
 import type { AtlasConfig, AtlasIspMeasurement } from './config.js';
 import type { ResolverIspView, ResolverSample, ResolverSnapshot } from './types.js';
 
@@ -29,12 +29,13 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
     return {
       isp: m.isp, asn: m.asn, measurementId: null, covered: false,
       note: 'No RIPE Atlas probe coverage for this ISP.',
-      probeCount: 0, resolverCount: 0, platforms: {}, pools: {}, edgeTtl: null, apexTtl: null, honoursLowTtl: null, observedAt: null, samples: [],
+      probeCount: 0, resolverCount: 0, ispResolverCount: 0, publicResolverCount: 0, platforms: {}, pools: {}, edgeTtl: null, apexTtl: null, honoursLowTtl: null, observedAt: null, samples: [],
     };
   }
   const samples: ResolverSample[] = [];
   const probes = new Set<number>();
   const resolvers = new Set<string>();
+  const publicResolvers = new Set<string>();
   const platforms: Record<string, number> = {};
   const pools: Record<string, number> = {};
   const edgeTtls: number[] = [];
@@ -53,13 +54,19 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
       if (!abuf) continue;
       const s = summarizeChain(parseDnsAbuf(abuf));
       const resolver = e.dst_addr ?? 'probe-resolver';
+      const pub = isPublicResolver(resolver);
+      const key = `${prb}:${resolver}`;
       probes.add(prb);
-      resolvers.add(`${prb}:${resolver}`);
-      if (s.platform) inc(platforms, s.platform);
-      for (const v of s.vips) if (/^\d+\.\d+\.\d+\.\d+$/.test(v)) inc(pools, vipPrefix(v));
-      if (s.edgeTtl !== null) edgeTtls.push(s.edgeTtl);
-      if (s.apexTtl !== null) apexTtls.push(s.apexTtl);
-      samples.push({ probeId: prb, resolver, platform: s.platform, target: s.target, vips: s.vips, apexTtl: s.apexTtl, edgeTtl: s.edgeTtl, observedAt: iso(e.time ?? when) });
+      resolvers.add(key);
+      if (pub) publicResolvers.add(key);
+      // Headline aggregates (platform / pool / TTL) reflect the ISP's OWN resolvers only.
+      if (!pub) {
+        if (s.platform) inc(platforms, s.platform);
+        for (const v of s.vips) if (/^\d+\.\d+\.\d+\.\d+$/.test(v)) inc(pools, vipPrefix(v));
+        if (s.edgeTtl !== null) edgeTtls.push(s.edgeTtl);
+        if (s.apexTtl !== null) apexTtls.push(s.apexTtl);
+      }
+      samples.push({ probeId: prb, resolver, public: pub, platform: s.platform, target: s.target, vips: s.vips, apexTtl: s.apexTtl, edgeTtl: s.edgeTtl, observedAt: iso(e.time ?? when) });
     }
   }
 
@@ -68,6 +75,7 @@ export function buildIspView(m: AtlasIspMeasurement, results: AtlasResult[], hon
   return {
     isp: m.isp, asn: m.asn, measurementId: m.measurementId, covered: true,
     probeCount: probes.size, resolverCount: resolvers.size,
+    ispResolverCount: resolvers.size - publicResolvers.size, publicResolverCount: publicResolvers.size,
     platforms, pools,
     edgeTtl: edge, apexTtl: range(apexTtls),
     honoursLowTtl: edge ? edge.max <= honourTtlThreshold : null,

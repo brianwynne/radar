@@ -4,7 +4,7 @@ import { describe, it, expect } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
-import { loadAtlasConfig } from '../src/atlas/index.js';
+import { createAtlasManager, loadAtlasConfig } from '../src/atlas/index.js';
 import { MockAtlasManager } from '../src/atlas/mock.js';
 import type { ResolverManager, ResolverSnapshot } from '../src/atlas/index.js';
 
@@ -69,6 +69,16 @@ describe('resolver-reader route', () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().checks.length).toBeGreaterThan(0);
     await eng.close();
+  });
+
+  it('NEVER shows mock: the default (disabled) manager returns an honest empty state', async () => {
+    const disabled = createAtlasManager(loadAtlasConfig({})); // ATLAS_ENABLED unset → disabled
+    const a = await app('NOC_VIEWER', disabled);
+    const body = (await a.inject({ url: '/api/v1/network/resolvers' })).json() as ResolverSnapshot;
+    expect(body.provenance.source).toBe('disabled');
+    expect(body.provenance.synthetic).toBe(false); // not synthetic — just not connected
+    expect(body.isps).toEqual([]);
+    await a.close();
   });
 
   it('polling toggle is engineer-gated and flips the flag', async () => {

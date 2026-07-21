@@ -1,7 +1,7 @@
 // DNS abuf decoder — fixtures are REAL RIPE Atlas responses captured from Irish ISP resolvers
 // resolving live.rte.ie (measurement 192116677).
 import { describe, it, expect } from 'vitest';
-import { parseDnsAbuf, summarizeChain } from '../src/atlas/decode.js';
+import { isPublicResolver, parseDnsAbuf, summarizeChain } from '../src/atlas/decode.js';
 
 // Eir probe 27252, resolver serving a cached answer: live.rte.ie → livebase → liveedge → 4× A
 // (185.54.105.x). TTLs as served: apex CNAME 88, livebase CNAME 53, A 27.
@@ -25,6 +25,11 @@ describe('parseDnsAbuf + summarizeChain', () => {
     expect(s.edgeTtl).toBe(27); // the low liveedge A TTL — the "did they honour it" number
     expect(s.minTtl).toBe(27);
     expect(s.vips).toContain('185.54.105.0');
+  });
+
+  it('flags well-known public resolvers (Google/Quad9/NextDNS/…) vs ISP-own', () => {
+    for (const p of ['8.8.8.8', '9.9.9.9', '1.1.1.1', '45.90.28.210', '149.112.112.112']) expect(isPublicResolver(p)).toBe(true);
+    for (const own of ['86.54.11.100', '89.101.251.230', '192.168.1.1', '10.0.16.2']) expect(isPublicResolver(own)).toBe(false);
   });
 
   it('malformed input → empty, never throws', () => {

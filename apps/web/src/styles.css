@@ -419,3 +419,4 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-samples { list-style: none; margin: 0.3rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.76rem; }
 .rv-samples li { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
 .rv-resolver { min-width: 8rem; }
+.rv-samples li.rv-public { opacity: 0.65; }

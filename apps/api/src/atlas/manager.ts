@@ -26,6 +26,9 @@ const dnsDefinition = (target: string, description: string, interval?: number) =
 export class HttpAtlasManager implements ResolverManager {
   private enabled: boolean;
   private measurements: AtlasIspMeasurement[];
+  /** The last on-demand check — used to seed the baseline before the recurring measurements warm
+   *  up (a recurring measurement's first result can lag its interval). REAL data, never mock. */
+  private lastCheck: ResolverSnapshot | null = null;
   constructor(private readonly cfg: AtlasConfig, private readonly fetchImpl: typeof fetch = fetch) {
     this.enabled = true;
     this.measurements = cfg.measurements.map((m) => ({ ...m }));
@@ -72,6 +75,12 @@ export class HttpAtlasManager implements ResolverManager {
   async snapshot(): Promise<ResolverSnapshot> {
     const warnings: string[] = [];
     const { isps, observedAt } = await this.build(this.measurements, warnings);
+    const hasData = isps.some((i) => i.covered && i.samples.length > 0);
+    // Recurring baseline not warmed yet → fall back to the last real on-demand check (never mock).
+    if (!hasData && this.lastCheck) {
+      return { ...this.lastCheck, warnings: [...this.lastCheck.warnings, 'Recurring baseline not warmed yet — showing the last on-demand check.'], pollingEnabled: this.enabled };
+    }
+    if (!hasData) warnings.push('Recurring measurements are scheduled but have not reported yet — use “Check resolvers now” for immediate data.');
     return { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, retrievedAt: new Date().toISOString() }, isps, observedAt, target: this.cfg.target, warnings, pollingEnabled: this.enabled };
   }
 
@@ -96,7 +105,9 @@ export class HttpAtlasManager implements ResolverManager {
     for (const m of this.cfg.measurements) if (m.measurementId === null && !measurements.some((x) => x.isp === m.isp)) measurements.push({ ...m });
     const { isps, observedAt } = await this.build(measurements, warnings);
     const pending = isps.some((i) => i.covered && i.samples.length === 0);
-    return { snapshot: { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, notice: 'On-demand check', retrievedAt: new Date().toISOString() }, isps, observedAt, target: this.cfg.target, warnings, pollingEnabled: this.enabled }, pending };
+    const snapshot: ResolverSnapshot = { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, notice: 'On-demand check', retrievedAt: new Date().toISOString() }, isps, observedAt, target: this.cfg.target, warnings, pollingEnabled: this.enabled };
+    if (isps.some((i) => i.covered && i.samples.length > 0)) this.lastCheck = snapshot; // seed the baseline with real data
+    return { snapshot, pending };
   }
 
   async setPolling(enabled: boolean): Promise<{ pollingEnabled: boolean }> {
@@ -111,4 +122,18 @@ export class HttpAtlasManager implements ResolverManager {
     this.enabled = enabled;
     return { pollingEnabled: this.enabled };
   }
+}
+
+/** Not-connected manager — the resolver reader shows an honest empty state, NEVER synthetic data.
+ *  Used whenever the RIPE Atlas connector is not live (disabled / no key). */
+export class DisabledResolverManager implements ResolverManager {
+  constructor(private readonly target: string) {}
+  pollingEnabled() { return false; }
+  private empty(): ResolverSnapshot {
+    return { provenance: { source: 'disabled', synthetic: false, readOnly: true, informationalOnly: true, notice: 'RIPE Atlas resolver reader is not connected — enable it (ATLAS_ENABLED + live mode + key) to read live measurements.', retrievedAt: new Date().toISOString() }, isps: [], observedAt: null, target: this.target, warnings: [], pollingEnabled: false };
+  }
+  async snapshot() { return this.empty(); }
+  async checkNow() { return { checks: [], startedAt: new Date().toISOString() }; }
+  async checkResults() { return { snapshot: this.empty(), pending: false }; }
+  async setPolling() { return { pollingEnabled: false }; }
 }

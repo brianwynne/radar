@@ -14,8 +14,10 @@ export interface AtlasProvenance {
 /** One resolver's answer (a probe may use several resolvers → several of these). */
 export interface ResolverSample {
   probeId: number;
-  /** The resolver the probe queried (its ISP resolver). */
+  /** The resolver the probe queried. */
   resolver: string;
+  /** True when `resolver` is a well-known PUBLIC resolver (Google/Quad9/…), not the ISP's own. */
+  public: boolean;
   platform: string | null;
   target: string | null;
   vips: string[];
@@ -34,7 +36,11 @@ export interface ResolverIspView {
   note?: string;
   probeCount: number;
   resolverCount: number;
-  /** platform → number of resolvers landing on it. */
+  /** Of `resolverCount`, how many are the ISP's own vs well-known public resolvers. The headline
+   *  aggregates below (platforms/pools/TTL) are computed from the ISP's OWN resolvers. */
+  ispResolverCount: number;
+  publicResolverCount: number;
+  /** platform → number of the ISP's own resolvers landing on it. */
   platforms: Record<string, number>;
   /** VIP /24 (e.g. "185.54.104") → count — surfaces the Cloudflare CW/PW pool split. */
   pools: Record<string, number>;

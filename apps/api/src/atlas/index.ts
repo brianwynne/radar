@@ -1,7 +1,7 @@
 import type { AtlasConfig } from './config.js';
 import { DisabledAtlasClient, HttpAtlasClient, type AtlasResolverClient } from './client.js';
-import { HttpAtlasManager, type ResolverManager } from './manager.js';
-import { MockAtlasClient, MockAtlasManager } from './mock.js';
+import { DisabledResolverManager, HttpAtlasManager, type ResolverManager } from './manager.js';
+import { MockAtlasClient } from './mock.js';
 
 export { loadAtlasConfig } from './config.js';
 export type { AtlasConfig } from './config.js';
@@ -16,8 +16,9 @@ export function createAtlasClient(cfg: AtlasConfig): AtlasResolverClient {
   return new HttpAtlasClient(cfg);
 }
 
-/** Build the resolver-reader manager (baseline + check-now + polling switch). */
+/** Build the resolver-reader manager (baseline + check-now + polling switch). NEVER returns mock in
+ *  the running path — when not live, a disabled manager shows an honest "not connected" state. */
 export function createAtlasManager(cfg: AtlasConfig): ResolverManager {
   if (cfg.mode === 'live' && cfg.enabled) return new HttpAtlasManager(cfg);
-  return new MockAtlasManager(cfg);
+  return new DisabledResolverManager(cfg.target);
 }

@@ -34,7 +34,7 @@ function IspCard({ v }: { v: ResolverIspView }) {
     <div className="rv-card">
       <div className="rv-head">
         <span className="rv-isp">{v.isp}</span><span className="rv-asn">AS{v.asn}</span>
-        <span className="rv-count muted">{v.resolverCount} resolvers · {v.probeCount} probes</span>
+        <span className="rv-count muted">{v.ispResolverCount} ISP resolvers{v.publicResolverCount > 0 ? ` · ${v.publicResolverCount} public` : ''} · {v.probeCount} probes</span>
       </div>
       <div className="rv-platforms">
         {platforms.map(([p, n]) => (
@@ -60,8 +60,9 @@ function IspCard({ v }: { v: ResolverIspView }) {
           {open && (
             <ul className="rv-samples">
               {v.samples.map((s, i) => (
-                <li key={`${s.probeId}-${i}`}>
+                <li key={`${s.probeId}-${i}`} className={s.public ? 'rv-public' : ''}>
                   <span className="mono rv-resolver">{s.resolver}</span>
+                  {s.public && <span className="badge neutral badge-sm" title="A public resolver the probe uses — not the ISP's own">public</span>}
                   <span className="platform-dot" style={{ background: colorFor(s.platform ?? 'Unclassified') }} />{s.platform ?? '?'}
                   <span className="muted mono">{s.target}</span>
                   <span className="muted mono">apex {s.apexTtl ?? '?'}s · edge {s.edgeTtl ?? '?'}s</span>
@@ -157,9 +158,13 @@ export function ResolverView() {
       {error && <div className="notice danger">{error}</div>}
       {snap.warnings.map((w, i) => <div key={i} className="notice warn">{w}</div>)}
 
-      <div className="rv-grid">
-        {snap.isps.map((v) => <IspCard key={v.isp} v={v} />)}
-      </div>
+      {snap.isps.length === 0 ? (
+        <div className="notice info">{snap.provenance.notice ?? 'No resolver data — the RIPE Atlas connector is not connected.'}{canManage && ' Turn on 6h polling or run a check to populate it.'}</div>
+      ) : (
+        <div className="rv-grid">
+          {snap.isps.map((v) => <IspCard key={v.isp} v={v} />)}
+        </div>
+      )}
     </div>
   );
 }

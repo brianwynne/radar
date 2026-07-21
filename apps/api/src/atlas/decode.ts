@@ -113,6 +113,23 @@ const platformOf = (host: string): string | null => {
   return null;
 };
 
+// Well-known PUBLIC recursive resolvers a probe may be configured with. Answers via these reflect
+// the public resolver, NOT the ISP's own — so they are flagged and excluded from the ISP headline.
+const PUBLIC_RESOLVERS = new Set([
+  '8.8.8.8', '8.8.4.4', // Google
+  '1.1.1.1', '1.0.0.1', '1.1.1.2', '1.0.0.2', // Cloudflare
+  '9.9.9.9', '9.9.9.10', '9.9.9.11', '149.112.112.112', // Quad9
+  '208.67.222.222', '208.67.220.220', // OpenDNS
+  '94.140.14.14', '94.140.15.15', // AdGuard
+  '76.76.2.0', '76.76.10.0', // ControlD
+]);
+const PUBLIC_PREFIXES = ['45.90.28.', '45.90.30.', '149.112.', '2001:4860:4860', '2606:4700:4700', '2620:fe::'];
+export function isPublicResolver(addr: string): boolean {
+  if (!addr) return false;
+  if (PUBLIC_RESOLVERS.has(addr)) return true;
+  return PUBLIC_PREFIXES.some((p) => addr.startsWith(p));
+}
+
 /** Summarise a decoded chain into platform + the TTLs we care about. */
 export function summarizeChain(rrs: DnsRR[]): ChainSummary {
   const hops = rrs
