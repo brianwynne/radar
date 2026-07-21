@@ -16,6 +16,8 @@ describe('NS1 Explorer — discovery & selection', () => {
     expect(await screen.findByText('Records in rte.ie')).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /live\.rte\.ie/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /vod\.rte\.ie/ })).toBeInTheDocument();
+    // Only CNAME records are listed — the A record is hidden.
+    expect(screen.queryByRole('button', { name: /edge\.rte\.ie/ })).not.toBeInTheDocument();
   });
 
   it('renders the record addressed by the URL and tracks it as recent', async () => {

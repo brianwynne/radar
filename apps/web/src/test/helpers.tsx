@@ -118,8 +118,9 @@ export function makeExplain(req: ReqBody): ExplainResponse {
 export const ZONE_BODY = {
   zone: 'rte.ie',
   records: [
-    { domain: 'live.rte.ie', type: 'A', ttl: 300 },
-    { domain: 'vod.rte.ie', type: 'A', ttl: 30 },
+    { domain: 'live.rte.ie', type: 'CNAME', ttl: 300 },
+    { domain: 'vod.rte.ie', type: 'CNAME', ttl: 30 },
+    { domain: 'edge.rte.ie', type: 'A', ttl: 30 }, // an A record — should be HIDDEN by the CNAME-only filter
   ],
 };
 export const RECORD_BODY = { id: 'demo', zone: 'rte.ie', domain: 'live.rte.ie', type: 'A', ttl: 30, use_client_subnet: true, answers: [{ id: 'ans-realta', answer: ['192.0.2.10'] }], filters: [{ filter: 'up' }] };

@@ -39,7 +39,8 @@ function extractRecords(zone: Record<string, unknown>): RecordSummary[] {
   const raw = Array.isArray(zone.records) ? zone.records : [];
   return raw
     .map((r) => r as { domain?: string; type?: string; ttl?: unknown })
-    .filter((r) => r.domain && r.type)
+    // The Explorer focuses on the steering chain — only CNAME records are shown.
+    .filter((r) => r.domain && r.type && String(r.type).toUpperCase() === 'CNAME')
     .map((r) => ({ domain: r.domain as string, type: r.type as string, ttl: typeof r.ttl === 'number' ? r.ttl : undefined }));
 }
 
