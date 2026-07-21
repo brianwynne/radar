@@ -206,7 +206,7 @@ export function RealtaCacheLb() {
                 </div>
                 <div style={{ marginTop: '0.4rem' }}><span className="chip">{lb.steeringPolicy}</span>{lb.locationStrategy && <span className="muted"> · {lb.locationStrategy}</span>}</div>
                 <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>Steers across</div>
-                <div>{poolChips(lb)}</div>
+                <div className="chip-wrap">{poolChips(lb)}</div>
                 <div className="muted" style={{ fontSize: '0.72rem', marginTop: '0.4rem' }}>
                   {lb.observed ? `${lb.observed.totalRequests.toLocaleString()} reqs (1h)` : 'no observed traffic'} · fallback {lb.fallbackPool?.poolName ?? lb.fallbackPool?.poolId.slice(0, 8) ?? '—'}{lbRtt(lb) !== null ? ` · ${lbRtt(lb)} ms` : ''}
                 </div>
@@ -293,8 +293,7 @@ export function RealtaCacheLb() {
                     {policyDetail && <div className="muted" style={{ fontSize: '0.72rem' }}>{policyDetail}</div>}
                   </td>
                   <td>
-                    {poolChips(lb)}
-                    {Object.keys(lb.regionPools).length > 0 && <span className="muted"> · +region overrides</span>}
+                    <div className="chip-wrap">{poolChips(lb)}{Object.keys(lb.regionPools).length > 0 && <span className="muted">+region overrides</span>}</div>
                   </td>
                   <td className="muted">{lb.fallbackPool?.poolName ?? lb.fallbackPool?.poolId.slice(0, 8) ?? '—'}</td>
                   <td title={lbRttTitle(lb)}>{lbRtt(lb) !== null ? `${lbRtt(lb)} ms` : '—'}</td>
