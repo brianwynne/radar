@@ -77,7 +77,7 @@ export function loadAtlasConfig(env: NodeJS.ProcessEnv = process.env): AtlasConf
     try {
       raw = JSON.parse(p.ATLAS_MEASUREMENTS);
     } catch (err) {
-      throw new Error(`RIPE Atlas configuration: ATLAS_MEASUREMENTS is not valid JSON: ${err instanceof Error ? err.message : 'parse error'}`);
+      throw new Error(`RIPE Atlas configuration: ATLAS_MEASUREMENTS is not valid JSON: ${err instanceof Error ? err.message : 'parse error'}`, { cause: err });
     }
     const m = measurementSchema.safeParse(raw);
     if (!m.success) throw new Error(`RIPE Atlas configuration: invalid ATLAS_MEASUREMENTS: ${m.error.issues.map((i) => i.message).join('; ')}`);
