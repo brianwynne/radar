@@ -81,10 +81,15 @@ function IspCard({ v, target }: { v: ResolverIspView; target: string }) {
           <span className="rv-hop-role">NS1 record · steering</span>
           <span className="rv-hop-ttl mono">{ttlRange(v.recordTtl)}</span>
           <span className="rv-hop-badges">
-            {honourBadge(honRecord)}
+            {/* The steering-window badge already encodes honouring (a longer hold = a bigger window),
+                so only flag the record when a resolver actually INFLATES it — never a redundant "honoured". */}
+            {honRecord === false && honourBadge(false)}
             {v.steeringImpeded !== null && (
-              <span className={`badge badge-sm ${v.steeringImpeded ? 'warn' : 'ok'}`}>
-                {v.steeringImpeded ? `frozen ~${v.steeringWindowSecs}s` : `re-steers ≤${v.steeringWindowSecs}s`}
+              <span className={`badge badge-sm ${v.steeringImpeded ? 'warn' : 'ok'}`}
+                title={v.steeringImpeded
+                  ? `Resolvers hold this steering decision for up to ${v.steeringWindowSecs}s (RTÉ's published TTL) — NS1 can't re-steer within that. Lower the record TTL for faster steering.`
+                  : `Resolvers re-fetch within ${v.steeringWindowSecs}s, so NS1 can re-steer quickly.`}>
+                {v.steeringImpeded ? `steering held ~${v.steeringWindowSecs}s` : `re-steers ≤${v.steeringWindowSecs}s`}
               </span>
             )}
           </span>

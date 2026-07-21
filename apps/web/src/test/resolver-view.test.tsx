@@ -16,8 +16,10 @@ describe('Resolver reader tab', () => {
     stubApi(NOC);
     await openResolvers();
     expect(screen.getByText(/Réalta 100%/)).toBeInTheDocument();
-    // Chain hops (live.rte.ie apex, NS1 record, liveedge) each carry a TTL honoured/not-honoured badge.
-    expect(screen.getAllByText('TTL honoured').length).toBeGreaterThanOrEqual(3);
+    // Apex (live.rte.ie) + edge carry a TTL honoured badge; the record shows the steering-window badge
+    // (not a redundant "honoured"), so exactly two honoured badges appear in the chain.
+    expect(screen.getAllByText('TTL honoured').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/steering held/i)).toBeInTheDocument(); // record's steering-window badge
     expect(screen.getByText(/185\.54\.104/)).toBeInTheDocument(); // CW/PW pool split visible
     expect(screen.getByText(/No RIPE Atlas probe coverage/i)).toBeInTheDocument(); // Three gap
   });
