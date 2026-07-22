@@ -223,6 +223,8 @@ describe('Live Steering', () => {
     expect(await screen.findByText(/TTL lever/i)).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: /Set TTL 30s/i }));
     expect(await screen.findByText(/R_max now ≈ 3\.00/i)).toBeInTheDocument(); // 90/30 = 3.00 %/s
+    // Drain bar: the old 180s cache generation must expire before the 30s is valid everywhere.
+    expect(await screen.findByText(/Old 180s caches draining/i)).toBeInTheDocument();
     // It writes via the guarded create/apply path, scoped to the livetest candidate, TTL 30, CNAME only.
     const applyCall = (fetch as unknown as Mock).mock.calls.find((c: unknown[]) => String(c[0]).includes('/ns1/records/apply'));
     expect(applyCall).toBeTruthy();

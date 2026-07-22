@@ -52,15 +52,41 @@ export function ShedSignals() {
   const [ttlBusy, setTtlBusy] = useState<number | null>(null);
   const [ttlMsg, setTtlMsg] = useState<string | null>(null);
   const [ttlErr, setTtlErr] = useState<string | null>(null);
+  const [currentTtl, setCurrentTtl] = useState<number | null>(null);
+  // After a TTL change, the OLD cached generation keeps being served until it expires — up to the OLD
+  // TTL. `drain` tracks that window so we can show when the new TTL is valid everywhere.
+  const [drain, setDrain] = useState<{ newTtl: number; oldTtl: number; at: number } | null>(null);
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
   // Keep the freshest watermark map available to the poll without re-subscribing.
   const wmSeeded = useRef(false);
 
+  // Read the candidate's current TTL so the first drain window uses the real prior value.
+  useEffect(() => {
+    if (!canWrite) return;
+    let alive = true;
+    api.record(TTL_ZONE, TTL_DOMAIN, 'CNAME')
+      .then((r) => { const t = Number((r.record as { ttl?: unknown } | undefined)?.ttl); if (alive && Number.isFinite(t)) setCurrentTtl(t); })
+      .catch(() => { /* record may not exist yet */ });
+    return () => { alive = false; };
+  }, [canWrite]);
+
+  // Tick once a second only while a drain window is open, to advance the progress bar.
+  useEffect(() => {
+    if (!drain) return;
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [drain]);
+
   // Flip the livetest candidate's TTL via the guarded write path (create/apply upserts the record).
   async function applyTtl(ttl: number) {
-    setTtlBusy(ttl); setTtlMsg(null); setTtlErr(null);
+    setTtlBusy(ttl); setTtlErr(null);
+    const oldTtl = currentTtl ?? (ttl === 30 ? 180 : 30); // best guess if we couldn't read it
     try {
       await api.recordApply({ zone: TTL_ZONE, domain: TTL_DOMAIN, type: 'CNAME', answers: [TTL_TARGET], ttl });
+      setCurrentTtl(ttl);
       setTtlMsg(`${TTL_DOMAIN} → TTL ${ttl}s. R_max now ≈ ${(90 / ttl).toFixed(2)} %/s.`);
+      setDrain({ newTtl: ttl, oldTtl, at: Date.now() });
+      setNowMs(Date.now());
     } catch (e) {
       setTtlErr(e instanceof ApiError ? `${e.code}: ${e.message}` : 'TTL change failed.');
     } finally {
@@ -117,6 +143,19 @@ export function ShedSignals() {
   };
   const dirty = data.defaultWatermarks.some((d) => { const c = wm[d.id]; return !!c && (c.low !== d.low || c.high !== d.high); });
 
+  // Progress of the old-TTL cache draining after a change (100% ⇒ the new TTL is valid everywhere).
+  const drainInfo = drain
+    ? (() => {
+        const elapsed = Math.max(0, (nowMs - drain.at) / 1000);
+        return {
+          pct: Math.min(100, (elapsed / drain.oldTtl) * 100),
+          remaining: Math.max(0, Math.ceil(drain.oldTtl - elapsed)),
+          done: elapsed >= drain.oldTtl,
+          validFrom: new Date(drain.at + drain.oldTtl * 1000).toLocaleTimeString(),
+        };
+      })()
+    : null;
+
   return (
     <div className="shed-signals">
       <div className="section-head" style={{ alignItems: 'baseline', gap: '0.75rem' }}>
@@ -147,6 +186,18 @@ export function ShedSignals() {
           <button className="ghost" disabled={ttlBusy !== null} onClick={() => applyTtl(180)}>{ttlBusy === 180 ? 'Reverting…' : 'Revert to 180s'}</button>
           {ttlMsg && <span className="mono" style={{ color: 'var(--ok)', flexBasis: '100%' }}>{ttlMsg}</span>}
           {ttlErr && <span className="mono" style={{ color: 'var(--danger)', flexBasis: '100%' }}>{ttlErr}</span>}
+          {drain && drainInfo && (
+            <div style={{ flexBasis: '100%' }}>
+              <div className="ttl-drain-wrap">
+                <div className={`ttl-drain-bar${drainInfo.done ? ' done' : ''}`} style={{ width: `${drainInfo.pct}%` }} />
+              </div>
+              <div className="mono muted" style={{ fontSize: '0.72rem', marginTop: '0.25rem' }}>
+                {drainInfo.done
+                  ? `✓ ${drain.newTtl}s TTL now in effect everywhere — the old ${drain.oldTtl}s caches have drained.`
+                  : `Old ${drain.oldTtl}s caches draining — ${drain.newTtl}s TTL valid everywhere in ${drainInfo.remaining}s (≈ ${drainInfo.validFrom}). Resolvers cached before the change still serve the old TTL until then.`}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

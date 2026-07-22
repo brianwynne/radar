@@ -517,3 +517,8 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .shed-slider { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; }
 .shed-slider input[type="range"] { flex: 1; min-width: 5rem; }
 .table-scroll { overflow-x: auto; }
+
+/* TTL drain progress — old cache generation expiring after a TTL change */
+.ttl-drain-wrap { height: 8px; border-radius: 4px; background: rgba(16,24,40,0.08); overflow: hidden; }
+.ttl-drain-bar { height: 100%; background: var(--warn); transition: width 1s linear; }
+.ttl-drain-bar.done { background: var(--ok); }
