@@ -263,12 +263,13 @@ describe('Live Steering', () => {
     await userEvent.click(screen.getByRole('tab', { name: /DC balancer/i }));
     expect((await screen.findAllByText('Citywest')).length).toBeGreaterThan(0); // pool name + site column
     expect(screen.getByText('Mam')).toBeInTheDocument();
-    // Capacity = healthy caches × per-cache Gb/s: CW 4×80=320, PW 320, Mam 2×20=40, Dad 1×20=20 (a cache down). Total 700.
+    // Relative capacity (healthy caches × per-cache): CW 4×200=800, PW 800, Mam 2×50=100, Dad 1×50=50. Total 1750.
     const cwRow = screen.getAllByText('Citywest')[0].closest('tr')!;
-    expect(within(cwRow).getByText(/320 G/)).toBeInTheDocument();
-    expect(within(cwRow).getByText(/46%/)).toBeInTheDocument(); // 320/700 = 45.7% recommended
-    const dadRow = screen.getByText('Dad').closest('tr')!;
-    expect(within(dadRow).getByText('1/2')).toBeInTheDocument(); // one Donnybrook cache down
+    expect(within(cwRow).getByText(/46%/)).toBeInTheDocument(); // recommended = 800/1750 = 45.7% capacity share
+    // Mam carries 12% of load on 5.7% of capacity → balance index ≈ 2.1× (over-subscribed).
+    const mamRow = screen.getByText('Mam').closest('tr')!;
+    expect(within(mamRow).getByText(/2\.1\d×/)).toBeInTheDocument();
+    const dadRow = screen.getByText('1/2').closest('tr')!; // unique to Dad (one Donnybrook cache down)
     expect(within(dadRow).getByText(/degraded/i)).toBeInTheDocument();
   });
 

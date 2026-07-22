@@ -18,20 +18,20 @@ export interface BalancePoolPolicy {
   site: string;
   /** Substrings that identify this pool on a Cloudflare pool name (case-insensitive). */
   match: string[];
-  /** Physical caches in the pool. */
+  /** Physical caches in the pool (used only so a failed cache proportionally lowers relative capacity). */
   caches: number;
-  /** Per-cache throughput estimate (Gb/s) — Donnybrook (Mam/Dad) caches are much smaller than the
-   *  Citywest/Parkwest ones. ESTIMATE: operator-tunable; capacity = caches × this. */
+  /** Per-cache RELATIVE capacity — only the RATIO between pools matters, never the absolute value.
+   *  caches × this = the pool's relative capacity. */
   cacheGbps: number;
 }
 
-// Default pool policy. Capacities are ESTIMATES (edit per real cache specs). CW/PW: 4 high-perf caches
-// (~80 Gb/s each); Mam/Dad: 2 lower-perf Donnybrook caches.
+// Default pool policy. Only the RELATIVE capacity matters: Citywest/Parkwest ≈ 800 each, Mam/Dad ≈ 100
+// each (an 8:1 ratio). Expressed as caches × per-cache so a failed cache drops the pool's capacity.
 export const BALANCE_POOLS: readonly BalancePoolPolicy[] = [
-  { id: 'citywest', name: 'Citywest', site: 'Citywest', match: ['citywest', 'cw'], caches: 4, cacheGbps: 80 },
-  { id: 'parkwest', name: 'Parkwest', site: 'Parkwest', match: ['parkwest', 'pw'], caches: 4, cacheGbps: 80 },
-  { id: 'mam', name: 'Mam', site: 'Donnybrook', match: ['mam'], caches: 2, cacheGbps: 20 },
-  { id: 'dad', name: 'Dad', site: 'Donnybrook', match: ['dad'], caches: 2, cacheGbps: 20 },
+  { id: 'citywest', name: 'Citywest', site: 'Citywest', match: ['citywest', 'cw'], caches: 4, cacheGbps: 200 }, // ≈ 800
+  { id: 'parkwest', name: 'Parkwest', site: 'Parkwest', match: ['parkwest', 'pw'], caches: 4, cacheGbps: 200 }, // ≈ 800
+  { id: 'mam', name: 'Mam', site: 'Donnybrook', match: ['mam'], caches: 2, cacheGbps: 50 }, // ≈ 100
+  { id: 'dad', name: 'Dad', site: 'Donnybrook', match: ['dad'], caches: 2, cacheGbps: 50 }, // ≈ 100
 ];
 
 export interface BalancePool {
