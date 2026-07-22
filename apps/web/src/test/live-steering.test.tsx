@@ -149,6 +149,29 @@ const SHED = {
   ],
 };
 
+const CF_LBS = {
+  items: [{
+    id: 'lb-live', name: 'liveedge.rte.ie', zoneName: 'rte.ie', enabled: true, proxied: false, steeringPolicy: 'random',
+    defaultPools: [
+      { poolId: 'p-cw', poolName: 'realta-citywest', weight: 0.25 },
+      { poolId: 'p-pw', poolName: 'realta-parkwest', weight: 0.25 },
+      { poolId: 'p-mam', poolName: 'realta-mam', weight: 0.25 },
+      { poolId: 'p-dad', poolName: 'realta-dad', weight: 0.25 },
+    ],
+    fallbackPool: null, regionPools: {}, popPools: {}, countryPools: {},
+    sessionAffinity: null, sessionAffinityTtl: null, sessionAffinityAttributes: null,
+    locationStrategy: null, adaptiveRoutingFailoverAcrossPools: null, randomSteeringDefaultWeight: 1, ttlSeconds: 30,
+    observed: { windowHours: 1, totalRequests: 1000, byRegion: [], byColo: [], byOrigin: [], byPool: [
+      { key: 'realta-citywest', requests: 500, sharePercent: 50 },
+      { key: 'realta-parkwest', requests: 300, sharePercent: 30 },
+      { key: 'realta-mam', requests: 120, sharePercent: 12 },
+      { key: 'realta-dad', requests: 80, sharePercent: 8 },
+    ] },
+  }],
+};
+const cfPool = (id: string, name: string, healthy: number, total: number) => ({ id, name, description: null, enabled: true, healthy: true, monitorId: null, healthCheck: null, minimumOrigins: null, origins: [], healthyOrigins: healthy, totalOrigins: total, originSteeringPolicy: null, loadShedding: null, checkRegions: [], notificationEmail: null });
+const CF_POOLS = { items: [cfPool('p-cw', 'realta-citywest', 4, 4), cfPool('p-pw', 'realta-parkwest', 4, 4), cfPool('p-mam', 'realta-mam', 2, 2), cfPool('p-dad', 'realta-dad', 1, 2)] };
+
 function stub(principal: Principal, opts: StubOpts = {}) {
   let eventsCall = 0;
   let dnsRuns = 0;
@@ -182,6 +205,8 @@ function stub(principal: Principal, opts: StubOpts = {}) {
         return j({ provenance: CONFIG.provenance, count: items.length, items });
       }
       if (p.endsWith('/live-steering/shed-signals')) return j(SHED);
+      if (p.endsWith('/network/cloudflare/load-balancers')) return j(CF_LBS);
+      if (p.endsWith('/network/cloudflare/pools')) return j(CF_POOLS);
       return j({});
     }),
   );
@@ -229,6 +254,22 @@ describe('Live Steering', () => {
     const applyCall = (fetch as unknown as Mock).mock.calls.find((c: unknown[]) => String(c[0]).includes('/ns1/records/apply'));
     expect(applyCall).toBeTruthy();
     expect(JSON.parse(String((applyCall![1] as RequestInit).body))).toMatchObject({ zone: 'livetest.rte.ie', domain: 'shed.livetest.rte.ie', type: 'CNAME', ttl: 30 });
+  });
+
+  it('DC balancer tab: shows the four pools with capacity-proportional recommended weights', async () => {
+    stub(VE); // topology.summary.read is enough to read Cloudflare
+    renderAt('/live-steering');
+    await screen.findByText('Current Expected DNS Steering');
+    await userEvent.click(screen.getByRole('tab', { name: /DC balancer/i }));
+    expect((await screen.findAllByText('Citywest')).length).toBeGreaterThan(0); // pool name + site column
+    expect(screen.getByText('Mam')).toBeInTheDocument();
+    // Capacity = healthy caches × per-cache Gb/s: CW 4×80=320, PW 320, Mam 2×20=40, Dad 1×20=20 (a cache down). Total 700.
+    const cwRow = screen.getAllByText('Citywest')[0].closest('tr')!;
+    expect(within(cwRow).getByText(/320 G/)).toBeInTheDocument();
+    expect(within(cwRow).getByText(/46%/)).toBeInTheDocument(); // 320/700 = 45.7% recommended
+    const dadRow = screen.getByText('Dad').closest('tr')!;
+    expect(within(dadRow).getByText('1/2')).toBeInTheDocument(); // one Donnybrook cache down
+    expect(within(dadRow).getByText(/degraded/i)).toBeInTheDocument();
   });
 
   it('Shed signals: the TTL lever is hidden without the write permission', async () => {

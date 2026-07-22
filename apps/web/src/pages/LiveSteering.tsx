@@ -18,6 +18,7 @@ import { PathTelemetryInline } from '../telemetry/NetworkPathTelemetry';
 import { RealtaDeliveryContext } from '../telemetry/CacheTelemetry';
 import { DnsObservationTier } from '../telemetry/DnsObservationTier';
 import { ShedSignals } from '../features/ShedSignals';
+import { DcBalancer } from '../features/DcBalancer';
 import type { LiveSteeringConfig, LiveSteeringEvent, LiveSteeringState } from '../api/types';
 
 const DEFAULT_INTERVAL = 30;
@@ -55,7 +56,7 @@ export function LiveSteering() {
   const showDetail = hasPermission('ns1.detail.read');
   const canRunObservation = hasPermission('dns.observed.run');
   const reduceMotion = useMemo(prefersReducedMotion, []);
-  const [view, setView] = useState<'steering' | 'shed'>('steering');
+  const [view, setView] = useState<'steering' | 'shed' | 'balance'>('steering');
   const telemetry = useNetworkPaths(60_000); // read-only, informational; refreshed hourly-ish
   const cache = useCacheTelemetry({ refreshMs: 60_000 }); // Réalta pool + origin context
   const dnsObs = useDnsObservation({ refreshMs: 60_000 }); // Tier-2 observed DNS answer
@@ -220,9 +221,11 @@ export function LiveSteering() {
       <div className="rv-viewtoggle" role="tablist" style={{ marginBottom: '0.75rem' }}>
         <button role="tab" aria-selected={view === 'steering'} className={view === 'steering' ? 'on' : ''} onClick={() => setView('steering')}>Expected steering</button>
         <button role="tab" aria-selected={view === 'shed'} className={view === 'shed' ? 'on' : ''} onClick={() => setView('shed')}>Shed signals → NS1</button>
+        <button role="tab" aria-selected={view === 'balance'} className={view === 'balance' ? 'on' : ''} onClick={() => setView('balance')}>DC balancer → Cloudflare</button>
       </div>
 
       {view === 'shed' && <ShedSignals />}
+      {view === 'balance' && <DcBalancer />}
       {view === 'steering' && (<>
 
       {configError && <div className="notice danger">{configError}</div>}

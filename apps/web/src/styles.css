@@ -522,3 +522,6 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .ttl-drain-wrap { height: 8px; border-radius: 4px; background: rgba(16,24,40,0.08); overflow: hidden; }
 .ttl-drain-bar { height: 100%; background: var(--warn); transition: width 1s linear; }
 .ttl-drain-bar.done { background: var(--ok); }
+
+/* DC balancer inputs */
+.dc-inputs { display: flex; gap: 1.25rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 0.75rem; }
