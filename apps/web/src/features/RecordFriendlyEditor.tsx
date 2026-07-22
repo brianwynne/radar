@@ -91,7 +91,7 @@ export function RecordFriendlyEditor({ initial, onApply, onCancel }: { initial: 
           return (
             <div key={a.key} className="rfe-answer" style={{ borderLeftColor: colorFor(plat) }}>
               <div className="rfe-answer-row">
-                <label className="field" style={{ flex: '2 1 12rem' }}><span className="muted">Answer (value)</span><input value={a.value} onChange={(e) => upd(a.key, { value: e.target.value })} className="mono" placeholder="liveedge.rte.ie" /></label>
+                <label className="field" style={{ flex: '2 1 12rem' }}><span className="muted">Answer (value)</span><input value={a.value} onChange={(e) => upd(a.key, { value: e.target.value })} className="mono" placeholder="target.example.com" /></label>
                 <label className="field" style={{ flex: '0 0 6rem' }}><span className="muted">Weight</span><input value={a.weight} disabled={a.feedWeight} onChange={(e) => upd(a.key, { weight: e.target.value })} className="mono" placeholder={a.feedWeight ? 'feed' : '1'} /></label>
                 <span className="platform-dot" style={{ background: colorFor(plat) }} title={plat} />
                 <button className="linklike danger" title="Remove answer" onClick={() => removeAnswer(a.key)}>remove</button>
