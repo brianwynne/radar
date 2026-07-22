@@ -61,7 +61,7 @@ jobs:
           mkdir -p "$STAGE"
           # Runtime files only (built dist + production node_modules + web static + deploy).
           cp -a package.json package-lock.json node_modules "$STAGE/"
-          for p in packages/radar-data packages/radar-engine apps/api; do
+          for p in packages/radar-data packages/radar-engine packages/radar-shed apps/api; do
             mkdir -p "$STAGE/$p"; cp -a "$p/package.json" "$p/dist" "$STAGE/$p/"
           done
           cp -a packages/radar-data/migrations "$STAGE/packages/radar-data/"

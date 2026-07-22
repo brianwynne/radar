@@ -14,13 +14,15 @@ WORKDIR /repo
 COPY package.json package-lock.json ./
 COPY packages/radar-data/package.json packages/radar-data/
 COPY packages/radar-engine/package.json packages/radar-engine/
+COPY packages/radar-shed/package.json packages/radar-shed/
 COPY apps/api/package.json apps/api/
 RUN npm ci --no-audit --no-fund
 # Sources.
 COPY packages/radar-data packages/radar-data
 COPY packages/radar-engine packages/radar-engine
+COPY packages/radar-shed packages/radar-shed
 COPY apps/api apps/api
-RUN npm run build -w @radar/data && npm run build -w @radar/engine && npm run build -w @radar/api
+RUN npm run build -w @radar/data && npm run build -w @radar/engine && npm run build -w @radar/shed && npm run build -w @radar/api
 
 FROM node:22-alpine AS runtime
 WORKDIR /repo
@@ -28,12 +30,14 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY packages/radar-data/package.json packages/radar-data/
 COPY packages/radar-engine/package.json packages/radar-engine/
+COPY packages/radar-shed/package.json packages/radar-shed/
 COPY apps/api/package.json apps/api/
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 # Built output + migration SQL (resolved at runtime by @radar/data.loadMigrations()).
 COPY --from=build /repo/packages/radar-data/dist packages/radar-data/dist
 COPY packages/radar-data/migrations packages/radar-data/migrations
 COPY --from=build /repo/packages/radar-engine/dist packages/radar-engine/dist
+COPY --from=build /repo/packages/radar-shed/dist packages/radar-shed/dist
 COPY --from=build /repo/apps/api/dist apps/api/dist
 USER node
 WORKDIR /repo/apps/api
