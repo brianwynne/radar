@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { balanceForEqualUtilisation, BALANCE_POOLS, type BalancePool } from '@radar/shed';
 import { api, ApiError } from '../api/client';
-import type { CloudflareLoadBalancer, CloudflarePool, CloudflareSteeredPool } from '../api/types';
+import type { CloudflareLoadBalancer, CloudflarePool } from '../api/types';
 
 const matches = (name: string | null | undefined, subs: readonly string[]): boolean =>
   !!name && subs.some((s) => name.toLowerCase().includes(s));
@@ -29,67 +29,31 @@ export function DcBalancer() {
     return () => { alive = false; };
   }, []);
 
-  // EVERY steered-pool reference in an LB (weights live in random_steering.pool_weights and are resolved
-  // onto whichever list steers — default / region / pop / country — so we must look at all of them).
-  const allRefs = (x: CloudflareLoadBalancer): CloudflareSteeredPool[] => [
-    x.fallbackPool,
-    ...x.defaultPools,
-    ...Object.values(x.regionPools).flat(),
-    ...Object.values(x.popPools).flat(),
-    ...Object.values(x.countryPools).flat(),
-  ].filter((p): p is CloudflareSteeredPool => !!p);
-
-  const cfPoolByPolicy = (bp: { match: readonly string[] }) => pools.find((p) => matches(p.name, bp.match)) ?? null;
-
-  // The delivery LB = the one that references the most of the four policy pools (by id OR name), across
-  // ALL its steering lists — not just default pools.
+  // The delivery LB = the one whose pools best match the four policy pools.
   const lb = useMemo(() => {
     if (!lbs?.length) return null;
-    const score = (x: CloudflareLoadBalancer) => {
-      const refs = allRefs(x);
-      return BALANCE_POOLS.filter((bp) => {
-        const id = cfPoolByPolicy(bp)?.id;
-        return refs.some((r) => (id && r.poolId === id) || matches(r.poolName, bp.match));
-      }).length;
-    };
+    const score = (x: CloudflareLoadBalancer) => BALANCE_POOLS.filter((bp) => x.defaultPools.some((sp) => matches(sp.poolName, bp.match))).length;
     return [...lbs].sort((a, b) => score(b) - score(a))[0] ?? null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lbs, pools]);
+  }, [lbs]);
 
   const outcome = useMemo(() => {
-    const refs = lb ? allRefs(lb) : [];
-    // pool id → configured weight (from any reference; the resolver already reads pool_weights).
-    const weightById = new Map<string, number>();
-    for (const r of refs) if (r.weight !== null) weightById.set(r.poolId, r.weight);
-
-    const raw = BALANCE_POOLS.map((bp) => {
-      const cfPool = cfPoolByPolicy(bp);
-      const referenced = refs.some((r) => (cfPool && r.poolId === cfPool.id) || matches(r.poolName, bp.match));
-      // Configured weight for this pool, else the LB's random-steering default when the pool is in the LB
-      // but carries no explicit weight (Cloudflare then treats it as the equal default_weight).
-      const w = cfPool ? weightById.get(cfPool.id) : undefined;
-      const rawWeight = w ?? (referenced ? lb?.randomSteeringDefaultWeight ?? null : null);
+    const input: BalancePool[] = BALANCE_POOLS.map((bp) => {
+      // Current weight = the weight Cloudflare reports for this pool (same as the Load Balancing page).
+      const steered = lb?.defaultPools.find((sp) => matches(sp.poolName, bp.match)) ?? null;
+      const cfPool = pools.find((p) => matches(p.name, bp.match)) ?? null;
       const capacity = (cfPool ? cfPool.healthyOrigins : bp.caches) * bp.cacheGbps;
       const share = lb?.observed?.byPool.find((b) => matches(b.key, bp.match))?.sharePercent ?? null;
-      return { id: bp.id, name: bp.name, capacity, load: share, rawWeight };
+      return { id: bp.id, name: bp.name, capacity, load: share, currentWeight: steered?.weight ?? null };
     });
-    // Normalise the live weights to a SHARE so "Current" is directly comparable to "Recommended".
-    const totalRaw = raw.reduce((s, x) => s + (x.rawWeight ?? 0), 0);
-    const input: BalancePool[] = raw.map((x) => ({
-      id: x.id, name: x.name, capacity: x.capacity, load: x.load,
-      currentWeight: x.rawWeight !== null && totalRaw > 0 ? x.rawWeight / totalRaw : null,
-    }));
-    const matchedPools = raw.filter((x) => x.rawWeight !== null || x.load !== null).length;
-    return { result: balanceForEqualUtilisation(input), matchedPools };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return balanceForEqualUtilisation(input);
   }, [lb, pools]);
 
   if (error) return <div className="notice error">{error}</div>;
   if (!lbs) return <div className="card"><p className="muted">Loading Cloudflare load balancers…</p></div>;
 
   const meta = (id: string) => BALANCE_POOLS.find((p) => p.id === id)!;
-  const cfPoolFor = (id: string) => cfPoolByPolicy(meta(id));
-  const result = outcome.result;
+  const cfPoolFor = (id: string) => pools.find((p) => matches(p.name, meta(id).match)) ?? null;
+  const result = outcome;
   const target = result.targetUtilisationPercent;
   // Balance index = load share ÷ capacity share (= util / target). 1.0 = balanced; > 1 over-subscribed.
   const indexOf = (util: number | null): number | null => (util !== null && target && target > 0 ? util / target : null);
@@ -99,7 +63,7 @@ export function DcBalancer() {
     <div className="dc-balancer">
       <div className="section-head" style={{ alignItems: 'baseline', gap: '0.75rem' }}>
         <h3 style={{ margin: 0 }}>DC balancer → Cloudflare <span className="badge">DRY-RUN · READ-ONLY</span></h3>
-        <span className="muted" style={{ fontSize: '0.78rem' }}>{lb ? `LB: ${lb.name} · ${lb.steeringPolicy} steering · ${outcome.matchedPools}/4 pools matched` : 'No matching load balancer found'}</span>
+        <span className="muted" style={{ fontSize: '0.78rem' }}>{lb ? `LB: ${lb.name} · ${lb.steeringPolicy} steering` : 'No matching load balancer found'}</span>
         <label className="switch" style={{ marginLeft: 'auto', fontSize: '0.8rem' }}>
           <input type="checkbox" checked={dynamicOn} onChange={(e) => setDynamicOn(e.target.checked)} /> Dynamic balancing
         </label>
@@ -125,7 +89,6 @@ export function DcBalancer() {
             {result.pools.map((p) => {
               const m = meta(p.id);
               const cf = cfPoolFor(p.id);
-              const activeShare = dynamicOn ? p.recommendedShare : (p.currentWeight !== null ? p.currentWeight * 100 : null);
               const ix = indexOf(p.utilisationPercent);
               const st = ix === null ? '' : ix >= 1.5 ? 'shed-shed' : ix >= 1.15 ? 'shed-partial' : 'shed-serve';
               return (
@@ -136,8 +99,8 @@ export function DcBalancer() {
                   <td className="mono">{result.totalCapacity > 0 ? `${((p.capacity / result.totalCapacity) * 100).toFixed(1)}%` : '—'}</td>
                   <td className="mono">{p.load === null ? '—' : `${p.load.toFixed(0)}%`}</td>
                   <td className={`shed-cell ${st}`}><b>{ix === null ? '—' : `${ix.toFixed(2)}×`}</b></td>
-                  <td className="mono">{p.currentWeight === null ? '—' : `${(p.currentWeight * 100).toFixed(0)}%`}</td>
-                  <td className="mono"><b>{activeShare === null ? '—' : `${activeShare.toFixed(0)}%`}</b></td>
+                  <td className="mono">{p.currentWeight === null ? '—' : p.currentWeight}</td>
+                  <td className="mono"><b>{dynamicOn ? `${p.recommendedShare.toFixed(0)}%` : (p.currentWeight === null ? '—' : p.currentWeight)}</b></td>
                 </tr>
               );
             })}

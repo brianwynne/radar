@@ -274,22 +274,13 @@ describe('Live Steering', () => {
     expect(within(dadRow).getByText(/degraded/i)).toBeInTheDocument();
   });
 
-  it('DC balancer: reports live weights even when the LB steers by country (not default pools)', async () => {
-    // Weights live in countryPools (IE), defaultPools is empty — the old logic (defaultPools only) showed "—".
-    const countryLb = { ...CF_LBS.items[0], defaultPools: [], countryPools: { IE: [
-      { poolId: 'p-cw', poolName: 'realta-citywest', weight: 0.4 },
-      { poolId: 'p-pw', poolName: 'realta-parkwest', weight: 0.3 },
-      { poolId: 'p-mam', poolName: 'realta-mam', weight: 0.2 },
-      { poolId: 'p-dad', poolName: 'realta-dad', weight: 0.1 },
-    ] } };
-    stub(VE, { cfLbs: { items: [countryLb] } });
+  it('DC balancer: displays the live Cloudflare pool weight as the current weight', async () => {
+    stub(VE);
     renderAt('/live-steering');
     await screen.findByText('Current Expected DNS Steering');
     await userEvent.click(screen.getByRole('tab', { name: /DC balancer/i }));
     const cwRow = (await screen.findAllByText('Citywest'))[0].closest('tr')!;
-    // Current weight normalised to a share: 0.4 / (0.4+0.3+0.2+0.1) = 40%.
-    expect(within(cwRow).getByText('40%')).toBeInTheDocument();
-    expect(screen.getByText(/4\/4 pools matched/)).toBeInTheDocument();
+    expect(within(cwRow).getByText('0.25')).toBeInTheDocument(); // the weight Cloudflare reports, shown as-is
   });
 
   it('Shed signals: the TTL lever is hidden without the write permission', async () => {
