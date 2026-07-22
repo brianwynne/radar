@@ -326,7 +326,7 @@ export function NetworkTelemetry() {
 
       <nav className="subtabs">
         <button className={`subtab ${tab === 'telemetry' ? 'active' : ''}`} onClick={() => setTab('telemetry')}>Telemetry</button>
-        <button className={`subtab ${tab === 'bandwidth' ? 'active' : ''}`} onClick={() => setTab('bandwidth')}>Bandwidth</button>
+        <button className={`subtab ${tab === 'bandwidth' ? 'active' : ''}`} onClick={() => setTab('bandwidth')}>OTT Delivery</button>
         <button className={`subtab ${tab === 'resolvers' ? 'active' : ''}`} onClick={() => setTab('resolvers')}>Resolvers</button>
       </nav>
 

@@ -1,6 +1,8 @@
 export {
   DATACENTRES,
   SHED_ISPS,
+  NON_DELIVERY_PROVIDERS,
+  isDeliveryLink,
   shedFraction,
   shedState,
   buildShedSignals,

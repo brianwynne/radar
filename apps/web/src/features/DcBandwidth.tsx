@@ -3,7 +3,8 @@
 //   2. the realtime bandwidth of each individual PNI (and the shared INEX link),
 //   3. the total across all PNIs.
 // Egress (primaryBps) is the delivery direction. Values refresh on the page's ~10s CloudVision poll.
-import { DATACENTRES } from '@radar/shed';
+import { useState } from 'react';
+import { DATACENTRES, isDeliveryLink, type DcId } from '@radar/shed';
 import type { NetworkInterface } from '../api/types';
 
 const G = 1e9;
@@ -13,19 +14,25 @@ const isPni = (i: NetworkInterface) => i.linkType === 'PRIVATE_PEERING';
 const isIx = (i: NetworkInterface) => i.linkType === 'IX_PEERING';
 
 export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) {
-  // Delivery links = the PNI + IX Port-Channels (memberOf === null so we don't double-count members).
-  const delivery = interfaces.filter((i) => (isPni(i) || isIx(i)) && i.memberOf === null);
+  const [focus, setFocus] = useState<'' | DcId>(''); // '' = both DCs; else focus one
+
+  // Delivery links = the PNI + IX Port-Channels (memberOf === null so we don't double-count members),
+  // excluding non-delivery cloud peers (e.g. Microsoft) even though they are PNIs.
+  const delivery = interfaces.filter((i) => isDeliveryLink(i.linkType, i.provider) && i.memberOf === null);
   const sum = (list: NetworkInterface[]) => (list.some((i) => i.primaryBps !== null) ? list.reduce((s, i) => s + (i.primaryBps ?? 0), 0) : null);
 
   const dcTotal = (dcId: string) => {
     const dev = DATACENTRES.find((d) => d.id === dcId)?.deviceId;
     return sum(delivery.filter((i) => i.deviceId === dev));
   };
-  const pnis = delivery.filter(isPni).sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0));
-  const ixs = delivery.filter(isIx).sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0));
+  // The per-link table + its totals honour the DC focus filter; the DC total cards always show both.
+  const focusDevice = DATACENTRES.find((d) => d.id === focus)?.deviceId ?? null;
+  const scoped = focus ? delivery.filter((i) => i.deviceId === focusDevice) : delivery;
+  const pnis = scoped.filter(isPni).sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0));
+  const ixs = scoped.filter(isIx).sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0));
   const totalPnis = sum(pnis);
   const totalIx = sum(ixs);
-  const grand = sum(delivery);
+  const grand = sum(scoped);
 
   const row = (i: NetworkInterface) => (
     <tr key={`${i.deviceId}::${i.name}`}>
@@ -38,15 +45,21 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
 
   return (
     <div className="dc-bandwidth">
-      <div className="section-head" style={{ alignItems: 'baseline' }}>
-        <h2 style={{ margin: 0 }}>Delivery bandwidth</h2>
-        <span className="muted" style={{ fontSize: '0.78rem' }}>egress · live · ~10s</span>
+      <div className="section-head" style={{ alignItems: 'baseline', gap: '0.75rem' }}>
+        <h2 style={{ margin: 0 }}>OTT delivery bandwidth</h2>
+        <span className="muted" style={{ fontSize: '0.78rem' }}>egress to eyeball networks · live · ~10s</span>
+        <div className="rv-viewtoggle" role="tablist" style={{ marginLeft: 'auto' }}>
+          <button role="tab" aria-selected={focus === ''} className={focus === '' ? 'on' : ''} onClick={() => setFocus('')}>Both</button>
+          {DATACENTRES.map((d) => (
+            <button key={d.id} role="tab" aria-selected={focus === d.id} className={focus === d.id ? 'on' : ''} onClick={() => setFocus(d.id)}>{d.name}</button>
+          ))}
+        </div>
       </div>
 
       {/* 1. Per-datacentre totals */}
       <div className="grid cols-2" style={{ marginBottom: '1rem' }}>
         {DATACENTRES.map((d) => (
-          <div className="card" key={d.id}>
+          <div className={`card${focus === d.id ? ' dc-focus' : ''}`} key={d.id}>
             <div className="muted" style={{ fontSize: '0.8rem' }}>{d.name} total</div>
             <div className="stat">{gbps(dcTotal(d.id))} <span style={{ fontSize: '1rem', fontWeight: 400 }} className="muted">Gb/s</span></div>
           </div>
@@ -61,8 +74,11 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
           </thead>
           <tbody>
             {pnis.map(row)}
+            {pnis.length > 0 && ixs.length > 0 && (
+              <tr className="dc-sep"><td colSpan={4}>Internet Exchange (IX)</td></tr>
+            )}
             {ixs.map(row)}
-            {delivery.length === 0 && <tr><td colSpan={4} className="muted">No delivery links found (CloudVision not connected, or no PNI/IX interfaces).</td></tr>}
+            {scoped.length === 0 && <tr><td colSpan={4} className="muted">No delivery links found (CloudVision not connected, or no PNI/IX interfaces).</td></tr>}
           </tbody>
           {/* 3. Totals */}
           <tfoot>

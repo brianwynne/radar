@@ -18,6 +18,16 @@ export interface ShedInterface {
   primaryBps: number | null;
 }
 
+// Providers we peer with that are NOT audience/eyeball delivery (cloud/content peers such as Microsoft).
+// Their PNIs carry non-delivery traffic, so they're excluded from delivery bandwidth and per-DC util.
+export const NON_DELIVERY_PROVIDERS = ['microsoft', 'msft'];
+
+/** Whether an interface is an audience-DELIVERY link: a PNI or IX, but not a non-delivery cloud peer. */
+export function isDeliveryLink(linkType: ShedLinkType, provider: string | null): boolean {
+  if (linkType !== 'PRIVATE_PEERING' && linkType !== 'IX_PEERING') return false;
+  return !(provider !== null && NON_DELIVERY_PROVIDERS.some((p) => provider.toLowerCase().includes(p)));
+}
+
 export type DcId = 'citywest' | 'parkwest';
 export interface Datacentre { id: DcId; name: string; deviceId: string }
 
@@ -176,7 +186,7 @@ export function buildShedSignals(interfaces: ShedInterface[], policy: readonly S
   // Per-DC utilisation = total egress across the DC's delivery interfaces (PNI + IX) ÷ their capacity.
   // This is the Citywest-vs-Parkwest signal used to correct the CW↔PW load-balancer weight split.
   const datacentres: DatacentreUtil[] = DATACENTRES.map((d) => {
-    const agg = aggregate(interfaces.filter((i) => i.deviceId === d.deviceId && (i.linkType === 'PRIVATE_PEERING' || i.linkType === 'IX_PEERING')));
+    const agg = aggregate(interfaces.filter((i) => i.deviceId === d.deviceId && isDeliveryLink(i.linkType, i.provider)));
     return { id: d.id, name: d.name, egressBps: agg.primaryBps, capacityBps: agg.capacityBps, utilisationPercent: agg.utilisationPercent };
   });
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { DcBandwidth } from '../features/DcBandwidth';
 import type { NetworkInterface } from '../api/types';
 
@@ -18,6 +19,7 @@ describe('DcBandwidth', () => {
     itf(PW, 'Port-Channel7', 'Eir', 'PRIVATE_PEERING', 90 * G),
     itf(PW, 'Port-Channel3', 'Liberty', 'PRIVATE_PEERING', 50 * G),
     itf(CW, 'Ethernet9', 'Cogent', 'TRANSIT', 99 * G), // transit — must be ignored
+    itf(CW, 'Port-Channel9', 'Microsoft', 'PRIVATE_PEERING', 70 * G), // a PNI, but cloud peering — must be excluded
   ];
 
   it('shows Citywest and Parkwest total delivery bandwidth (PNI + IX)', () => {
@@ -42,5 +44,25 @@ describe('DcBandwidth', () => {
   it('ignores non-delivery (transit) links', () => {
     render(<DcBandwidth interfaces={interfaces} />);
     expect(screen.queryByText('Cogent')).not.toBeInTheDocument();
+  });
+
+  it('the focus filter scopes the per-PNI list and totals to one datacentre', async () => {
+    render(<DcBandwidth interfaces={interfaces} />);
+    await userEvent.click(screen.getByRole('tab', { name: 'Citywest' }));
+    expect(screen.queryByText('Liberty')).not.toBeInTheDocument(); // Parkwest link is filtered out
+    expect(screen.getByText('Sky')).toBeInTheDocument();
+    // Citywest PNIs only: Eir 40 + Sky 60 = 100 (Microsoft still excluded).
+    const totalRow = screen.getByText('Total of PNIs').closest('tr')! as HTMLElement;
+    expect(within(totalRow).getByText('100.0 Gb/s')).toBeInTheDocument();
+  });
+
+  it('excludes a non-delivery cloud peer (Microsoft) even though it is a PNI', () => {
+    render(<DcBandwidth interfaces={interfaces} />);
+    expect(screen.queryByText('Microsoft')).not.toBeInTheDocument();
+    // Its 70G must not be counted in Citywest total (still 130) or the PNI total (still 240).
+    const cw = screen.getByText('Citywest total').closest('.card')! as HTMLElement;
+    expect(within(cw).getByText('130.0')).toBeInTheDocument();
+    const totalRow = screen.getByText('Total of PNIs').closest('tr')! as HTMLElement;
+    expect(within(totalRow).getByText('240.0 Gb/s')).toBeInTheDocument();
   });
 });

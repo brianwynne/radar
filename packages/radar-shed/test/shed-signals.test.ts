@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { buildShedSignals, shedFraction, shedState, type ShedInterface } from '../src/index.js';
+import { buildShedSignals, shedFraction, shedState, isDeliveryLink, type ShedInterface } from '../src/index.js';
+
+describe('isDeliveryLink', () => {
+  it('accepts PNI and IX eyeball links, rejects transit/internal and cloud peers', () => {
+    expect(isDeliveryLink('PRIVATE_PEERING', 'Eir')).toBe(true);
+    expect(isDeliveryLink('IX_PEERING', 'INEX')).toBe(true);
+    expect(isDeliveryLink('TRANSIT', 'Cogent')).toBe(false);
+    expect(isDeliveryLink('PRIVATE_PEERING', 'Microsoft')).toBe(false); // cloud peer, not delivery
+    expect(isDeliveryLink('PRIVATE_PEERING', 'MSFT edge')).toBe(false);
+  });
+});
 
 const G = 1_000_000_000; // 1 Gb/s
 const CW = 'JPN2508A7QM';
