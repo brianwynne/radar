@@ -46,6 +46,7 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .nav a.active, .nav a:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 .principal { text-align: right; font-size: 0.8rem; color: #c7d3e5; }
 .principal b { color: #fff; }
+.principal-email { font-size: 0.72rem; color: #9fb0c9; }
 .role-chip {
   display: inline-block; background: rgba(255,255,255,0.12); color: #dbe6f5;
   border-radius: 999px; padding: 0.05rem 0.5rem; font-size: 0.7rem; margin-left: 0.35rem;

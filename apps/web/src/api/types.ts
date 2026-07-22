@@ -7,7 +7,7 @@ export interface Principal {
   email?: string;
   roles: string[];
   permissions: string[];
-  authenticationMethod: 'dev' | 'oidc';
+  authenticationMethod: 'dev' | 'oidc' | 'cf-access';
   developmentAuthentication: boolean;
 }
 

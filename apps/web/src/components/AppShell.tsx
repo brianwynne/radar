@@ -7,6 +7,13 @@ import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import type { Ns1Status } from '../api/types';
 
+// How each authentication mode is shown in the principal chip.
+const AUTH_METHOD_LABEL: Record<string, string> = {
+  dev: 'development authentication',
+  oidc: 'Microsoft Entra ID',
+  'cf-access': 'Cloudflare Access',
+};
+
 const NAV = [
   { to: '/', label: 'Dashboard', perm: 'dashboard.read', end: true },
   // Hidden until complete — routes remain, just unlinked from the nav.
@@ -55,7 +62,8 @@ export function AppShell() {
                 </span>
               ))}
             </div>
-            <div>{principal.authenticationMethod === 'dev' ? 'development authentication' : 'Microsoft Entra ID'}</div>
+            {principal.email && principal.email !== principal.displayName && <div className="principal-email mono">{principal.email}</div>}
+            <div>{AUTH_METHOD_LABEL[principal.authenticationMethod] ?? principal.authenticationMethod}</div>
           </div>
         )}
       </header>
