@@ -8,6 +8,7 @@ import { useCloudVision } from '../telemetry/use-cloudvision';
 import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
 import { ResolverView } from '../features/ResolverView';
+import { DcBandwidth } from '../features/DcBandwidth';
 import type { LinkType, NetworkHealth, NetworkInterface } from '../api/types';
 
 const LINK_TYPES: LinkType[] = ['PRIVATE_PEERING', 'IX_PEERING', 'TRANSIT', 'INTERNAL', 'UNKNOWN'];
@@ -87,7 +88,7 @@ export function NetworkTelemetry() {
   // Poll on CloudVision's ~10-second publish grid — the interface `rates` node republishes
   // every ~10s, so this is the freshest the analytics API meaningfully offers.
   const t = useCloudVision(10_000);
-  const [tab, setTab] = useState<'telemetry' | 'resolvers'>('telemetry');
+  const [tab, setTab] = useState<'telemetry' | 'bandwidth' | 'resolvers'>('telemetry');
   const [provider, setProvider] = useState('');
   const [linkType, setLinkType] = useState('');
   const [status, setStatus] = useState('');
@@ -325,9 +326,11 @@ export function NetworkTelemetry() {
 
       <nav className="subtabs">
         <button className={`subtab ${tab === 'telemetry' ? 'active' : ''}`} onClick={() => setTab('telemetry')}>Telemetry</button>
+        <button className={`subtab ${tab === 'bandwidth' ? 'active' : ''}`} onClick={() => setTab('bandwidth')}>Bandwidth</button>
         <button className={`subtab ${tab === 'resolvers' ? 'active' : ''}`} onClick={() => setTab('resolvers')}>Resolvers</button>
       </nav>
 
+      {tab === 'bandwidth' && <DcBandwidth interfaces={t.interfaces} />}
       {tab === 'resolvers' && <ResolverView />}
       {tab === 'telemetry' && (<>
       {t.notice && t.mode !== 'disabled' && <div className="notice info">{t.notice}</div>}
