@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { NOC, VE, renderAt } from './helpers';
+import type { Mock } from 'vitest';
+import { NOC, VE, ENGINEER, renderAt } from './helpers';
 import type { LiveSteeringConfig, LiveSteeringEvent, LiveSteeringState, Principal } from '../api/types';
 
 afterEach(() => {
@@ -212,6 +213,29 @@ describe('Live Steering', () => {
     expect(within(eirRow).getByText('serve')).toBeInTheDocument();
     // Watermark sliders are present (adjustable).
     expect(within(eirRow).getAllByRole('slider').length).toBe(2);
+  });
+
+  it('Shed signals: engineer gets the guarded TTL lever, which PUTs the TTL to the livetest candidate', async () => {
+    stub(ENGINEER);
+    renderAt('/live-steering');
+    await screen.findByText('Current Expected DNS Steering');
+    await userEvent.click(screen.getByRole('tab', { name: /Shed signals/i }));
+    expect(await screen.findByText(/TTL lever/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Set TTL 30s/i }));
+    expect(await screen.findByText(/R_max now ≈ 3\.00/i)).toBeInTheDocument(); // 90/30 = 3.00 %/s
+    // It writes via the guarded create/apply path, scoped to the livetest candidate, TTL 30, CNAME only.
+    const applyCall = (fetch as unknown as Mock).mock.calls.find((c: unknown[]) => String(c[0]).includes('/ns1/records/apply'));
+    expect(applyCall).toBeTruthy();
+    expect(JSON.parse(String((applyCall![1] as RequestInit).body))).toMatchObject({ zone: 'livetest.rte.ie', domain: 'shed.livetest.rte.ie', type: 'CNAME', ttl: 30 });
+  });
+
+  it('Shed signals: the TTL lever is hidden without the write permission', async () => {
+    stub(VE);
+    renderAt('/live-steering');
+    await screen.findByText('Current Expected DNS Steering');
+    await userEvent.click(screen.getByRole('tab', { name: /Shed signals/i }));
+    await screen.findByRole('columnheader', { name: 'Citywest' });
+    expect(screen.queryByText(/TTL lever/i)).not.toBeInTheDocument();
   });
 
   it('shows a steering path per selected ISP with telemetry-not-connected, and never labels it actual traffic', async () => {

@@ -5,9 +5,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { shedFraction, shedState, type ShedState } from '@radar/shed';
 import { api, ApiError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import type { ShedSignalsResponse, ShedSignalIsp } from '../api/types';
 
 const POLL_MS = 10_000;
+
+// TTL lever — a livetest candidate we flip between 180s and 30s to demonstrate R_max = H/TTL.
+// Guarded by the NS1 write path (allow-listed to livetest, never a production record).
+const TTL_ZONE = 'livetest.rte.ie';
+const TTL_DOMAIN = 'shed.livetest.rte.ie';
+const TTL_TARGET = 'target.example.com';
 
 type Wm = { low: number; high: number };
 
@@ -37,11 +44,29 @@ function UtilCell({ util, wm, active, capacityBps }: { util: number | null; wm: 
 }
 
 export function ShedSignals() {
+  const { hasPermission } = useAuth();
+  const canWrite = hasPermission('ns1.record.create');
   const [data, setData] = useState<ShedSignalsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wm, setWm] = useState<Record<string, Wm>>({});
+  const [ttlBusy, setTtlBusy] = useState<number | null>(null);
+  const [ttlMsg, setTtlMsg] = useState<string | null>(null);
+  const [ttlErr, setTtlErr] = useState<string | null>(null);
   // Keep the freshest watermark map available to the poll without re-subscribing.
   const wmSeeded = useRef(false);
+
+  // Flip the livetest candidate's TTL via the guarded write path (create/apply upserts the record).
+  async function applyTtl(ttl: number) {
+    setTtlBusy(ttl); setTtlMsg(null); setTtlErr(null);
+    try {
+      await api.recordApply({ zone: TTL_ZONE, domain: TTL_DOMAIN, type: 'CNAME', answers: [TTL_TARGET], ttl });
+      setTtlMsg(`${TTL_DOMAIN} → TTL ${ttl}s. R_max now ≈ ${(90 / ttl).toFixed(2)} %/s.`);
+    } catch (e) {
+      setTtlErr(e instanceof ApiError ? `${e.code}: ${e.message}` : 'TTL change failed.');
+    } finally {
+      setTtlBusy(null);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -110,6 +135,20 @@ export function ShedSignals() {
         Per-ISP (incl. INEX) egress utilisation per datacentre, with the <span className="mono">shed_load</span> gating RADAR
         <b> would</b> feed to NS1. Drag a watermark to see the gating recompute against the live load. Nothing is sent to NS1.
       </p>
+
+      {canWrite && (
+        <div className="notice info" style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <span style={{ flex: '1 1 20rem' }}>
+            <b>TTL lever</b> — the controllable ramp is <span className="mono">R_max = H / TTL</span>, so a shorter TTL lets the reactive loop
+            catch steeper ramps. Flip the guarded <span className="mono">livetest</span> candidate <span className="mono">{TTL_DOMAIN}</span> to try it
+            (never touches a production record; requires NS1 writes enabled).
+          </span>
+          <button className="ghost" disabled={ttlBusy !== null} onClick={() => applyTtl(30)}>{ttlBusy === 30 ? 'Setting…' : 'Set TTL 30s'}</button>
+          <button className="ghost" disabled={ttlBusy !== null} onClick={() => applyTtl(180)}>{ttlBusy === 180 ? 'Reverting…' : 'Revert to 180s'}</button>
+          {ttlMsg && <span className="mono" style={{ color: 'var(--ok)', flexBasis: '100%' }}>{ttlMsg}</span>}
+          {ttlErr && <span className="mono" style={{ color: 'var(--danger)', flexBasis: '100%' }}>{ttlErr}</span>}
+        </div>
+      )}
 
       {!data.connected && <div className="notice warn">CloudVision telemetry is not connected — the grid shows the ISP/DC structure and watermark policy, but no live utilisation.</div>}
 
