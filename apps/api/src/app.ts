@@ -43,6 +43,7 @@ import { cloudVisionConnectionRoutes } from './routes/cloudvision-connection.js'
 import type { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
+import { createCfAccessVerifier, resolveCfAccessJwks } from './auth/cf-access.js';
 import type { DatabaseHealthCheck } from './database/health.js';
 import type { Database } from './database/repositories.js';
 import type { SteeringStore } from './database/steering-store.js';
@@ -145,6 +146,11 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   if (config.authMode === 'oidc' && !deps.oidcVerifier && config.oidc) {
     const getKey = await resolveJwks(config.oidc);
     authDeps = { ...deps, oidcVerifier: createOidcVerifier(config.oidc, getKey) };
+  }
+  // Cloudflare Access: build a verifier over the team's certs endpoint (lazy JWKS; nothing fetched at
+  // construction, so tests inject a local key set instead).
+  if (config.authMode === 'cf-access' && !deps.cfAccessVerifier && config.cfAccess) {
+    authDeps = { ...authDeps, cfAccessVerifier: createCfAccessVerifier(config.cfAccess, resolveCfAccessJwks(config.cfAccess)) };
   }
   registerAuth(app, config, authDeps);
 

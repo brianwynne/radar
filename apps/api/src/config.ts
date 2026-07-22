@@ -46,6 +46,17 @@ const schema = z.object({
   OIDC_ROLE_VIEWING_ENGINEER: z.string().default('RADAR.ViewingEngineer'),
   OIDC_ROLE_ENGINEER: z.string().default('RADAR.Engineer'),
 
+  // Cloudflare Access (identity at the edge; RADAR verifies the Access JWT and trusts the user email).
+  // The production topology: Cloudflare Access authenticates users → cloudflared → RADAR. RADAR reads
+  // the signed Cf-Access-Jwt-Assertion, verifies it against the team's public keys, and identifies the
+  // caller by email. A single role applies to every verified user (Access policy decides who is admitted).
+  CF_ACCESS_ENABLED: z.string().optional(),
+  CF_ACCESS_TEAM_DOMAIN: z.string().optional(), // e.g. "myteam" or "myteam.cloudflareaccess.com"
+  CF_ACCESS_AUD: z.string().optional(),          // the Access application's AUD tag
+  CF_ACCESS_JWKS_URI: z.string().optional(),     // explicit override; otherwise derived from the team domain
+  CF_ACCESS_EMAIL_CLAIM: z.string().default('email'),
+  CF_ACCESS_ROLE: z.enum(['NOC_VIEWER', 'VIEWING_ENGINEER', 'ENGINEER']).default('NOC_VIEWER'),
+
   // Change detection (NS1 Activity-API polling). Off by default; requires a database.
   CHANGE_DETECTION_ENABLED: z.string().optional(),
   CHANGE_DETECTION_INTERVAL_MS: z.coerce.number().int().positive().default(30_000),
@@ -54,7 +65,22 @@ const schema = z.object({
 const TRUTHY = new Set(['true', '1', 'yes', 'on']);
 const parseBool = (v: string | undefined): boolean => v !== undefined && TRUTHY.has(v.toLowerCase());
 
-export type AuthMode = 'dev' | 'oidc' | 'none';
+export type AuthMode = 'dev' | 'cf-access' | 'oidc' | 'none';
+
+export interface CfAccessConfig {
+  /** Issuer — https://<team>.cloudflareaccess.com. */
+  issuerUrl: string;
+  /** The Access application's AUD tag (audience). */
+  audience: string;
+  /** Access public-keys endpoint (…/cdn-cgi/access/certs). */
+  jwksUri: string;
+  /** JWT claim carrying the user's email (Cloudflare Access sets `email`). */
+  emailClaim: string;
+  /** The single RADAR role granted to every Access-verified user (Access policy gates who gets in). */
+  role: RadarRole;
+  /** Trusted signing algorithms (allow-list; not taken from the token header). */
+  algorithms: string[];
+}
 
 export interface OidcConfig {
   issuerUrl: string;
@@ -86,6 +112,8 @@ export interface Config {
   allowDevAuthInProduction: boolean;
   devUser: { id: string; name: string; email: string; role: RadarRole };
   oidc?: OidcConfig;
+  /** Cloudflare Access identity (verifies the Access JWT; identity = user email). */
+  cfAccess?: CfAccessConfig;
   /** Present when DATABASE_URL is configured. Its absence is a startup error in
    *  server.ts (the API cannot function without persistence); leaving it optional here
    *  keeps configuration-only unit tests independent of a database. */
@@ -129,10 +157,30 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     );
   }
 
-  // Authentication precedence: dev-auth wins and disables OIDC entirely; otherwise
-  // OIDC if enabled; otherwise none (protected routes 401). Never a fallback chain.
+  // Cloudflare Access (verified per request; identity = user email). Enabled independently of dev/OIDC.
+  let cfAccess: CfAccessConfig | undefined;
+  if (!devAuth && parseBool(p.CF_ACCESS_ENABLED)) {
+    const missing: string[] = [];
+    if (!p.CF_ACCESS_TEAM_DOMAIN) missing.push('CF_ACCESS_TEAM_DOMAIN');
+    if (!p.CF_ACCESS_AUD) missing.push('CF_ACCESS_AUD');
+    if (missing.length > 0) throw new Error(`Cloudflare Access is enabled but its configuration is incomplete: missing ${missing.join(', ')}.`);
+    // Accept a bare team name or a full host; derive the issuer + certs endpoint.
+    const host = (p.CF_ACCESS_TEAM_DOMAIN as string).trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    const fqdn = host.includes('.') ? host : `${host}.cloudflareaccess.com`;
+    cfAccess = {
+      issuerUrl: `https://${fqdn}`,
+      audience: p.CF_ACCESS_AUD as string,
+      jwksUri: p.CF_ACCESS_JWKS_URI ?? `https://${fqdn}/cdn-cgi/access/certs`,
+      emailClaim: p.CF_ACCESS_EMAIL_CLAIM,
+      role: p.CF_ACCESS_ROLE,
+      algorithms: ['RS256'], // Cloudflare Access signs with RS256; allow-list is fixed, not token-driven.
+    };
+  }
+
+  // Authentication precedence: dev-auth wins; else Cloudflare Access; else OIDC; else none
+  // (protected routes 401). Never a fallback chain — a failure in the active mode yields 401, not a downgrade.
   let oidc: OidcConfig | undefined;
-  if (!devAuth && parseBool(p.OIDC_ENABLED)) {
+  if (!devAuth && !cfAccess && parseBool(p.OIDC_ENABLED)) {
     const missing: string[] = [];
     if (!p.OIDC_ISSUER_URL) missing.push('OIDC_ISSUER_URL');
     if (!p.OIDC_AUDIENCE) missing.push('OIDC_AUDIENCE');
@@ -162,7 +210,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     };
   }
 
-  const authMode: AuthMode = devAuth ? 'dev' : oidc ? 'oidc' : 'none';
+  const authMode: AuthMode = devAuth ? 'dev' : cfAccess ? 'cf-access' : oidc ? 'oidc' : 'none';
 
   // Validate database configuration when DATABASE_URL is supplied. Invalid values (e.g.
   // pool sizes) fail fast here; server.ts requires the result to be present to start.
@@ -202,6 +250,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     allowDevAuthInProduction,
     devUser: { id: p.RADAR_DEV_USER_ID, name: p.RADAR_DEV_USER_NAME, email: p.RADAR_DEV_USER_EMAIL, role: p.RADAR_DEV_ROLE },
     oidc,
+    cfAccess,
     database,
     ns1,
     changeDetection: { enabled: parseBool(p.CHANGE_DETECTION_ENABLED), intervalMs: p.CHANGE_DETECTION_INTERVAL_MS },

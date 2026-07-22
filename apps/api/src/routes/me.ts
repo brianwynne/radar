@@ -26,7 +26,7 @@ const meSchema = {
         email: { type: 'string' },
         roles: { type: 'array', items: { type: 'string' } },
         permissions: { type: 'array', items: { type: 'string' } },
-        authenticationMethod: { type: 'string', enum: ['dev', 'oidc'] },
+        authenticationMethod: { type: 'string', enum: ['dev', 'oidc', 'cf-access'] },
         developmentAuthentication: { type: 'boolean' },
       },
     },

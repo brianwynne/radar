@@ -10,7 +10,7 @@ export interface RadarPrincipal {
   email?: string;
   roles: RadarRole[];
   permissions: RadarPermission[];
-  authenticationMethod: 'dev' | 'oidc';
+  authenticationMethod: 'dev' | 'oidc' | 'cf-access';
 }
 
 /** Build a principal, deriving effective permissions from its roles. */
@@ -19,7 +19,7 @@ export function buildPrincipal(input: {
   displayName?: string;
   email?: string;
   roles: RadarRole[];
-  authenticationMethod: 'dev' | 'oidc';
+  authenticationMethod: 'dev' | 'oidc' | 'cf-access';
 }): RadarPrincipal {
   return { ...input, permissions: permissionsForRoles(input.roles) };
 }
