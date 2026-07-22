@@ -450,13 +450,13 @@ export interface LiveSteeringEventsResponse {
 
 // --- Shed signals (per-ISP × DC utilisation → NS1 shed_load gating; dry-run) ---
 // The row/cell shapes are the shed core's; the response wraps them with provenance.
-import type { ShedSignalIsp } from '@radar/shed';
-export type { ShedSignalIsp, ShedCell, ShedSignals, Watermark, DcId, ShedState } from '@radar/shed';
+import type { ShedSignalIsp, DatacentreUtil } from '@radar/shed';
+export type { ShedSignalIsp, ShedCell, ShedSignals, Watermark, DcId, ShedState, DatacentreUtil } from '@radar/shed';
 export interface ShedSignalsResponse {
   provenance: LiveSteeringProvenance & { telemetrySource?: string; notice?: string; observedAt?: string | null };
   connected: boolean;
   defaultWatermarks: { id: string; low: number; high: number }[];
-  datacentres: { id: string; name: string }[];
+  datacentres: DatacentreUtil[];
   isps: ShedSignalIsp[];
 }
 

@@ -133,7 +133,10 @@ const SHED = {
   provenance: { source: 'radar', readOnly: true, write: false, telemetrySource: 'cloudvision', label: 'Shed signals', observedAt: '2026-07-20T21:00:00Z', retrievedAt: '2026-07-20T21:00:05Z' },
   connected: true,
   defaultWatermarks: [{ id: 'eir', low: 78, high: 90 }, { id: 'inex', low: 75, high: 90 }],
-  datacentres: [{ id: 'citywest', name: 'Citywest' }, { id: 'parkwest', name: 'Parkwest' }],
+  datacentres: [
+    { id: 'citywest', name: 'Citywest', egressBps: 4e11, capacityBps: 8e11, utilisationPercent: 50 },
+    { id: 'parkwest', name: 'Parkwest', egressBps: 6.4e11, capacityBps: 8e11, utilisationPercent: 80 },
+  ],
   isps: [
     { id: 'eir', name: 'Eir', asn: 5466, viaInex: false, isInex: false, watermark: { low: 78, high: 90 },
       cells: [
@@ -280,7 +283,22 @@ describe('Live Steering', () => {
     await screen.findByText('Current Expected DNS Steering');
     await userEvent.click(screen.getByRole('tab', { name: /DC balancer/i }));
     const cwRow = (await screen.findAllByText('Citywest'))[0].closest('tr')!;
-    expect(within(cwRow).getByText('0.25')).toBeInTheDocument(); // the weight Cloudflare reports, shown as-is
+    expect(within(cwRow).getAllByText('0.25').length).toBeGreaterThan(0); // the weight Cloudflare reports, shown as-is
+  });
+
+  it('DC balancer: CW↔PW panel computes the live imbalance and shifts weight to the cooler DC', async () => {
+    stub(VE);
+    renderAt('/live-steering');
+    await screen.findByText('Current Expected DNS Steering');
+    await userEvent.click(screen.getByRole('tab', { name: /DC balancer/i }));
+    const panel = (await screen.findByText(/Citywest ↔ Parkwest live balance/)).closest('.cwpw-panel')! as HTMLElement;
+    // CW 50%, PW 80% network utilisation → imbalance = (80-50)/65 = 46.2%, PW hotter.
+    expect(within(panel).getByText('50.0%')).toBeInTheDocument();
+    expect(within(panel).getByText('80.0%')).toBeInTheDocument();
+    expect(within(panel).getByText(/PW \+46\.2%/)).toBeInTheDocument();
+    // Both pools weight 0.25 → CW gets more (0.3077), PW less (0.1923); full precision, not %.
+    expect(within(panel).getByText('0.3077')).toBeInTheDocument();
+    expect(within(panel).getByText('0.1923')).toBeInTheDocument();
   });
 
   it('Shed signals: the TTL lever is hidden without the write permission', async () => {

@@ -1,5 +1,33 @@
 import { describe, it, expect } from 'vitest';
-import { balanceForEqualUtilisation, BALANCE_POOLS, type BalancePool } from '../src/index.js';
+import { balanceForEqualUtilisation, rebalancePair, BALANCE_POOLS, type BalancePool } from '../src/index.js';
+
+describe('rebalancePair (Citywest ↔ Parkwest from live utilisation)', () => {
+  it('shifts weight to the cooler DC and preserves the combined weight', () => {
+    // Parkwest hotter (80%) than Citywest (40%), currently equal weight.
+    const r = rebalancePair({ utilisationPercent: 40, weight: 0.4 }, { utilisationPercent: 80, weight: 0.4 });
+    expect(r.aWeight + r.bWeight).toBeCloseTo(0.8, 6); // combined weight preserved (Mam/Dad untouched)
+    expect(r.aWeight).toBeGreaterThan(r.bWeight); // more to Citywest (cooler)
+    // target: a ∝ b's util → 0.8 × 80/120 = 0.5333
+    expect(r.aWeight).toBeCloseTo(0.5333, 3);
+    expect(r.imbalancePercent).toBeCloseTo(66.7, 1); // (80-40)/60 × 100
+  });
+  it('balanced input leaves weights unchanged (imbalance 0)', () => {
+    const r = rebalancePair({ utilisationPercent: 60, weight: 0.5 }, { utilisationPercent: 60, weight: 0.3 });
+    expect(r.aWeight).toBeCloseTo(0.5, 6);
+    expect(r.bWeight).toBeCloseTo(0.3, 6);
+    expect(r.imbalancePercent).toBe(0);
+  });
+  it('gain < 1 takes a gentler step toward the target', () => {
+    const full = rebalancePair({ utilisationPercent: 40, weight: 0.4 }, { utilisationPercent: 80, weight: 0.4 });
+    const half = rebalancePair({ utilisationPercent: 40, weight: 0.4 }, { utilisationPercent: 80, weight: 0.4 }, { gain: 0.5 });
+    expect(half.aWeight).toBeGreaterThan(0.4); // still moves toward Citywest
+    expect(half.aWeight).toBeLessThan(full.aWeight); // but not all the way
+  });
+  it('unknown utilisation returns the weights unchanged', () => {
+    const r = rebalancePair({ utilisationPercent: null, weight: 0.4 }, { utilisationPercent: 80, weight: 0.4 });
+    expect(r).toEqual({ aWeight: 0.4, bWeight: 0.4, imbalancePercent: null });
+  });
+});
 
 describe('BALANCE_POOLS policy', () => {
   it('has the four delivery pools with CW/PW higher capacity than Mam/Dad', () => {

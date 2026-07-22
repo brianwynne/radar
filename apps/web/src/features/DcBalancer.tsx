@@ -6,9 +6,9 @@
 // each pool's observed load share ÷ its capacity share (1.0 = perfectly balanced). A failed cache lowers
 // a pool's healthy capacity → its weight → shifts traffic away. A toggle reverts to the predefined weights.
 import { useEffect, useMemo, useState } from 'react';
-import { balanceForEqualUtilisation, BALANCE_POOLS, type BalancePool } from '@radar/shed';
+import { balanceForEqualUtilisation, rebalancePair, BALANCE_POOLS, type BalancePool } from '@radar/shed';
 import { api, ApiError } from '../api/client';
-import type { CloudflareLoadBalancer, CloudflarePool } from '../api/types';
+import type { CloudflareLoadBalancer, CloudflarePool, ShedSignalsResponse } from '../api/types';
 
 const matches = (name: string | null | undefined, subs: readonly string[]): boolean =>
   !!name && subs.some((s) => name.toLowerCase().includes(s));
@@ -18,15 +18,18 @@ const pctOrDash = (v: number | null): string => (v === null ? '—' : `${v.toFix
 export function DcBalancer() {
   const [lbs, setLbs] = useState<CloudflareLoadBalancer[] | null>(null);
   const [pools, setPools] = useState<CloudflarePool[]>([]);
+  const [shed, setShed] = useState<ShedSignalsResponse | null>(null); // live per-DC (CW/PW) utilisation
   const [error, setError] = useState<string | null>(null);
   const [dynamicOn, setDynamicOn] = useState(true);
 
   useEffect(() => {
     let alive = true;
-    Promise.all([api.cloudflareLoadBalancers(), api.cloudflarePools()])
-      .then(([l, p]) => { if (alive) { setLbs(l.items); setPools(p.items); } })
+    const load = () => Promise.all([api.cloudflareLoadBalancers(), api.cloudflarePools(), api.shedSignals()])
+      .then(([l, p, s]) => { if (alive) { setLbs(l.items); setPools(p.items); setShed(s); } })
       .catch((e) => { if (alive) setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not load Cloudflare data.'); });
-    return () => { alive = false; };
+    void load();
+    const t = setInterval(load, 10_000); // keep the CW↔PW utilisation live
+    return () => { alive = false; clearInterval(t); };
   }, []);
 
   // The delivery LB = the one whose pools best match the four policy pools.
@@ -47,6 +50,18 @@ export function DcBalancer() {
     });
     return balanceForEqualUtilisation(input);
   }, [lb, pools]);
+
+  // Live Citywest ↔ Parkwest rebalance: use the per-DC network utilisation to shift weight between the
+  // CW and PW pools ONLY (Mam/Dad untouched), driving their utilisation toward equal.
+  const cwPw = useMemo(() => {
+    const util = (id: string) => shed?.datacentres.find((d) => d.id === id)?.utilisationPercent ?? null;
+    const weight = (id: string) => outcome.pools.find((p) => p.id === id)?.currentWeight ?? null;
+    const cwUtil = util('citywest'), pwUtil = util('parkwest'), cwW = weight('citywest'), pwW = weight('parkwest');
+    const reb = cwW !== null && pwW !== null
+      ? rebalancePair({ utilisationPercent: cwUtil, weight: cwW }, { utilisationPercent: pwUtil, weight: pwW })
+      : null;
+    return { cwUtil, pwUtil, cwW, pwW, reb };
+  }, [shed, outcome]);
 
   if (error) return <div className="notice error">{error}</div>;
   if (!lbs) return <div className="card"><p className="muted">Loading Cloudflare load balancers…</p></div>;
@@ -75,6 +90,35 @@ export function DcBalancer() {
         {' '}No Cloudflare write key is configured, so <b>nothing is sent</b>.
         {worst && worst.ix && worst.ix > 1.15 && <> Most over-subscribed: <b>{meta(worst.id).name}</b> at {(worst.ix).toFixed(2)}× its capacity share.</>}
       </p>
+
+      {/* Live Citywest ↔ Parkwest balance, driven by the network-utilisation page (CloudVision). */}
+      <div className="cwpw-panel">
+        <div className="cwpw-head">
+          <b>Citywest ↔ Parkwest live balance</b>
+          <span className="muted"> — from network utilisation; adjusts only the CW/PW pool weights, Mam/Dad untouched</span>
+        </div>
+        {cwPw.cwUtil === null || cwPw.pwUtil === null ? (
+          <div className="muted" style={{ fontSize: '0.78rem' }}>Network utilisation unavailable (CloudVision not connected).</div>
+        ) : (
+          <div className="cwpw-grid">
+            <div><span className="muted">Citywest util</span><div className="cwpw-num">{cwPw.cwUtil.toFixed(1)}%</div></div>
+            <div><span className="muted">Parkwest util</span><div className="cwpw-num">{cwPw.pwUtil.toFixed(1)}%</div></div>
+            <div><span className="muted">Imbalance</span><div className={`cwpw-num ${cwPw.reb && Math.abs(cwPw.reb.imbalancePercent ?? 0) >= 10 ? 'cwpw-hot' : ''}`}>{cwPw.reb?.imbalancePercent === null || cwPw.reb === null ? '—' : `${cwPw.reb.imbalancePercent > 0 ? 'PW' : cwPw.reb.imbalancePercent < 0 ? 'CW' : ''} +${Math.abs(cwPw.reb.imbalancePercent).toFixed(1)}%`}</div></div>
+            <div>
+              <span className="muted">CW weight</span>
+              <div className="cwpw-num mono">{cwPw.cwW === null ? '—' : cwPw.cwW}{cwPw.reb && <span className="cwpw-arrow"> → <b>{cwPw.reb.aWeight.toFixed(4)}</b></span>}</div>
+            </div>
+            <div>
+              <span className="muted">PW weight</span>
+              <div className="cwpw-num mono">{cwPw.pwW === null ? '—' : cwPw.pwW}{cwPw.reb && <span className="cwpw-arrow"> → <b>{cwPw.reb.bWeight.toFixed(4)}</b></span>}</div>
+            </div>
+          </div>
+        )}
+        <div className="muted" style={{ fontSize: '0.7rem', marginTop: '0.35rem' }}>
+          Weight shifts toward the cooler DC in proportion to the imbalance, at full Cloudflare weight precision (no % rounding).
+          Combined CW+PW weight is preserved. Dry-run — nothing is sent.
+        </div>
+      </div>
 
       <div className="table-scroll">
         <table className="shed-table">

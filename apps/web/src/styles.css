@@ -525,3 +525,13 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 
 /* DC balancer inputs */
 .dc-inputs { display: flex; gap: 1.25rem; align-items: flex-end; flex-wrap: wrap; margin-bottom: 0.75rem; }
+
+/* Citywest ↔ Parkwest live balance panel */
+.cwpw-panel { border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.85rem; margin-bottom: 0.9rem; background: var(--panel-muted); }
+.cwpw-head { font-size: 0.85rem; margin-bottom: 0.5rem; }
+.cwpw-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
+.cwpw-grid > div > span { font-size: 0.7rem; }
+.cwpw-num { font-size: 1.05rem; font-weight: 700; }
+.cwpw-num.cwpw-hot { color: var(--danger); }
+.cwpw-arrow { font-size: 0.9rem; font-weight: 400; color: var(--ink-soft); }
+.cwpw-arrow b { color: var(--brand-ink); }

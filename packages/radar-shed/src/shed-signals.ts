@@ -100,8 +100,17 @@ export interface ShedSignalIsp {
   combined: { capacityBps: number | null; primaryBps: number | null; utilisationPercent: number | null };
 }
 
+export interface DatacentreUtil {
+  id: DcId;
+  name: string;
+  /** Total egress across the DC's delivery interfaces (PNI + IX). */
+  egressBps: number | null;
+  capacityBps: number | null;
+  utilisationPercent: number | null;
+}
+
 export interface ShedSignals {
-  datacentres: { id: DcId; name: string }[];
+  datacentres: DatacentreUtil[];
   isps: ShedSignalIsp[];
 }
 
@@ -164,5 +173,12 @@ export function buildShedSignals(interfaces: ShedInterface[], policy: readonly S
     };
   });
 
-  return { datacentres: DATACENTRES.map((d) => ({ id: d.id, name: d.name })), isps };
+  // Per-DC utilisation = total egress across the DC's delivery interfaces (PNI + IX) ÷ their capacity.
+  // This is the Citywest-vs-Parkwest signal used to correct the CW↔PW load-balancer weight split.
+  const datacentres: DatacentreUtil[] = DATACENTRES.map((d) => {
+    const agg = aggregate(interfaces.filter((i) => i.deviceId === d.deviceId && (i.linkType === 'PRIVATE_PEERING' || i.linkType === 'IX_PEERING')));
+    return { id: d.id, name: d.name, egressBps: agg.primaryBps, capacityBps: agg.capacityBps, utilisationPercent: agg.utilisationPercent };
+  });
+
+  return { datacentres, isps };
 }

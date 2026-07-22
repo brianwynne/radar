@@ -72,6 +72,40 @@ export interface BalanceOutcome {
   currentSpreadPercent: number | null;
 }
 
+export interface PairRebalance {
+  /** New weights for the two pools — full precision (NOT rounded to %), sum preserved. Cloudflare pool
+   *  weights are fine-grained floats, so we keep every digit to hit the balance precisely. */
+  aWeight: number;
+  bWeight: number;
+  /** Relative imbalance: (b − a) / mean × 100. Positive ⇒ b is the hotter side. Null if either util unknown. */
+  imbalancePercent: number | null;
+}
+
+/** Rebalance exactly TWO pools (e.g. Citywest ↔ Parkwest) from their live utilisation, WITHOUT touching
+ *  any others. It's a FEEDBACK step: shift a portion of the combined weight from the busier DC to the
+ *  quieter one, proportional to the imbalance — so when utilisation is already equal the weights are left
+ *  unchanged, and over a live loop they converge. Weights stay full-precision (fine granularity, no %
+ *  rounding). `gain` (default 1) scales the step; < 1 damps a fast loop. */
+export function rebalancePair(
+  a: { utilisationPercent: number | null; weight: number },
+  b: { utilisationPercent: number | null; weight: number },
+  opts: { gain?: number } = {},
+): PairRebalance {
+  const total = a.weight + b.weight;
+  const ua = a.utilisationPercent;
+  const ub = b.utilisationPercent;
+  if (ua === null || ub === null || ua + ub <= 0 || total <= 0) {
+    return { aWeight: a.weight, bWeight: b.weight, imbalancePercent: null };
+  }
+  const gain = opts.gain ?? 1;
+  const rel = (ub - ua) / (ua + ub); // −1..1; positive ⇒ b hotter → shift weight to a
+  const shift = gain * rel * total * 0.5; // 0 when balanced; half the combined weight at full imbalance
+  const aWeight = Math.min(total, Math.max(0, a.weight + shift));
+  const bWeight = total - aWeight;
+  const imbalancePercent = Math.round(((ub - ua) / ((ua + ub) / 2)) * 1000) / 10;
+  return { aWeight, bWeight, imbalancePercent };
+}
+
 /** Compute the weights that equalise utilisation across the pools. `feedbackGain` (default 0) trims the
  *  capacity-proportional weights toward pools running below the target and away from those above it —
  *  use a small value (~0.5–1) so the dynamic loop corrects imbalance the weight split alone can't. */
