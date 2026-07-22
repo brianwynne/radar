@@ -1,0 +1,123 @@
+// DC load-balancer weight control — the complement to shed_load. shed_load spills an ISP to commercial
+// CDNs when its PNIs saturate; THIS keeps traffic on the RTÉ CDN by balancing it across the delivery
+// pools (Mam, Dad, Citywest, Parkwest) via Cloudflare Load Balancing POOL weights. Pure and standalone
+// (no DB/HTTP/React) so the same solver runs in the dashboard (dry-run preview) and, later, a resilient
+// balancer service that actually pushes weights to Cloudflare.
+//
+// Objective: EQUALISE UTILISATION across the pools. With traffic split in proportion to weight,
+// util_i = load_i / cap_i, so equal utilisation ⟺ weight ∝ capacity. Because a pool's capacity is
+// (healthy caches × per-cache throughput), a failed cache automatically lowers that pool's capacity →
+// lowers its weight → shifts traffic away. That capacity-tracking is the "dynamic" in dynamic balancing;
+// an optional load-feedback trim corrects residual imbalance the weight split alone doesn't explain.
+
+export type PoolId = 'mam' | 'dad' | 'citywest' | 'parkwest';
+
+export interface BalancePoolPolicy {
+  id: PoolId;
+  name: string;
+  site: string;
+  /** Substrings that identify this pool on a Cloudflare pool name (case-insensitive). */
+  match: string[];
+  /** Physical caches in the pool. */
+  caches: number;
+  /** Per-cache throughput estimate (Gb/s) — Donnybrook (Mam/Dad) caches are much smaller than the
+   *  Citywest/Parkwest ones. ESTIMATE: operator-tunable; capacity = caches × this. */
+  cacheGbps: number;
+}
+
+// Default pool policy. Capacities are ESTIMATES (edit per real cache specs). CW/PW: 4 high-perf caches
+// (~80 Gb/s each); Mam/Dad: 2 lower-perf Donnybrook caches.
+export const BALANCE_POOLS: readonly BalancePoolPolicy[] = [
+  { id: 'citywest', name: 'Citywest', site: 'Citywest', match: ['citywest', 'cw'], caches: 4, cacheGbps: 80 },
+  { id: 'parkwest', name: 'Parkwest', site: 'Parkwest', match: ['parkwest', 'pw'], caches: 4, cacheGbps: 80 },
+  { id: 'mam', name: 'Mam', site: 'Donnybrook', match: ['mam'], caches: 2, cacheGbps: 20 },
+  { id: 'dad', name: 'Dad', site: 'Donnybrook', match: ['dad'], caches: 2, cacheGbps: 20 },
+];
+
+export interface BalancePool {
+  id: string;
+  name?: string;
+  /** Current healthy capacity (same unit as load — e.g. Gb/s). Failed caches reduce this. */
+  capacity: number;
+  /** Observed current load (same unit as capacity); null if unknown. */
+  load?: number | null;
+  /** Currently-configured Cloudflare pool weight (the predefined/static baseline); null if unknown. */
+  currentWeight?: number | null;
+}
+
+export interface BalancedPool {
+  id: string;
+  name?: string;
+  capacity: number;
+  load: number | null;
+  /** load / capacity × 100 (null when load unknown). */
+  utilisationPercent: number | null;
+  currentWeight: number | null;
+  /** Recommended weight for equal utilisation, normalised so the set sums to 1. */
+  recommendedWeight: number;
+  /** recommendedWeight × 100. */
+  recommendedShare: number;
+  /** Utilisation each pool would tend to if the recommended weights were applied (equal across pools,
+   *  absent feedback). Null when total load is unknown. */
+  projectedUtilisationPercent: number | null;
+}
+
+export interface BalanceOutcome {
+  pools: BalancedPool[];
+  totalCapacity: number;
+  totalLoad: number | null;
+  /** totalLoad / totalCapacity × 100 — the utilisation all pools converge to when balanced. */
+  targetUtilisationPercent: number | null;
+  /** max − min current utilisation across pools with known load (0 = already balanced). */
+  currentSpreadPercent: number | null;
+}
+
+/** Compute the weights that equalise utilisation across the pools. `feedbackGain` (default 0) trims the
+ *  capacity-proportional weights toward pools running below the target and away from those above it —
+ *  use a small value (~0.5–1) so the dynamic loop corrects imbalance the weight split alone can't. */
+export function balanceForEqualUtilisation(pools: BalancePool[], opts: { feedbackGain?: number } = {}): BalanceOutcome {
+  const gain = opts.feedbackGain ?? 0;
+  const totalCapacity = pools.reduce((s, p) => s + Math.max(0, p.capacity), 0);
+  const known = pools.filter((p) => typeof p.load === 'number') as (BalancePool & { load: number })[];
+  const totalLoad = known.length ? known.reduce((s, p) => s + p.load, 0) : null;
+  const targetUtil = totalLoad !== null && totalCapacity > 0 ? (totalLoad / totalCapacity) * 100 : null;
+
+  // Base weight ∝ capacity, optionally trimmed by how far each pool is from the target utilisation.
+  const raw = pools.map((p) => {
+    const base = totalCapacity > 0 ? Math.max(0, p.capacity) / totalCapacity : 1 / pools.length;
+    const util = typeof p.load === 'number' && p.capacity > 0 ? (p.load / p.capacity) * 100 : null;
+    let w = base;
+    if (gain > 0 && util !== null && targetUtil && targetUtil > 0) {
+      w = Math.max(0, base * (1 + gain * ((targetUtil - util) / targetUtil)));
+    }
+    return { p, util, w };
+  });
+  const wSum = raw.reduce((s, r) => s + r.w, 0) || 1;
+
+  const outPools: BalancedPool[] = raw.map(({ p, util, w }) => {
+    const recommendedWeight = w / wSum;
+    const projected = totalLoad !== null && p.capacity > 0 ? ((totalLoad * recommendedWeight) / p.capacity) * 100 : null;
+    return {
+      id: p.id,
+      name: p.name,
+      capacity: p.capacity,
+      load: typeof p.load === 'number' ? p.load : null,
+      utilisationPercent: util === null ? null : Math.round(util * 10) / 10,
+      currentWeight: typeof p.currentWeight === 'number' ? p.currentWeight : null,
+      recommendedWeight,
+      recommendedShare: Math.round(recommendedWeight * 1000) / 10,
+      projectedUtilisationPercent: projected === null ? null : Math.round(projected * 10) / 10,
+    };
+  });
+
+  const utils = outPools.map((p) => p.utilisationPercent).filter((u): u is number => u !== null);
+  const currentSpread = utils.length ? Math.round((Math.max(...utils) - Math.min(...utils)) * 10) / 10 : null;
+
+  return {
+    pools: outPools,
+    totalCapacity,
+    totalLoad,
+    targetUtilisationPercent: targetUtil === null ? null : Math.round(targetUtil * 10) / 10,
+    currentSpreadPercent: currentSpread,
+  };
+}

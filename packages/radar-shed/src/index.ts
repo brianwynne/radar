@@ -17,3 +17,6 @@ export type {
   ShedSignalIsp,
   ShedSignals,
 } from './shed-signals.js';
+
+export { BALANCE_POOLS, balanceForEqualUtilisation } from './balance.js';
+export type { PoolId, BalancePoolPolicy, BalancePool, BalancedPool, BalanceOutcome } from './balance.js';
