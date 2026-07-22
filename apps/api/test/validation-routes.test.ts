@@ -13,7 +13,8 @@ function fakeRepo() {
   const rows: ValidationResultRecord[] = [];
   const repo: ValidationResultRepository = {
     async create(v: NewValidationResult) {
-      const rec = { ...v, id: `val-${rows.length + 1}`, ranAt: v.ranAt ?? new Date(NOW) } as ValidationResultRecord;
+      // Real result ids are Postgres UUIDs; keep the fixture realistic so the route's UUID guard is exercised faithfully.
+      const rec = { ...v, id: `${String(rows.length + 1).padStart(8, '0')}-0000-4000-8000-000000000000`, ranAt: v.ranAt ?? new Date(NOW) } as ValidationResultRecord;
       rows.push(rec);
       return rec;
     },

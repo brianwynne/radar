@@ -118,6 +118,11 @@ export const validationRoutes: FastifyPluginAsync<ValidationRouteOptions> = asyn
     async (req, reply) => {
       if (!opts.repository) return reply.code(503).send({ code: 'PERSISTENCE_UNAVAILABLE', message: 'Validation history is not configured.', correlationId: req.id });
       const { resultId } = req.params as { resultId: string };
+      // Guard the UUID before it reaches the `uuid` column — a malformed id would otherwise raise a
+      // Postgres 22P02 and surface as a 500 instead of a clean 404.
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(resultId)) {
+        return reply.code(404).send({ code: 'NOT_FOUND', message: 'Unknown validation result.', correlationId: req.id });
+      }
       const rec = await opts.repository.getById(resultId);
       if (!rec) return reply.code(404).send({ code: 'NOT_FOUND', message: 'Unknown validation result.', correlationId: req.id });
       const canRaw = req.principal!.permissions.includes('ns1.raw.read');

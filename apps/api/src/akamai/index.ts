@@ -1,6 +1,7 @@
 // Akamai connector module. Owns the aggregator, the S3 poller (the DataStream 2 → S3 → RADAR pull
 // path), and an ingest entry point (the alternative HTTPS-push path / replay hook). Read-only:
 // nothing here can write to Akamai. The factory selects disabled vs live from config.
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { AkamaiAggregator, type AkamaiStatus } from './aggregator.js';
 import { AkamaiS3Poller, type AkamaiS3PollerStatus } from './poller.js';
 import { S3ReadClient } from './s3-client.js';
@@ -101,7 +102,12 @@ export class AkamaiConnector {
   }
 
   verifyIngestSecret(provided: string | undefined): boolean {
-    return this.ingestSecret.length > 0 && provided === this.ingestSecret;
+    if (this.ingestSecret.length === 0 || !provided) return false;
+    // Constant-time: compare fixed-length SHA-256 digests so neither the outcome nor the length of
+    // the provided key leaks via response timing (matches the SecretBox comparison discipline).
+    const a = createHash('sha256').update(provided).digest();
+    const b = createHash('sha256').update(this.ingestSecret).digest();
+    return timingSafeEqual(a, b);
   }
 
   /** Not connected ⇒ an honest disabled snapshot: no series (replayed/stale data is not shown as live). */

@@ -56,11 +56,18 @@ export const akamaiRoutes: FastifyPluginAsync<AkamaiRoutesOptions> = async (app,
     app.addContentTypeParser(['application/x-ndjson', 'application/gzip', 'application/octet-stream', 'text/plain'], { parseAs: 'buffer', bodyLimit: opts.ingestBodyLimit ?? 8 * 1024 * 1024 }, (_req, body, done) => done(null, body));
     app.post(
       '/cdn/akamai/datastream/ingest',
-      { bodyLimit: opts.ingestBodyLimit ?? 8 * 1024 * 1024, schema: { ...schema('DataStream 2 ingest', 'Accepts a DataStream 2 edge-log batch (NDJSON, optionally gzip). Shared-secret auth via the X-Radar-Ingest-Key header. Read-only aggregation — nothing is persisted or forwarded.'), security: [] } },
-      async (req, reply) => {
-        if (!connector.verifyIngestSecret(req.headers['x-radar-ingest-key'] as string | undefined)) {
-          return reply.code(401).send({ code: 'UNAUTHORIZED', message: 'Invalid or missing ingest key.' });
-        }
+      {
+        bodyLimit: opts.ingestBodyLimit ?? 8 * 1024 * 1024,
+        // Authenticate the shared secret in onRequest — BEFORE the (up to 8 MiB) body is buffered — so
+        // an attacker without the key can't force large allocations that are only rejected post-parse.
+        onRequest: async (req, reply) => {
+          if (!connector.verifyIngestSecret(req.headers['x-radar-ingest-key'] as string | undefined)) {
+            return reply.code(401).send({ code: 'UNAUTHORIZED', message: 'Invalid or missing ingest key.' });
+          }
+        },
+        schema: { ...schema('DataStream 2 ingest', 'Accepts a DataStream 2 edge-log batch (NDJSON, optionally gzip). Shared-secret auth via the X-Radar-Ingest-Key header. Read-only aggregation — nothing is persisted or forwarded.'), security: [] },
+      },
+      async (req) => {
         const body = Buffer.isBuffer(req.body) ? req.body : Buffer.from(typeof req.body === 'string' ? req.body : '');
         const accepted = connector.ingestUpload(body, req.headers['content-encoding'] as string | undefined);
         return { accepted };
