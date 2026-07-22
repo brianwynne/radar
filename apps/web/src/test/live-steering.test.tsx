@@ -126,6 +126,7 @@ interface StubOpts {
   events?: (callIndex: number) => LiveSteeringEvent[];
   eventsFail?: () => boolean;
   telemetryMode?: 'mock' | 'disabled';
+  cfLbs?: unknown;
 }
 
 const SHED = {
@@ -205,7 +206,7 @@ function stub(principal: Principal, opts: StubOpts = {}) {
         return j({ provenance: CONFIG.provenance, count: items.length, items });
       }
       if (p.endsWith('/live-steering/shed-signals')) return j(SHED);
-      if (p.endsWith('/network/cloudflare/load-balancers')) return j(CF_LBS);
+      if (p.endsWith('/network/cloudflare/load-balancers')) return j(opts.cfLbs ?? CF_LBS);
       if (p.endsWith('/network/cloudflare/pools')) return j(CF_POOLS);
       return j({});
     }),
@@ -271,6 +272,24 @@ describe('Live Steering', () => {
     expect(within(mamRow).getByText(/2\.1\d×/)).toBeInTheDocument();
     const dadRow = screen.getByText('1/2').closest('tr')!; // unique to Dad (one Donnybrook cache down)
     expect(within(dadRow).getByText(/degraded/i)).toBeInTheDocument();
+  });
+
+  it('DC balancer: reports live weights even when the LB steers by country (not default pools)', async () => {
+    // Weights live in countryPools (IE), defaultPools is empty — the old logic (defaultPools only) showed "—".
+    const countryLb = { ...CF_LBS.items[0], defaultPools: [], countryPools: { IE: [
+      { poolId: 'p-cw', poolName: 'realta-citywest', weight: 0.4 },
+      { poolId: 'p-pw', poolName: 'realta-parkwest', weight: 0.3 },
+      { poolId: 'p-mam', poolName: 'realta-mam', weight: 0.2 },
+      { poolId: 'p-dad', poolName: 'realta-dad', weight: 0.1 },
+    ] } };
+    stub(VE, { cfLbs: { items: [countryLb] } });
+    renderAt('/live-steering');
+    await screen.findByText('Current Expected DNS Steering');
+    await userEvent.click(screen.getByRole('tab', { name: /DC balancer/i }));
+    const cwRow = (await screen.findAllByText('Citywest'))[0].closest('tr')!;
+    // Current weight normalised to a share: 0.4 / (0.4+0.3+0.2+0.1) = 40%.
+    expect(within(cwRow).getByText('40%')).toBeInTheDocument();
+    expect(screen.getByText(/4\/4 pools matched/)).toBeInTheDocument();
   });
 
   it('Shed signals: the TTL lever is hidden without the write permission', async () => {
