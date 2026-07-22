@@ -1,14 +1,16 @@
 // Réalta Cache Load Balancing page: renders the summary, the load-balancer steering (pools
 // resolved to names) and the origin pools with their caches + health, from the mock API.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, within, fireEvent } from '@testing-library/react';
+import { screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { NOC, renderAt, stubApi } from './helpers';
 
 const SEEDED_KEY = 'radar.cacheLb.defaultsSeeded.v1';
 // The default focused view auto-pins the primary delivery LBs/pools on first visit; mark it seeded
 // so the toggle tests start from an empty focused view (one test below opts back in).
 beforeEach(() => localStorage.setItem(SEEDED_KEY, '1'));
-afterEach(() => { vi.unstubAllGlobals(); localStorage.clear(); });
+// Explicit cleanup(): the only LB in the mock (liveedge.rte.ie) is a default-pinned name, so a prior
+// test's DOM leaking in would make it match twice — unmount deterministically before clearing state.
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); localStorage.clear(); });
 
 describe('Réalta Cache Load Balancing page', () => {
   it('shows steering (pools resolved to names) and pools with origin health', async () => {
