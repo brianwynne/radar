@@ -83,15 +83,28 @@ export function ShedSignals() {
     });
   const wmFor = (isp: ShedSignalIsp): Wm => wm[isp.id] ?? isp.watermark;
 
+  // Reset the sliders to the mathematically-derived optimal policy (capacity-scaled headroom +
+  // stability-sized band) served by the backend.
+  const resetToOptimal = () => {
+    const seed: Record<string, Wm> = {};
+    for (const d of data.defaultWatermarks) seed[d.id] = { low: d.low, high: d.high };
+    setWm(seed);
+  };
+  const dirty = data.defaultWatermarks.some((d) => { const c = wm[d.id]; return !!c && (c.low !== d.low || c.high !== d.high); });
+
   return (
     <div className="shed-signals">
-      <div className="section-head" style={{ alignItems: 'baseline' }}>
+      <div className="section-head" style={{ alignItems: 'baseline', gap: '0.75rem' }}>
         <h3 style={{ margin: 0 }}>Shed signals → NS1 <span className="badge">DRY-RUN · READ-ONLY</span></h3>
         <span className="muted" style={{ fontSize: '0.78rem' }}>
           {data.connected
             ? `Live CloudVision · ${data.provenance.observedAt ? new Date(data.provenance.observedAt).toLocaleTimeString() : '—'}`
             : 'CloudVision not connected — utilisation unavailable'}
         </span>
+        <button className="ghost" style={{ marginLeft: 'auto', fontSize: '0.76rem' }} disabled={!dirty} onClick={resetToOptimal}
+          title="Reset every watermark to the derived optimal (capacity-scaled headroom + stability-sized band)">
+          Reset to optimal
+        </button>
       </div>
       <p className="muted" style={{ fontSize: '0.8rem', marginTop: 0 }}>
         Per-ISP (incl. INEX) egress utilisation per datacentre, with the <span className="mono">shed_load</span> gating RADAR
