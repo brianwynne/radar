@@ -15,8 +15,10 @@ const updateSchema = z
     enabled: z.boolean().optional(),
     cpCodes: z.array(z.string().max(64)).max(500).nullable().optional(),
     cpNames: z.record(z.string().max(64), z.string().max(128)).nullable().optional(),
-    bucket: z.string().max(256).nullable().optional(),
-    region: z.string().max(64).nullable().optional(),
+    // Charset-guarded: bucket/region are interpolated into the S3 host `${bucket}.s3.${region}.amazonaws.com`,
+    // so forbid anything (/, @, :, whitespace) that could shift the effective host off amazonaws.com.
+    bucket: z.string().max(63).regex(/^[a-z0-9.-]*$/, 'S3 bucket may contain only lowercase letters, digits, dots and hyphens.').nullable().optional(),
+    region: z.string().max(32).regex(/^[a-z0-9-]*$/, 'S3 region may contain only lowercase letters, digits and hyphens.').nullable().optional(),
     prefix: z.string().max(512).nullable().optional(),
     accessKeyId: z.string().max(128).nullable().optional(),
     pollIntervalSeconds: z.number().int().min(5).max(3600).nullable().optional(),

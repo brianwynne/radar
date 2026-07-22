@@ -12,6 +12,7 @@ import { CloudVisionPoller } from './poller.js';
 import type { CloudVisionConfig, CloudVisionMode } from './config.js';
 import type { CloudVisionClient, CloudVisionSource } from './types.js';
 import type { SecretBox } from '../security/secret-box.js';
+import { assertPublicHttpEndpoint, UnsafeEndpointError } from '../security/endpoint.js';
 import type { ConnectorSettingsRecord, ConnectorSettingsRepository } from '@radar/data';
 
 const CONNECTOR = 'cloudvision';
@@ -249,10 +250,10 @@ export class CloudVisionConnectorManager {
     // Live requires an endpoint and a token that will exist AFTER this update.
     if (enabled && mode === 'live') {
       if (!endpoint) throw new ConnectorManagerError('ENDPOINT_REQUIRED', 'A live connection requires an endpoint.');
-      // A malformed endpoint (no http/https scheme) is rejected in ALL environments — it would break
-      // the client at build time. The HTTPS-only rule is additionally enforced outside development.
-      if (!/^https?:\/\//i.test(endpoint)) throw new ConnectorManagerError('ENDPOINT_INSECURE', 'The endpoint must be an http(s) URL (e.g. https://www.arista.io).');
-      if (!this.isDev && !/^https:\/\//i.test(endpoint)) throw new ConnectorManagerError('ENDPOINT_INSECURE', 'The endpoint must use HTTPS outside development.');
+      // Reject a malformed scheme (breaks the client at build time), a non-HTTPS URL outside dev, and
+      // — SSRF hardening — any internal/loopback/link-local host, so the CV token can't be sent inward.
+      try { assertPublicHttpEndpoint(endpoint, { requireHttps: !this.isDev }); }
+      catch (err) { throw new ConnectorManagerError('ENDPOINT_INSECURE', err instanceof UnsafeEndpointError ? err.reason : 'The endpoint must be a public http(s) URL (e.g. https://www.arista.io).'); }
       const tokenAfter = tokenAction === 'replace' ? true : tokenAction === 'clear' ? false : this.tokenConfigured();
       if (!tokenAfter) throw new ConnectorManagerError('TOKEN_REQUIRED', 'A live connection requires a service-account token.');
     }

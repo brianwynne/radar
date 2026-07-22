@@ -15,6 +15,8 @@ export interface AtlasIspMeasurement {
 
 export interface AtlasConfig {
   enabled: boolean;
+  /** Measurement-management gate (create/stop). Reads work without it; mutations require it on. */
+  writeEnabled: boolean;
   mode: AtlasMode;
   endpoint: string;
   apiKey?: string;
@@ -54,6 +56,10 @@ const boolFrom = (def: boolean) =>
 
 const schema = z.object({
   ATLAS_ENABLED: boolFrom(false),
+  // Measurement MANAGEMENT gate (create-on-check-now / create+delete-on-polling). Default OFF, like
+  // NS1_WRITE_ENABLED: reads work without it, but RADAR won't create/stop RIPE Atlas measurements
+  // (which spend credits) until it's explicitly enabled.
+  ATLAS_WRITE_ENABLED: boolFrom(false),
   ATLAS_MODE: z.enum(['mock', 'live']).default('mock'),
   ATLAS_ENDPOINT: z.string().default('https://atlas.ripe.net/api/v2'),
   ATLAS_API_KEY: z.string().optional(),
@@ -112,6 +118,7 @@ export function loadAtlasConfig(env: NodeJS.ProcessEnv = process.env): AtlasConf
 
   const base: AtlasConfig = {
     enabled: p.ATLAS_ENABLED,
+    writeEnabled: p.ATLAS_WRITE_ENABLED,
     mode: p.ATLAS_MODE,
     endpoint: p.ATLAS_ENDPOINT.replace(/\/+$/, ''),
     target: p.ATLAS_TARGET,

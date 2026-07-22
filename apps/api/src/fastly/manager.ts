@@ -12,6 +12,7 @@ import { FastlyRealtimeStreamer } from './realtime-streamer.js';
 import type { FastlyConfig, FastlyMode } from './config.js';
 import type { FastlyClient, FastlyRealtimeClient, FastlySource } from './types.js';
 import { ConnectorManagerError, type AuditSink } from '../cloudvision/manager.js';
+import { assertPublicHttpEndpoint, UnsafeEndpointError } from '../security/endpoint.js';
 import type { SecretBox } from '../security/secret-box.js';
 import type { ConnectorSettingsRecord, ConnectorSettingsRepository } from '@radar/data';
 
@@ -238,6 +239,13 @@ export class FastlyConnectorManager {
     const enabled = input.enabled ?? current?.enabled ?? this.base.enabled;
     const mode: FastlyMode = input.mode ?? (current?.mode as FastlyMode) ?? this.base.mode;
     const apiBase = input.apiBase !== undefined ? (input.apiBase?.trim() || null) : current?.endpoint ?? null;
+    // SSRF hardening: a custom apiBase must be a public HTTPS endpoint (HTTP allowed only in dev for a
+    // local stub) — never an internal/loopback host, so a mistyped/malicious value can't exfiltrate the
+    // Fastly-Key to an internal target.
+    if (apiBase) {
+      try { assertPublicHttpEndpoint(apiBase, { requireHttps: !this.isDev }); }
+      catch (err) { throw new ConnectorManagerError('ENDPOINT_INSECURE', err instanceof UnsafeEndpointError ? err.reason : 'The endpoint is not a valid public http(s) URL.'); }
+    }
     const serviceIds = input.serviceIds !== undefined ? listToCsv(input.serviceIds) : current?.edgeDeviceIds ?? listToCsv(this.base.serviceIds);
 
     const suppliedToken = input.token?.trim() ?? '';

@@ -9,13 +9,21 @@ import type { AtlasConfig, AtlasIspMeasurement } from './config.js';
 import type { ResolverIdentitySnapshot, ResolverSnapshot } from './types.js';
 
 export interface ResolverCheck { isp: string; asn: number; measurementId: number }
+// Thrown when a measurement-management operation (create/stop) is attempted with the write gate off.
+export class AtlasWriteError extends Error {
+  constructor(message: string) { super(message); this.name = 'AtlasWriteError'; }
+}
 export interface ResolverManager {
   snapshot(): Promise<ResolverSnapshot>;
-  /** Fire a burst per ISP. `target` overrides the record checked (defaults to the configured one). */
-  checkNow(target?: string): Promise<{ checks: ResolverCheck[]; startedAt: string; target: string }>;
+  /** Fire a burst per ISP (CREATES RIPE Atlas measurements — write). `write` reports whether a real
+   *  external mutation occurred (false in mock/disabled). `target` overrides the record checked. */
+  checkNow(target?: string): Promise<{ checks: ResolverCheck[]; startedAt: string; target: string; write: boolean }>;
   checkResults(checks: ResolverCheck[], target?: string): Promise<{ snapshot: ResolverSnapshot; pending: boolean }>;
-  setPolling(enabled: boolean): Promise<{ pollingEnabled: boolean }>;
+  /** Toggle recurring measurements (CREATES/STOPS them on Atlas — write). `write` = real mutation occurred. */
+  setPolling(enabled: boolean): Promise<{ pollingEnabled: boolean; write: boolean }>;
   pollingEnabled(): boolean;
+  /** Whether measurement management (create/stop) is enabled — reads work regardless. */
+  writeEnabled(): boolean;
   /** The ISP's ACTUAL recursive resolvers (behind CPE forwarders) + their ECS behaviour. */
   identity(): Promise<ResolverIdentitySnapshot>;
 }
@@ -108,7 +116,10 @@ export class HttpAtlasManager implements ResolverManager {
     return { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, retrievedAt: new Date().toISOString() }, isps, observedAt, target: this.cfg.target, warnings, pollingEnabled: this.enabled };
   }
 
-  async checkNow(target?: string): Promise<{ checks: ResolverCheck[]; startedAt: string; target: string }> {
+  writeEnabled(): boolean { return this.cfg.writeEnabled; }
+
+  async checkNow(target?: string): Promise<{ checks: ResolverCheck[]; startedAt: string; target: string; write: boolean }> {
+    if (!this.cfg.writeEnabled) throw new AtlasWriteError('RIPE Atlas measurement management is disabled (set ATLAS_WRITE_ENABLED to allow check-now / polling, which spend Atlas credits).');
     const t = normaliseTarget(target) ?? this.cfg.target;
     const covered = this.measurements.filter((m) => m.asn && this.hasCoverage(m));
     const checks: ResolverCheck[] = [];
@@ -116,7 +127,8 @@ export class HttpAtlasManager implements ResolverManager {
       const id = await this.createBurst(m, t);
       if (id !== null) checks.push({ isp: m.isp, asn: m.asn, measurementId: id });
     }
-    return { checks, startedAt: new Date().toISOString(), target: t };
+    // write: a real external mutation occurred (burst measurements were created on RIPE Atlas).
+    return { checks, startedAt: new Date().toISOString(), target: t, write: checks.length > 0 };
   }
   // Covered = the ISP had a recurring measurement (i.e. Atlas has probes there). Three → null → skip.
   private hasCoverage(m: AtlasIspMeasurement): boolean {
@@ -165,8 +177,9 @@ export class HttpAtlasManager implements ResolverManager {
     return { provenance: { source: 'ripe-atlas', synthetic: false, readOnly: true, informationalOnly: true, retrievedAt: new Date().toISOString() }, isps, observedAt, warnings };
   }
 
-  async setPolling(enabled: boolean): Promise<{ pollingEnabled: boolean }> {
-    if (enabled === this.enabled) return { pollingEnabled: this.enabled };
+  async setPolling(enabled: boolean): Promise<{ pollingEnabled: boolean; write: boolean }> {
+    if (!this.cfg.writeEnabled) throw new AtlasWriteError('RIPE Atlas measurement management is disabled (set ATLAS_WRITE_ENABLED to start/stop recurring measurements, which spend Atlas credits).');
+    if (enabled === this.enabled) return { pollingEnabled: this.enabled, write: false };
     if (!enabled) {
       // Stop the recurring measurements → no more credit spend. Keep ids for last-known baseline.
       for (const m of this.measurements) if (m.measurementId !== null) await this.stop(m.measurementId).catch(() => {});
@@ -175,7 +188,8 @@ export class HttpAtlasManager implements ResolverManager {
       this.measurements = await Promise.all(this.measurements.map(async (m) => (this.hasCoverage(m) ? { ...m, measurementId: (await this.createRecurring(m)) ?? m.measurementId } : { ...m })));
     }
     this.enabled = enabled;
-    return { pollingEnabled: this.enabled };
+    // write: recurring measurements were created or stopped on RIPE Atlas.
+    return { pollingEnabled: this.enabled, write: true };
   }
 }
 
@@ -187,10 +201,11 @@ export class DisabledResolverManager implements ResolverManager {
   private empty(): ResolverSnapshot {
     return { provenance: { source: 'disabled', synthetic: false, readOnly: true, informationalOnly: true, notice: 'RIPE Atlas resolver reader is not connected — enable it (ATLAS_ENABLED + live mode + key) to read live measurements.', retrievedAt: new Date().toISOString() }, isps: [], observedAt: null, target: this.target, warnings: [], pollingEnabled: false };
   }
+  writeEnabled() { return false; }
   async snapshot() { return this.empty(); }
-  async checkNow(target?: string) { return { checks: [], startedAt: new Date().toISOString(), target: normaliseTarget(target) ?? this.target }; }
+  async checkNow(target?: string) { return { checks: [], startedAt: new Date().toISOString(), target: normaliseTarget(target) ?? this.target, write: false }; }
   async checkResults() { return { snapshot: this.empty(), pending: false }; }
-  async setPolling() { return { pollingEnabled: false }; }
+  async setPolling() { return { pollingEnabled: false, write: false }; }
   async identity(): Promise<ResolverIdentitySnapshot> {
     return { provenance: { source: 'disabled', synthetic: false, readOnly: true, informationalOnly: true, notice: 'RIPE Atlas resolver reader is not connected.', retrievedAt: new Date().toISOString() }, isps: [], observedAt: null, warnings: [] };
   }

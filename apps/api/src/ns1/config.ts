@@ -90,7 +90,10 @@ export function loadNs1Config(env: NodeJS.ProcessEnv = process.env): Ns1Config {
   // default test namespace. Only these names may ever be created.
   const writeAllow = (p.NS1_WRITE_ALLOW ?? '')
     .split(/[\s,]+/).map((s) => s.trim().toLowerCase().replace(/\.$/, '')).filter(Boolean);
-  const writeApiKey = readSecretAt(WRITE_SECRET_FILE) ?? p.NS1_WRITE_API_KEY?.trim() ?? apiKey;
+  // The write path requires a DEDICATED write key — it deliberately does NOT fall back to the read
+  // key. A read-only credential must never satisfy the writer's "key configured" guard, so with no
+  // write key provisioned the NS1 write path stays inert (writeReady() → false) regardless of the gate.
+  const writeApiKey = readSecretAt(WRITE_SECRET_FILE) ?? p.NS1_WRITE_API_KEY?.trim();
 
   return {
     mode: p.RADAR_MODE,

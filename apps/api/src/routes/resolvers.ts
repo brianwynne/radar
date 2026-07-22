@@ -5,6 +5,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { requirePermission } from '../auth/guards.js';
+import { AtlasWriteError } from '../atlas/index.js';
 import type { ResolverManager, ResolverSnapshot } from '../atlas/index.js';
 
 export interface ResolverRoutesOptions {
@@ -45,9 +46,14 @@ export const resolverRoutes: FastifyPluginAsync<ResolverRoutesOptions> = async (
   app.post(
     '/network/resolvers/check',
     { preHandler: requirePermission('connector.manage'), schema: schema('Check resolvers now', 'Fire a burst RIPE Atlas DNS measurement per covered ISP and return the handles to poll. Optional `target` checks a different record (defaults to the configured one). Spends Atlas credits (user-initiated).') },
-    async (req) => {
+    async (req, reply) => {
       const parsed = checkStartBody.safeParse(req.body ?? {});
-      return opts.manager.checkNow(parsed.success ? parsed.data.target : undefined);
+      try {
+        return await opts.manager.checkNow(parsed.success ? parsed.data.target : undefined);
+      } catch (err) {
+        if (err instanceof AtlasWriteError) return reply.code(403).send({ code: 'ATLAS_WRITE_DISABLED', message: err.message, correlationId: req.id });
+        throw err;
+      }
     },
   );
 
@@ -64,10 +70,15 @@ export const resolverRoutes: FastifyPluginAsync<ResolverRoutesOptions> = async (
   app.post(
     '/network/resolvers/polling',
     { preHandler: requirePermission('connector.manage'), schema: schema('Toggle recurring polling', 'Turn the 6-hourly recurring measurements on or off. Off STOPS them on RIPE Atlas to halt credit spend; on re-creates them.') },
-    async (req) => {
+    async (req, reply) => {
       const parsed = pollingBody.safeParse(req.body);
       if (!parsed.success) return { error: 'invalid body' };
-      return opts.manager.setPolling(parsed.data.enabled);
+      try {
+        return await opts.manager.setPolling(parsed.data.enabled);
+      } catch (err) {
+        if (err instanceof AtlasWriteError) return reply.code(403).send({ code: 'ATLAS_WRITE_DISABLED', message: err.message, correlationId: req.id });
+        throw err;
+      }
     },
   );
 };

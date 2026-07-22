@@ -7,6 +7,7 @@ export { loadAtlasConfig } from './config.js';
 export type { AtlasConfig } from './config.js';
 export type { AtlasResolverClient } from './client.js';
 export type { ResolverManager, ResolverCheck } from './manager.js';
+export { AtlasWriteError } from './manager.js';
 export type { ResolverSnapshot } from './types.js';
 
 /** Build the resolver-reader client (read-only baseline) for the configured mode. */

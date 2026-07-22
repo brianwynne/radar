@@ -65,8 +65,9 @@ export class MockAtlasManager implements ResolverManager {
   private enabled = true;
   constructor(private readonly cfg: AtlasConfig) {}
   pollingEnabled() { return this.enabled; }
+  writeEnabled() { return false; } // mock mode never mutates RIPE Atlas
   async snapshot() { return mockSnapshot(this.cfg, this.enabled); }
-  async checkNow(target?: string) { return { checks: [{ isp: 'Eir', asn: 5466, measurementId: 900001 }, { isp: 'Sky', asn: 5607, measurementId: 900002 }] as ResolverCheck[], startedAt: new Date().toISOString(), target: target?.trim() || this.cfg.target }; }
+  async checkNow(target?: string) { return { checks: [{ isp: 'Eir', asn: 5466, measurementId: 900001 }, { isp: 'Sky', asn: 5607, measurementId: 900002 }] as ResolverCheck[], startedAt: new Date().toISOString(), target: target?.trim() || this.cfg.target, write: false }; }
   async checkResults(_checks: ResolverCheck[], target?: string) {
     // A synthetic BURST result: samples carry per-resolver max (set-TTL) + obs + verdict.
     const snap = mockSnapshot(this.cfg, this.enabled);
@@ -75,7 +76,7 @@ export class MockAtlasManager implements ResolverManager {
     for (const i of snap.isps) i.samples = i.samples.map((s, idx) => ({ ...s, recordTtl: idx === 0 ? 300 : 60, edgeTtl: 30, obs: 11, ttlVerdict: idx === 0 ? 'honours' : 'caps' }));
     return { snapshot: snap, pending: false };
   }
-  async setPolling(enabled: boolean) { this.enabled = enabled; return { pollingEnabled: this.enabled }; }
+  async setPolling(enabled: boolean) { this.enabled = enabled; return { pollingEnabled: this.enabled, write: false }; }
   async identity() { return mockIdentity(); }
 }
 
