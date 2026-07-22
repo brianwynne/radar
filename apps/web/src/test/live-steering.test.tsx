@@ -127,6 +127,27 @@ interface StubOpts {
   telemetryMode?: 'mock' | 'disabled';
 }
 
+const SHED = {
+  provenance: { source: 'radar', readOnly: true, write: false, telemetrySource: 'cloudvision', label: 'Shed signals', observedAt: '2026-07-20T21:00:00Z', retrievedAt: '2026-07-20T21:00:05Z' },
+  connected: true,
+  defaultWatermarks: [{ id: 'eir', low: 78, high: 90 }, { id: 'inex', low: 75, high: 90 }],
+  datacentres: [{ id: 'citywest', name: 'Citywest' }, { id: 'parkwest', name: 'Parkwest' }],
+  isps: [
+    { id: 'eir', name: 'Eir', asn: 5466, viaInex: false, isInex: false, watermark: { low: 78, high: 90 },
+      cells: [
+        { dc: 'citywest', active: true, capacityBps: 1e11, primaryBps: 5e10, utilisationPercent: 50, interfaceNames: ['Port-Channel7'] },
+        { dc: 'parkwest', active: true, capacityBps: 1e11, primaryBps: 9.4e10, utilisationPercent: 94, interfaceNames: ['Port-Channel7'] },
+      ],
+      combined: { capacityBps: 2e11, primaryBps: 1.44e11, utilisationPercent: 72 } },
+    { id: 'inex', name: 'INEX (IX)', asn: null, viaInex: false, isInex: true, watermark: { low: 75, high: 90 },
+      cells: [
+        { dc: 'citywest', active: true, capacityBps: 1e11, primaryBps: 3e10, utilisationPercent: 30, interfaceNames: ['Port-Channel1'] },
+        { dc: 'parkwest', active: true, capacityBps: 1e11, primaryBps: 5e10, utilisationPercent: 50, interfaceNames: ['Port-Channel2'] },
+      ],
+      combined: { capacityBps: 2e11, primaryBps: 8e10, utilisationPercent: 40 } },
+  ],
+};
+
 function stub(principal: Principal, opts: StubOpts = {}) {
   let eventsCall = 0;
   let dnsRuns = 0;
@@ -159,6 +180,7 @@ function stub(principal: Principal, opts: StubOpts = {}) {
         eventsCall += 1;
         return j({ provenance: CONFIG.provenance, count: items.length, items });
       }
+      if (p.endsWith('/live-steering/shed-signals')) return j(SHED);
       return j({});
     }),
   );
@@ -171,6 +193,25 @@ describe('Live Steering', () => {
     renderAt('/live-steering');
     expect(await screen.findByText('Current Expected DNS Steering')).toBeInTheDocument();
     expect(screen.getByText(/not measured traffic/i)).toBeInTheDocument();
+  });
+
+  it('Shed signals tab: renders the per-ISP × DC grid and computes NS1 shed_load gating from live util', async () => {
+    stub(VE);
+    renderAt('/live-steering');
+    await screen.findByText('Current Expected DNS Steering');
+    await userEvent.click(screen.getByRole('tab', { name: /Shed signals/i }));
+    // Grid header + rows.
+    expect(await screen.findByRole('columnheader', { name: 'Citywest' })).toBeInTheDocument();
+    expect(screen.getByText('INEX (IX)')).toBeInTheDocument();
+    const eirRow = screen.getByText('Eir').closest('tr')!;
+    // Eir Citywest 50% (below low 78) → served, no shed badge; Parkwest 94% (≥ high 90) → full shed.
+    expect(within(eirRow).getByText('50%')).toBeInTheDocument();
+    expect(within(eirRow).getByText('94%')).toBeInTheDocument();
+    expect(within(eirRow).getAllByText(/shed 100%/i).length).toBeGreaterThan(0);
+    // Combined 72% is below Eir's default low (78) → the gating pill reads "serve".
+    expect(within(eirRow).getByText('serve')).toBeInTheDocument();
+    // Watermark sliders are present (adjustable).
+    expect(within(eirRow).getAllByRole('slider').length).toBe(2);
   });
 
   it('shows a steering path per selected ISP with telemetry-not-connected, and never labels it actual traffic', async () => {

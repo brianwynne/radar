@@ -491,3 +491,29 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .rv-idprobes { font-size: 0.72rem; }
 .rv-idecs { font-size: 0.78rem; color: var(--accent); }
 .rv-idrow .muted.rv-idecs { color: var(--ink-soft); }
+
+/* Shed Signals — realtime per-(ISP × DC) utilisation + NS1 shed_load gating (light theme) */
+.shed-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.shed-table th, .shed-table td { padding: 0.45rem 0.6rem; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.shed-table th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--ink-soft); }
+.shed-cell { min-width: 8rem; }
+.shed-cell-num { display: flex; align-items: baseline; gap: 0.4rem; margin-top: 0.2rem; }
+.shed-bar-wrap { position: relative; height: 8px; border-radius: 4px; background: rgba(16,24,40,0.08); overflow: visible; }
+.shed-bar { height: 100%; border-radius: 4px; background: currentColor; opacity: 0.9; }
+.shed-tick { position: absolute; top: -2px; width: 2px; height: 12px; }
+.shed-tick.low { background: rgba(16,24,40,0.35); }
+.shed-tick.high { background: rgba(16,24,40,0.7); }
+.shed-badge { font-size: 0.68rem; padding: 0.02rem 0.35rem; border-radius: 999px; background: var(--panel-muted); color: var(--ink-soft); }
+/* State colours drive the bar (currentColor) + the pill */
+.shed-serve { color: var(--ok); }
+.shed-partial { color: var(--warn); }
+.shed-shed { color: var(--danger); }
+.shed-no-data, .shed-cell.muted { color: var(--ink-soft); }
+.shed-pill { display: inline-block; padding: 0.08rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+.shed-pill.shed-serve { background: var(--ok-bg); color: var(--ok); }
+.shed-pill.shed-partial { background: var(--warn-bg); color: var(--warn); }
+.shed-pill.shed-shed { background: var(--danger-bg); color: var(--danger); }
+.shed-pill.shed-no-data { background: var(--panel-muted); color: var(--ink-soft); }
+.shed-slider { display: flex; align-items: center; gap: 0.4rem; font-size: 0.7rem; }
+.shed-slider input[type="range"] { flex: 1; min-width: 5rem; }
+.table-scroll { overflow-x: auto; }

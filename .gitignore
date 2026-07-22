@@ -10,3 +10,6 @@ secrets/
 .DS_Store
 /tmp/
 .vite/
+
+# Session scratch — temp files, tokens, downloaded toolchains (never commit)
+scratchpad/

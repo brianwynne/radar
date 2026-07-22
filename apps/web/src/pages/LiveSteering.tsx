@@ -17,6 +17,7 @@ import { useDnsObservation } from '../telemetry/use-dns-observation';
 import { PathTelemetryInline } from '../telemetry/NetworkPathTelemetry';
 import { RealtaDeliveryContext } from '../telemetry/CacheTelemetry';
 import { DnsObservationTier } from '../telemetry/DnsObservationTier';
+import { ShedSignals } from '../features/ShedSignals';
 import type { LiveSteeringConfig, LiveSteeringEvent, LiveSteeringState } from '../api/types';
 
 const DEFAULT_INTERVAL = 30;
@@ -54,6 +55,7 @@ export function LiveSteering() {
   const showDetail = hasPermission('ns1.detail.read');
   const canRunObservation = hasPermission('dns.observed.run');
   const reduceMotion = useMemo(prefersReducedMotion, []);
+  const [view, setView] = useState<'steering' | 'shed'>('steering');
   const telemetry = useNetworkPaths(60_000); // read-only, informational; refreshed hourly-ish
   const cache = useCacheTelemetry({ refreshMs: 60_000 }); // Réalta pool + origin context
   const dnsObs = useDnsObservation({ refreshMs: 60_000 }); // Tier-2 observed DNS answer
@@ -215,6 +217,14 @@ export function LiveSteering() {
         </p>
       </div>
 
+      <div className="rv-viewtoggle" role="tablist" style={{ marginBottom: '0.75rem' }}>
+        <button role="tab" aria-selected={view === 'steering'} className={view === 'steering' ? 'on' : ''} onClick={() => setView('steering')}>Expected steering</button>
+        <button role="tab" aria-selected={view === 'shed'} className={view === 'shed' ? 'on' : ''} onClick={() => setView('shed')}>Shed signals → NS1</button>
+      </div>
+
+      {view === 'shed' && <ShedSignals />}
+      {view === 'steering' && (<>
+
       {configError && <div className="notice danger">{configError}</div>}
       {telemetry.notice && telemetry.mode !== 'disabled' && <div className="notice info">{telemetry.notice}</div>}
       {cache.notice && cache.mode !== 'disabled' && <div className="notice info">{cache.notice}</div>}
@@ -366,6 +376,7 @@ export function LiveSteering() {
           </div>
         )}
       </div>
+      </>)}
     </div>
   );
 }

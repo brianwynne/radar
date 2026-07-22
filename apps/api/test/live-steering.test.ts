@@ -5,6 +5,7 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/config.js';
 import type { SteeringStore } from '../src/database/steering-store.js';
+import type { CloudVisionPoller } from '../src/cloudvision/poller.js';
 import type { SteeringChangeEvent, SteeringState } from '@radar/data';
 
 function fakeStore(states: SteeringState[], events: SteeringChangeEvent[]): SteeringStore {
@@ -127,6 +128,55 @@ describe('GET /api/v1/live-steering/events', () => {
   it('401 unauthenticated', async () => {
     const a = await app('NOC_VIEWER', fakeStore([], []), false);
     expect((await a.inject({ url: '/api/v1/live-steering/events' })).statusCode).toBe(401);
+    await a.close();
+  });
+});
+
+describe('GET /live-steering/shed-signals', () => {
+  const G = 1_000_000_000;
+  const iface = (deviceId: string, provider: string, linkType: string, primaryBps: number) =>
+    ({ deviceId, name: `PC-${provider}`, provider, linkType, speedBps: 100 * G, primaryBps });
+  // Minimal fake poller — the route only reads getLatest().interfaces + status().source.
+  function fakePoller(interfaces: unknown[], source = 'cloudvision'): CloudVisionPoller {
+    const snap = { capturedAt: '2026-07-20T21:00:00Z', source, interfaces } as unknown;
+    return { getLatest: () => snap, status: () => ({ source }) } as unknown as CloudVisionPoller;
+  }
+  async function appWithPoller(poller?: CloudVisionPoller): Promise<FastifyInstance> {
+    const a = await buildApp(loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', RADAR_DEV_AUTH: 'true', RADAR_DEV_ROLE: 'NOC_VIEWER' }), { cloudVisionPoller: poller });
+    await a.ready();
+    return a;
+  }
+
+  it('no poller → connected:false but still lists every ISP + both DCs', async () => {
+    const a = await appWithPoller();
+    const body = (await a.inject({ url: '/api/v1/live-steering/shed-signals' })).json();
+    expect(body.connected).toBe(false);
+    expect(body.provenance).toMatchObject({ readOnly: true, write: false });
+    expect(body.datacentres.map((d: { id: string }) => d.id)).toEqual(['citywest', 'parkwest']);
+    expect(body.isps.map((i: { id: string }) => i.id)).toContain('inex');
+    expect(body.defaultWatermarks.find((w: { id: string }) => w.id === 'liberty')).toMatchObject({ low: 55, high: 75 });
+    await a.close();
+  });
+
+  it('live poller → per-DC egress utilisation computed from real interfaces', async () => {
+    const a = await appWithPoller(fakePoller([
+      iface('JPN2508A7QM', 'Eir', 'PRIVATE_PEERING', 50 * G), // CW 50%
+      iface('JPA2430A9R2', 'Eir', 'PRIVATE_PEERING', 90 * G), // PW 90%
+      iface('JPN2508A7QM', 'INEX', 'IX_PEERING', 40 * G),
+    ]));
+    const body = (await a.inject({ url: '/api/v1/live-steering/shed-signals' })).json();
+    expect(body.connected).toBe(true);
+    const eir = body.isps.find((i: { id: string }) => i.id === 'eir');
+    expect(eir.cells.find((c: { dc: string }) => c.dc === 'citywest').utilisationPercent).toBe(50);
+    expect(eir.cells.find((c: { dc: string }) => c.dc === 'parkwest').utilisationPercent).toBe(90);
+    expect(eir.combined.utilisationPercent).toBe(70);
+    await a.close();
+  });
+
+  it('401 unauthenticated', async () => {
+    const a = await buildApp(loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', RADAR_DEV_AUTH: 'false' }), {});
+    await a.ready();
+    expect((await a.inject({ url: '/api/v1/live-steering/shed-signals' })).statusCode).toBe(401);
     await a.close();
   });
 });

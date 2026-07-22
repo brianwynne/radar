@@ -1,0 +1,26 @@
+{
+  "name": "@radar/shed",
+  "version": "0.1.0",
+  "private": true,
+  "description": "RADAR shed core — per-(ISP × datacentre) utilisation → NS1 shed_load gating. Standalone: no DB/HTTP/Fastify/React deps, so it can run inside RADAR or as an independent resilient service.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3",
+    "vitest": "4.1.10"
+  }
+}

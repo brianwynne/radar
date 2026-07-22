@@ -8,9 +8,13 @@ import type { SteeringStore } from '../database/steering-store.js';
 import { requirePermission } from '../auth/guards.js';
 import { DEFAULT_WATCHED_RECORDS, ISP_SCENARIOS, preferredPathForAsn } from '../change-detection/isps.js';
 import { REASON_DISPLAY, STEERING_REASONS, type SteeringReason } from '../change-detection/steering-state.js';
+import type { CloudVisionPoller } from '../cloudvision/poller.js';
+import { buildShedSignals, SHED_ISPS } from '@radar/shed';
 
 export interface LiveSteeringRouteOptions {
   store?: SteeringStore;
+  /** CloudVision poller — source of the live interface utilisation for the shed-signal view. */
+  cvPoller?: CloudVisionPoller;
 }
 
 const MAX_SELECTABLE_ISPS = 6;
@@ -155,6 +159,43 @@ export const liveSteeringRoutes: FastifyPluginAsync<LiveSteeringRouteOptions> = 
           currentState: e.currentState,
           activity: e.activity,
         })),
+      };
+    },
+  );
+
+  // --- Shed signals: per-(ISP × datacentre) egress utilisation + the shed_load gating that WOULD be
+  //     fed to NS1 (dry-run visualisation; RADAR writes nothing). Raw util from the live CloudVision
+  //     snapshot; the pure gating is applied client-side so the watermarks stay adjustable. ---------
+  app.get(
+    '/live-steering/shed-signals',
+    {
+      preHandler: requirePermission('steering.summary.read'),
+      schema: {
+        tags: ['live-steering'],
+        summary: 'Per-(ISP × DC) utilisation + NS1 shed_load gating (dry-run)',
+        description:
+          'The live per-ISP (incl. INEX) per-datacentre egress utilisation from CloudVision, with the default shed_load watermark policy. Models the load-shedding signals RADAR WOULD feed to NS1’s shed_load filter — READ-ONLY, nothing is sent to NS1.',
+        security: [{ bearerAuth: [] }],
+      },
+    },
+    async () => {
+      const latest = opts.cvPoller?.getLatest() ?? null;
+      const source = opts.cvPoller?.status().source ?? 'disabled';
+      const signals = buildShedSignals(latest?.interfaces ?? []);
+      return {
+        provenance: {
+          source: 'radar',
+          readOnly: true,
+          write: false,
+          telemetrySource: source, // 'cloudvision' when live; 'disabled'/'mock' otherwise
+          label: 'Shed signals that would be fed to NS1 (dry-run)',
+          notice: 'Dry-run visualisation of the NS1 shed_load feed. RADAR sends nothing to NS1 here.',
+          observedAt: latest?.capturedAt ?? null,
+          retrievedAt: new Date().toISOString(),
+        },
+        connected: source === 'cloudvision',
+        defaultWatermarks: SHED_ISPS.map((i) => ({ id: i.id, low: i.watermark.low, high: i.watermark.high })),
+        ...signals,
       };
     },
   );

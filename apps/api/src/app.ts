@@ -234,7 +234,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   });
   await app.register(auditRoutes, { prefix: '/api/v1', database: deps.database });
   await app.register(changeDetectionRoutes, { prefix: '/api/v1', service: deps.changeDetection });
-  await app.register(liveSteeringRoutes, { prefix: '/api/v1', store: deps.steeringStore });
+  await app.register(liveSteeringRoutes, { prefix: '/api/v1', store: deps.steeringStore, cvPoller: deps.cloudVisionPoller });
   await app.register(telemetryRoutes, { prefix: '/api/v1', client: deps.telemetryClient, mode: deps.telemetryMode });
   await app.register(cacheTelemetryRoutes, { prefix: '/api/v1', client: deps.cacheTelemetryClient, mode: deps.cacheTelemetryMode });
   await app.register(dnsObservationRoutes, { prefix: '/api/v1', service: deps.dnsObservationService, repository: deps.dnsObservationRepository, staleAfterSeconds: deps.dnsObservationStaleAfterSeconds });

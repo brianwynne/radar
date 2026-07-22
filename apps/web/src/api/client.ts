@@ -9,6 +9,7 @@ import type {
   ExplainResponse,
   LiveSteeringConfig,
   LiveSteeringEventsResponse,
+  ShedSignalsResponse,
   LiveSteeringStateResponse,
   CacheNodeResponse,
   CacheNodesResponse,
@@ -160,6 +161,7 @@ export const api = {
     const qs = p.toString();
     return request<LiveSteeringEventsResponse>(`/api/v1/live-steering/events${qs ? `?${qs}` : ''}`);
   },
+  shedSignals: () => request<ShedSignalsResponse>('/api/v1/live-steering/shed-signals'),
   telemetryNetworkPaths: (q: { pathType?: string; status?: string; stale?: boolean } = {}) => {
     const p = new URLSearchParams();
     if (q.pathType) p.set('pathType', q.pathType);
