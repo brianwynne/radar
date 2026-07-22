@@ -32,10 +32,11 @@ describe('DcBandwidth', () => {
 
   it('lists each PNI with its realtime bandwidth and the PNI total', () => {
     render(<DcBandwidth interfaces={interfaces} />);
-    // Each PNI row (Eir appears at both DCs).
-    expect(screen.getAllByText('Eir').length).toBe(2);
-    expect(screen.getByText('Sky')).toBeInTheDocument();
-    expect(screen.getByText('Liberty')).toBeInTheDocument();
+    // Each PNI row in the detail table (Eir appears at both DCs).
+    const detail = screen.getByText('Datacentre').closest('table')! as HTMLElement;
+    expect(within(detail).getAllByText('Eir').length).toBe(2);
+    expect(within(detail).getByText('Sky')).toBeInTheDocument();
+    expect(within(detail).getByText('Liberty')).toBeInTheDocument();
     // Total of PNIs = 40 + 60 + 90 + 50 = 240 (excludes the 30 IX and the transit link).
     const totalRow = screen.getByText('Total of PNIs').closest('tr')! as HTMLElement;
     expect(within(totalRow).getByText('240.0 Gb/s')).toBeInTheDocument();
@@ -44,6 +45,19 @@ describe('DcBandwidth', () => {
   it('ignores non-delivery (transit) links', () => {
     render(<DcBandwidth interfaces={interfaces} />);
     expect(screen.queryByText('Cogent')).not.toBeInTheDocument();
+  });
+
+  it('shows the % difference between paired links (same provider at both DCs)', () => {
+    render(<DcBandwidth interfaces={interfaces} />);
+    // Eir is the only provider present at BOTH DCs (Citywest 40G, Parkwest 90G).
+    const pairsTable = screen.getByText('Paired link').closest('table')! as HTMLElement;
+    const eirRow = within(pairsTable).getByText('Eir').closest('tr')! as HTMLElement;
+    expect(within(eirRow).getByText('40.0 G')).toBeInTheDocument();
+    expect(within(eirRow).getByText('90.0 G')).toBeInTheDocument();
+    expect(within(eirRow).getByText(/PW \+77%/)).toBeInTheDocument(); // (90-40)/65 ≈ 76.9%
+    // Single-homed links (Sky CW-only, Liberty PW-only) are not pairs.
+    expect(within(pairsTable).queryByText('Sky')).not.toBeInTheDocument();
+    expect(within(pairsTable).queryByText('Liberty')).not.toBeInTheDocument();
   });
 
   it('the focus filter scopes the per-PNI list and totals to one datacentre', async () => {

@@ -34,6 +34,21 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
   const totalIx = sum(ixs);
   const grand = sum(scoped);
 
+  // Paired links: the same provider at BOTH datacentres (Eir CW vs Eir PW, INEX CW vs INEX PW, …),
+  // with the % difference between the two sides. Always over both DCs, independent of the focus filter.
+  const dev = (id: DcId) => DATACENTRES.find((d) => d.id === id)?.deviceId;
+  const providerBps = (provider: string, dcId: DcId) => sum(delivery.filter((i) => (i.provider ?? i.name) === provider && i.deviceId === dev(dcId)));
+  const pairs = [...new Set(delivery.map((i) => i.provider ?? i.name))]
+    .map((provider) => {
+      const cw = providerBps(provider, 'citywest');
+      const pw = providerBps(provider, 'parkwest');
+      const diff = cw !== null && pw !== null && cw + pw > 0 ? ((pw - cw) / ((cw + pw) / 2)) * 100 : null;
+      const ix = delivery.some((i) => (i.provider ?? i.name) === provider && isIx(i));
+      return { provider, cw, pw, diff, ix };
+    })
+    .filter((x) => x.cw !== null && x.pw !== null) // only providers present at both DCs
+    .sort((a, b) => Math.abs(b.diff ?? 0) - Math.abs(a.diff ?? 0));
+
   const row = (i: NetworkInterface) => (
     <tr key={`${i.deviceId}::${i.name}`}>
       <td><b>{i.provider ?? i.name}</b>{i.provider && <span className="mono muted" style={{ fontSize: '0.72rem' }}> {i.name}</span>}</td>
@@ -65,6 +80,32 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
           </div>
         ))}
       </div>
+
+      {/* 1b. Paired links (same provider CW vs PW) + the % difference */}
+      {pairs.length > 0 && (
+        <div className="table-scroll" style={{ marginBottom: '1rem' }}>
+          <table className="shed-table">
+            <thead>
+              <tr><th>Paired link</th><th style={{ textAlign: 'right' }}>Citywest</th><th style={{ textAlign: 'right' }}>Parkwest</th><th style={{ textAlign: 'right' }} title="Difference between the two sides, relative to their mean">Difference</th></tr>
+            </thead>
+            <tbody>
+              {pairs.map((pr) => {
+                const hot = pr.diff !== null && Math.abs(pr.diff) >= 15;
+                return (
+                  <tr key={pr.provider}>
+                    <td><b>{pr.provider}</b>{pr.ix && <span className="badge neutral" style={{ marginLeft: '0.3rem' }}>IX</span>}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{gbps(pr.cw)} G</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{gbps(pr.pw)} G</td>
+                    <td className={`mono ${hot ? 'shed-shed' : pr.diff !== null && Math.abs(pr.diff) >= 5 ? 'shed-partial' : 'shed-serve'}`} style={{ textAlign: 'right' }}>
+                      <b>{pr.diff === null ? '—' : Math.abs(pr.diff) < 0.5 ? 'balanced' : `${pr.diff > 0 ? 'PW' : 'CW'} +${Math.abs(pr.diff).toFixed(0)}%`}</b>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* 2. Each PNI (+ INEX) in realtime */}
       <div className="table-scroll">
