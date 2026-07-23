@@ -54,10 +54,21 @@ describe('DcBandwidth', () => {
     const eirRow = within(pairsTable).getByText('Eir').closest('tr')! as HTMLElement;
     expect(within(eirRow).getByText('40.0 G')).toBeInTheDocument();
     expect(within(eirRow).getByText('90.0 G')).toBeInTheDocument();
-    expect(within(eirRow).getByText(/PW \+77%/)).toBeInTheDocument(); // (90-40)/65 ≈ 76.9%
+    expect(within(eirRow).getByText(/PW \+56%/)).toBeInTheDocument(); // (90-40)/90 ≈ 55.6% of the larger side
     // Single-homed links (Sky CW-only, Liberty PW-only) are not pairs.
     expect(within(pairsTable).queryByText('Sky')).not.toBeInTheDocument();
     expect(within(pairsTable).queryByText('Liberty')).not.toBeInTheDocument();
+  });
+
+  it('a pair with traffic on only one DC reads 100% difference', () => {
+    const oneSided: NetworkInterface[] = [
+      itf(CW, 'Port-Channel5', 'Three', 'PRIVATE_PEERING', 1.5 * G),
+      itf(PW, 'Port-Channel5', 'Three', 'PRIVATE_PEERING', 0), // dead PNI at Parkwest
+    ];
+    render(<DcBandwidth interfaces={oneSided} />);
+    const pairsTable = screen.getByText('Paired link').closest('table')! as HTMLElement;
+    const row = within(pairsTable).getByText('Three').closest('tr')! as HTMLElement;
+    expect(within(row).getByText(/CW \+100%/)).toBeInTheDocument(); // 1.5 vs 0 ⇒ 100%, not 200%
   });
 
   it('the focus filter scopes the per-PNI list and totals to one datacentre', async () => {

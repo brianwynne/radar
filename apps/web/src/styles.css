@@ -539,3 +539,4 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 /* OTT delivery bandwidth — DC focus + PNI/IX separator */
 .card.dc-focus { border-color: var(--brand); box-shadow: 0 0 0 2px var(--info-bg); }
 tr.dc-sep td { background: var(--panel-muted); color: var(--ink-soft); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; padding: 0.3rem 0.6rem; border-top: 2px solid var(--line); }
+tr.dc-subtotal td { border-top: 1px solid var(--line); background: var(--panel-muted); padding-top: 0.4rem; padding-bottom: 0.4rem; }

@@ -42,7 +42,13 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
     .map((provider) => {
       const cw = providerBps(provider, 'citywest');
       const pw = providerBps(provider, 'parkwest');
-      const diff = cw !== null && pw !== null && cw + pw > 0 ? ((pw - cw) / ((cw + pw) / 2)) * 100 : null;
+      // % difference relative to the LARGER side (0–100%): one side carrying nothing reads 100%.
+      let diff: number | null = null;
+      if (cw !== null && pw !== null) {
+        const hi = Math.max(cw, pw);
+        const mag = hi > 0 ? ((hi - Math.min(cw, pw)) / hi) * 100 : 0;
+        diff = pw >= cw ? mag : -mag; // sign = direction (positive ⇒ Parkwest higher)
+      }
       const ix = delivery.some((i) => (i.provider ?? i.name) === provider && isIx(i));
       return { provider, cw, pw, diff, ix };
     })
@@ -115,27 +121,24 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
           </thead>
           <tbody>
             {pnis.map(row)}
-            {pnis.length > 0 && ixs.length > 0 && (
+            {/* PNI subtotal — directly under the PNIs */}
+            {pnis.length > 0 && (
+              <tr className="dc-subtotal"><td colSpan={3}><b>Total of PNIs</b></td><td className="mono" style={{ textAlign: 'right' }}><b>{gbps(totalPnis)} Gb/s</b></td></tr>
+            )}
+            {ixs.length > 0 && (
               <tr className="dc-sep"><td colSpan={4}>Internet Exchange (IX)</td></tr>
             )}
             {ixs.map(row)}
+            {/* IX subtotal — directly under the IX links */}
+            {ixs.length > 0 && (
+              <tr className="dc-subtotal"><td colSpan={3} className="muted">Total INEX</td><td className="mono muted" style={{ textAlign: 'right' }}>{gbps(totalIx)} Gb/s</td></tr>
+            )}
             {scoped.length === 0 && <tr><td colSpan={4} className="muted">No delivery links found (CloudVision not connected, or no PNI/IX interfaces).</td></tr>}
           </tbody>
-          {/* 3. Totals */}
           <tfoot>
             <tr>
-              <td colSpan={3}><b>Total of PNIs</b></td>
-              <td className="mono" style={{ textAlign: 'right' }}><b>{gbps(totalPnis)} Gb/s</b></td>
-            </tr>
-            {ixs.length > 0 && (
-              <tr>
-                <td colSpan={3} className="muted">Total INEX</td>
-                <td className="mono muted" style={{ textAlign: 'right' }}>{gbps(totalIx)} Gb/s</td>
-              </tr>
-            )}
-            <tr>
-              <td colSpan={3} className="muted">Grand total (PNI + IX)</td>
-              <td className="mono muted" style={{ textAlign: 'right' }}>{gbps(grand)} Gb/s</td>
+              <td colSpan={3}>Grand total (PNI + IX)</td>
+              <td className="mono" style={{ textAlign: 'right' }}>{gbps(grand)} Gb/s</td>
             </tr>
           </tfoot>
         </table>
