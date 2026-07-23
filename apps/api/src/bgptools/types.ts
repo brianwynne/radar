@@ -1,0 +1,119 @@
+// bgp.tools connector — canonical domain model. READ-ONLY external routing intelligence: RADAR
+// observes bgp.tools' publicly-documented data (the table dump: every prefix each AS originates,
+// with a visibility hit count) and NEVER modifies BGP or NS1. The model deliberately keeps three
+// layers separate so an operator can see exactly how a conclusion was reached:
+//   1. RawRoutingObservation  — what the provider reported (table row(s) for a prefix)
+//   2. NormalizedRoutingSignal — RADAR's normalised signals derived from raw + expected config
+//   3. RoutingIntegrityAssessment — RADAR's healthy/degraded/critical/unknown verdict + reasons
+// Only signals with a DOCUMENTED bgp.tools source are modelled here (prefix visibility, origin,
+// withdrawal, observation counts). RPKI / upstreams / AS-path / leaks have no documented export
+// and are intentionally out of scope for v1 (never fabricated).
+
+export type AddressFamily = 'ipv4' | 'ipv6';
+
+export type RoutingIntegrityState = 'healthy' | 'degraded' | 'critical' | 'unknown';
+
+/** Confidence in an observation, from how widely the prefix is seen and how fresh the data is. */
+export type SourceConfidence = 'high' | 'medium' | 'low';
+
+/** Where a datum came from — the provider's live table, or synthetic mock/fixture data. */
+export type BgpToolsSource = 'bgptools' | 'mock' | 'disabled';
+
+/** One prefix that RADAR watches, with the origin ASN it is EXPECTED to be announced from. */
+export interface MonitoredPrefix {
+  prefix: string;
+  addressFamily: AddressFamily;
+  /** The ASN RADAR expects to originate this prefix (RTÉ's own or a contracted origin). */
+  expectedOriginAsn: number;
+  /** Optional operator label (site / service) — never affects the assessment. */
+  description?: string;
+}
+
+/** A single origin seen for a prefix in the provider's table, with its visibility hit count
+ *  (how many of the provider's collector sessions observed it). */
+export interface ObservedOrigin {
+  asn: number;
+  /** Visibility hits for this (prefix, origin) pair. */
+  hits: number;
+}
+
+/** RAW observation for one monitored prefix — the provider's report, unmodified. A prefix with
+ *  no origins was not found in the table (withdrawn / not visible). Multiple origins = MOAS. */
+export interface RawRoutingObservation {
+  prefix: string;
+  addressFamily: AddressFamily;
+  origins: ObservedOrigin[];
+  /** When the provider's data was captured (UTC). */
+  observedAt: Date;
+}
+
+/** RADAR's NORMALISED signals for one prefix, derived from the raw observation + expected config.
+ *  Every field is traceable to documented bgp.tools data or the operator's expected-origin config —
+ *  nothing is inferred from a source we do not have. */
+export interface NormalizedRoutingSignal {
+  prefix: string;
+  addressFamily: AddressFamily;
+  expectedOriginAsn: number;
+  /** The dominant observed origin (most hits); null when the prefix is withdrawn. */
+  observedOriginAsn: number | null;
+  observedOrigins: ObservedOrigin[];
+  /** observedOriginAsn === expectedOriginAsn (and the expected origin is actually present). */
+  originAsExpected: boolean;
+  /** No origin observed for the prefix at all — withdrawn / not visible. */
+  prefixWithdrawn: boolean;
+  /** An origin other than the expected ASN is announcing the prefix (hijack / leak indicator). */
+  unexpectedOrigin: boolean;
+  /** More than one origin ASN seen for the prefix (Multi-Origin AS). */
+  moas: boolean;
+  /** Total observed hits ÷ the full-visibility baseline (0..1); null when withdrawn/unknown. */
+  prefixVisibilityRatio: number | null;
+  /** Total visibility hits across all origins for the prefix. */
+  observationCount: number;
+  firstObservedAt: Date;
+  lastObservedAt: Date;
+  sourceConfidence: SourceConfidence;
+  /** lastObservedAt is older than the configured freshness window — treat as unknown. */
+  stale: boolean;
+}
+
+/** RADAR's verdict for one prefix (or, when `prefix` is absent, the overall estate). The `reasons`
+ *  are human-readable and each maps to a field in `signals`, so the conclusion is fully explained. */
+export interface RoutingIntegrityAssessment {
+  /** The prefix this assessment is for; omitted for the overall estate roll-up. */
+  prefix?: string;
+  state: RoutingIntegrityState;
+  reasons: string[];
+  /** The evidence the verdict was drawn from (per-prefix assessments only). */
+  signals?: NormalizedRoutingSignal;
+  assessedAt: Date;
+}
+
+/** Counts of prefixes by integrity state — the overview roll-up. */
+export interface RoutingIntegrityCounts {
+  healthy: number;
+  degraded: number;
+  critical: number;
+  unknown: number;
+  total: number;
+}
+
+/** The overall routing-intelligence snapshot RADAR presents. */
+export interface RoutingIntelligenceSnapshot {
+  capturedAt: string; // ISO-8601 UTC
+  source: BgpToolsSource;
+  /** Worst-severity roll-up across all monitored prefixes. */
+  overall: RoutingIntegrityState;
+  counts: RoutingIntegrityCounts;
+  assessments: RoutingIntegrityAssessment[];
+  /** Honest provenance — synthetic vs observed, read-only, and a note. */
+  provenance: BgpToolsProvenance;
+  /** Non-fatal issues (stale data, prefixes with no expected origin, …). */
+  warnings: string[];
+}
+
+export interface BgpToolsProvenance {
+  source: BgpToolsSource;
+  synthetic: boolean;
+  readOnly: true;
+  note: string;
+}
