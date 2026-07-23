@@ -453,11 +453,18 @@ function buildLinkGroups(interfaces: NetworkInterface[], cfg: AdapterConfig): Li
 }
 
 function buildSummary(devices: NetworkDevice[], interfaces: NetworkInterface[], peers: BgpPeer[], snapshotFreshness: Freshness): NetworkSummary {
+  // Eyeball peering, INEX and transit terminate on the edge ROUTERS; the DC switches carry only
+  // internal CDN fabric (cache uplinks, member links) — never eyeball peering — some of which a
+  // greedy description parse can mislabel as PRIVATE_PEERING. Scope the edge/peering/transit
+  // aggregates to router interfaces so the Peering card shows eyeball PNIs + INEX only. Guarded:
+  // if no device is classified as a router, fall back to all interfaces (never blank the card).
+  const routerIds = new Set(devices.filter((d) => d.deviceType === 'router').map((d) => d.id));
+  const onEdge = routerIds.size > 0 ? (i: NetworkInterface) => routerIds.has(i.deviceId) : () => true;
   // Exclude LAG members from throughput aggregates — the Port-Channel already represents their
   // combined traffic, so counting both would double-count.
-  const external = interfaces.filter((i) => EXTERNAL.includes(i.linkType) && i.memberOf === null);
-  const peering = interfaces.filter((i) => PEERING.includes(i.linkType) && i.memberOf === null);
-  const transit = interfaces.filter((i) => i.linkType === 'TRANSIT' && i.memberOf === null);
+  const external = interfaces.filter((i) => EXTERNAL.includes(i.linkType) && i.memberOf === null && onEdge(i));
+  const peering = interfaces.filter((i) => PEERING.includes(i.linkType) && i.memberOf === null && onEdge(i));
+  const transit = interfaces.filter((i) => i.linkType === 'TRANSIT' && i.memberOf === null && onEdge(i));
   const totalEdge = sumOrNull(external.map((i) => i.primaryBps));
   const operationalCapacity = sumOrNull(external.filter((i) => i.operState === 'up').map((i) => i.speedBps));
   const operationalHeadroom = totalEdge !== null && operationalCapacity !== null ? Math.max(0, operationalCapacity - totalEdge) : null;

@@ -149,8 +149,13 @@ export function NetworkTelemetry() {
 
   // Configured capacity per link for the Peering and Transit tiles. Global (not scoped to the
   // Router filter) to mirror the summary tiles these lists sit under.
-  const peeringLinks = useMemo(() => linksOfTypes(t.interfaces, PEERING_TYPES), [t.interfaces]);
-  const transitLinks = useMemo(() => linksOfTypes(t.interfaces, TRANSIT_TYPES), [t.interfaces]);
+  // Peering/Transit capacity breakdowns terminate on the edge routers; scope to router devices so
+  // switch CDN-fabric links (which a greedy description parse can mislabel as peering) don't leak
+  // in. Guarded: no routers identified → don't restrict (mirrors the backend summary).
+  const routerIds = useMemo(() => new Set(t.devices.filter((d) => d.deviceType === 'router').map((d) => d.id)), [t.devices]);
+  const edgeInterfaces = useMemo(() => (routerIds.size > 0 ? t.interfaces.filter((i) => routerIds.has(i.deviceId)) : t.interfaces), [t.interfaces, routerIds]);
+  const peeringLinks = useMemo(() => linksOfTypes(edgeInterfaces, PEERING_TYPES), [edgeInterfaces]);
+  const transitLinks = useMemo(() => linksOfTypes(edgeInterfaces, TRANSIT_TYPES), [edgeInterfaces]);
   const peeringCapacityBps = useMemo(() => sumCapacityBps(peeringLinks), [peeringLinks]);
   const transitCapacityBps = useMemo(() => sumCapacityBps(transitLinks), [transitLinks]);
 

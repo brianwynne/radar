@@ -228,6 +228,34 @@ describe('LAG capacity is the sum of its member port speeds', () => {
   });
 });
 
+describe('peering/edge aggregates count edge-router links only, not DC switches', () => {
+  const at = new Date(NOW);
+  const dev = (id: string, hostname: string) => ({ id, hostname, modelName: null, softwareVersion: null, streaming: true, reachable: true, observedAt: at });
+  const itf = (deviceId: string, name: string, out: number): RawInterface => ({
+    deviceId, name, description: name, adminState: 'up', operState: 'up', speedBps: 100e9,
+    reportedInBps: 0, reportedOutBps: out, inOctets: null, outOctets: null, inErrors: 0, outErrors: 0,
+    inDiscards: 0, outDiscards: 0, observedAt: at, memberOf: null,
+  });
+  // Both links classify PRIVATE_PEERING (the switch one is a mislabelled CDN-fabric link); only
+  // the one on the edge router is real eyeball peering.
+  const rules: ClassificationRule[] = [
+    { match: { kind: 'description_exact', description: 'router-eir' }, linkType: 'PRIVATE_PEERING', provider: 'Eir' },
+    { match: { kind: 'description_exact', description: 'switch-citywest' }, linkType: 'PRIVATE_PEERING', provider: 'Citywest' },
+  ];
+  const snap = buildSnapshot(
+    {
+      devices: [dev('R1', 'edge-citywest-router'), dev('S1', 'edge-citywest-switch')],
+      interfaces: [itf('R1', 'router-eir', 30e9), itf('S1', 'switch-citywest', 90e9)],
+      bgpPeers: [],
+    },
+    cfg({ classificationRules: rules, expectedDeviceIds: ['R1', 'S1'] }),
+  );
+  it('peering + edge totals include the router link, not the switch link', () => {
+    expect(snap.summary.totalPeeringThroughputBps).toBe(30e9); // Eir on the router
+    expect(snap.summary.totalEdgeThroughputBps).toBe(30e9); // not 120G (30 + the switch's 90)
+  });
+});
+
 describe('primaryBps + utilisation follow the busier direction', () => {
   const at = new Date(NOW);
   const iface = (inBps: number, outBps: number): RawInterface => ({

@@ -82,18 +82,22 @@ describe('Network Telemetry page', () => {
     expect(within(first as HTMLElement).getByText('out')).toBeInTheDocument();
   });
 
-  it('splits devices into router/switch tabs and filters by datacentre', async () => {
-    stubApi(NOC); // edge1 = router/Citywest, edge2 = switch/Parkwest
+  it('splits devices by type tab and filters by datacentre', async () => {
+    stubApi(NOC); // edge1 = router/Citywest, edge2 = router/Parkwest
     renderAt('/network');
     // Both devices listed under the default "All" tab (device ids are unique to the Devices table).
     expect(await screen.findByText('JPE00000001')).toBeInTheDocument();
     expect(screen.getByText('JPE00000002')).toBeInTheDocument();
-    // Switches tab → only the switch (edge2) remains; the router and its rows are scoped out.
+    // Routers tab → both remain (both are edge routers).
+    fireEvent.click(screen.getByRole('button', { name: /Routers/ }));
+    expect(screen.getByText('JPE00000001')).toBeInTheDocument();
+    expect(screen.getByText('JPE00000002')).toBeInTheDocument();
+    // Switches tab → none (no switch in this mock) and the router interfaces are scoped out.
     fireEvent.click(screen.getByRole('button', { name: /Switches/ }));
     expect(screen.queryByText('JPE00000001')).not.toBeInTheDocument();
-    expect(screen.getByText('JPE00000002')).toBeInTheDocument();
-    expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument(); // an edge1 interface, scoped out
-    // Back to All, then filter by datacentre = Citywest → only the router (edge1) remains.
+    expect(screen.queryByText('JPE00000002')).not.toBeInTheDocument();
+    expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
+    // Back to All, then filter by datacentre = Citywest → only edge1 (Parkwest edge2 drops out).
     fireEvent.click(screen.getByRole('button', { name: /^All/ }));
     fireEvent.change(screen.getByLabelText('Datacentre'), { target: { value: 'Citywest' } });
     expect(screen.getByText('JPE00000001')).toBeInTheDocument();
