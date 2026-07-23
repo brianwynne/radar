@@ -31,6 +31,22 @@ export type {
   ConnectorSettingsUpdate,
   ConnectorSettingsRepository,
   TokenAction,
+  BgpToolsAddressFamily,
+  MonitoredPrefixRecord,
+  MonitoredPrefixUpsert,
+  BgpToolsMonitoredPrefixRepository,
+  ObservedOriginRecord,
+  BgpToolsObservationRecord,
+  NewBgpToolsObservation,
+  BgpToolsObservationQuery,
+  BgpToolsObservationRepository,
+  IncidentKind,
+  IncidentSeverity,
+  IncidentState,
+  BgpToolsIncidentRecord,
+  IncidentSignal,
+  BgpToolsIncidentQuery,
+  BgpToolsIncidentRepository,
 } from './types.js';
 
 export type { SnapshotRepository } from './snapshots/snapshot-repository.js';
@@ -45,6 +61,12 @@ export { PostgresSteeringEventRepository } from './steering/postgres-steering-ev
 export { PostgresDnsObservationRepository } from './dns/postgres-dns-observation-repository.js';
 export { PostgresValidationResultRepository } from './validation/postgres-validation-repository.js';
 export { PostgresConnectorSettingsRepository } from './connector/postgres-connector-settings-repository.js';
+export {
+  PostgresBgpToolsMonitoredPrefixRepository,
+  PostgresBgpToolsObservationRepository,
+  PostgresBgpToolsIncidentRepository,
+  originsChecksum,
+} from './bgptools/postgres-bgptools-repository.js';
 
 export {
   applyMigrations,

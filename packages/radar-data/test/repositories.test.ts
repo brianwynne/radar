@@ -60,6 +60,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0003_dns_observations', filename: '0003_dns_observations.sql', applied: true, checksumMatches: true },
       { version: '0004_ns1_validations', filename: '0004_ns1_validations.sql', applied: true, checksumMatches: true },
       { version: '0005_connector_settings', filename: '0005_connector_settings.sql', applied: true, checksumMatches: true },
+      { version: '0006_bgptools', filename: '0006_bgptools.sql', applied: true, checksumMatches: true },
     ]);
   });
 

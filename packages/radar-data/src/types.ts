@@ -352,3 +352,109 @@ export interface ConnectorSettingsRepository {
   get(connector: string): Promise<ConnectorSettingsRecord | null>;
   upsert(update: ConnectorSettingsUpdate): Promise<ConnectorSettingsRecord>;
 }
+
+// --- bgp.tools routing intelligence (read-only) -----------------------------
+
+export type BgpToolsAddressFamily = 'ipv4' | 'ipv6';
+
+/** One monitored prefix and the origin ASN it is expected to be announced from. */
+export interface MonitoredPrefixRecord {
+  prefix: string;
+  addressFamily: BgpToolsAddressFamily;
+  expectedOriginAsn: number;
+  description?: string;
+  createdBy?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type MonitoredPrefixUpsert = Omit<MonitoredPrefixRecord, 'createdAt' | 'updatedAt'>;
+
+export interface BgpToolsMonitoredPrefixRepository {
+  list(): Promise<MonitoredPrefixRecord[]>;
+  upsert(prefix: MonitoredPrefixUpsert): Promise<MonitoredPrefixRecord>;
+  remove(prefix: string): Promise<boolean>;
+}
+
+/** A single observed origin for a prefix (from the bgp.tools table), with its visibility hits. */
+export interface ObservedOriginRecord {
+  asn: number;
+  hits: number;
+}
+
+/** A raw table observation for one prefix, recorded only when the origin set changes. */
+export interface BgpToolsObservationRecord {
+  id: string;
+  prefix: string;
+  addressFamily: BgpToolsAddressFamily;
+  origins: ObservedOriginRecord[];
+  contentChecksum: string;
+  observedAt: Date;
+  source: string;
+  createdAt: Date;
+}
+
+export type NewBgpToolsObservation = Omit<BgpToolsObservationRecord, 'id' | 'createdAt' | 'contentChecksum'> & {
+  /** Optional precomputed checksum; the repository derives one from `origins` when absent. */
+  contentChecksum?: string;
+};
+
+export interface BgpToolsObservationQuery {
+  prefix?: string;
+  since?: Date;
+  /** Page size, 1..1000 (default 200). */
+  limit?: number;
+}
+
+export interface BgpToolsObservationRepository {
+  /** Record an observation only if the origin set differs from the latest for that prefix
+   *  (change-log semantics). Returns the stored record, or the existing latest when unchanged. */
+  record(observation: NewBgpToolsObservation): Promise<{ record: BgpToolsObservationRecord; inserted: boolean }>;
+  list(query?: BgpToolsObservationQuery): Promise<BgpToolsObservationRecord[]>;
+  /** Delete observations older than the cutoff; returns the number removed. */
+  prune(olderThan: Date): Promise<number>;
+}
+
+export type IncidentKind = 'withdrawn' | 'hijack' | 'moas' | 'visibility_loss';
+export type IncidentSeverity = 'degraded' | 'critical';
+export type IncidentState = 'detected' | 'active' | 'acknowledged' | 'resolved' | 'suppressed';
+
+export interface BgpToolsIncidentRecord {
+  id: string;
+  prefix: string;
+  kind: IncidentKind;
+  severity: IncidentSeverity;
+  state: IncidentState;
+  firstDetectedAt: Date;
+  lastObservedAt: Date;
+  resolvedAt?: Date;
+  observationCount: number;
+  evidence: unknown;
+  updatedAt: Date;
+}
+
+/** An observed problem for a prefix at a point in time — drives open-or-update grouping. */
+export interface IncidentSignal {
+  prefix: string;
+  kind: IncidentKind;
+  severity: IncidentSeverity;
+  observedAt: Date;
+  evidence: unknown;
+}
+
+export interface BgpToolsIncidentQuery {
+  state?: IncidentState;
+  prefix?: string;
+  /** When true, only open incidents (detected/active/acknowledged). */
+  openOnly?: boolean;
+  limit?: number;
+}
+
+export interface BgpToolsIncidentRepository {
+  /** Open a new incident for (prefix, kind) or update the existing open one (bumps count,
+   *  last-observed, severity, evidence). Idempotent grouping. */
+  openOrUpdate(signal: IncidentSignal): Promise<BgpToolsIncidentRecord>;
+  /** Resolve any open incident for (prefix, kind); returns the resolved record if one existed. */
+  resolveOpen(prefix: string, kind: IncidentKind, at: Date): Promise<BgpToolsIncidentRecord | null>;
+  list(query?: BgpToolsIncidentQuery): Promise<BgpToolsIncidentRecord[]>;
+}
