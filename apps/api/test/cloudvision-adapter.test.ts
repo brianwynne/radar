@@ -181,7 +181,7 @@ describe('LAG capacity is the sum of its member port speeds', () => {
   // A 2×100G Port-Channel whose Sysdb speedMbps under-reports the bundle as a single member (100G).
   // RADAR must derive the bundle's capacity from its members: 200G, not the reported 100G.
   const at = new Date(NOW);
-  const mk = (name: string, out: number, speedBps: number | null, operState: 'up' | 'down', memberOf: string | null) => ({
+  const mk = (name: string, out: number, speedBps: number | null, operState: 'up' | 'down' | 'unknown', memberOf: string | null) => ({
     deviceId: 'D1', name, description: 'CDN-MEM-PKW-6', adminState: 'up' as const, operState, speedBps,
     reportedInBps: 0, reportedOutBps: out, inOctets: null, outOctets: null, inErrors: 0, outErrors: 0,
     inDiscards: 0, outDiscards: 0, observedAt: at, memberOf,
@@ -202,7 +202,18 @@ describe('LAG capacity is the sum of its member port speeds', () => {
     expect(po.headroomBps).toBe(100e9); // 200G − 100G
   });
 
-  it('counts only UP members toward capacity', () => {
+  it('counts idle (unknown-state) members — live CloudVision never marks a port down', () => {
+    // A switch bundle whose members carry no traffic: CloudVision reports them 'unknown', not 'up'.
+    // They must still contribute their link capacity (200G), not be dropped (which read 100G before).
+    const snap = build([
+      mk('Port-Channel11', 100e9, 100e9, 'unknown', null),
+      mk('Ethernet21/1', 0, 100e9, 'unknown', 'Port-Channel11'),
+      mk('Ethernet22/1', 0, 100e9, 'unknown', 'Port-Channel11'),
+    ]);
+    expect(snap.interfaces.find((i) => i.name === 'Port-Channel11')!.speedBps).toBe(200e9);
+  });
+
+  it('excludes only explicitly-down members from capacity', () => {
     const snap = build([
       mk('Port-Channel11', 100e9, 100e9, 'up', null),
       mk('Ethernet21/1', 100e9, 100e9, 'up', 'Port-Channel11'),

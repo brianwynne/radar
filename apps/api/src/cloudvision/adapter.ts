@@ -385,7 +385,12 @@ function reconcileLagCapacity(interfaces: NetworkInterface[], cfg: AdapterConfig
   for (const lag of interfaces) {
     const members = membersByParent.get(counterKey(lag.deviceId, lag.name));
     if (!members || members.length === 0) continue;
-    const summed = sumOrNull(members.filter((m) => m.operState === 'up').map((m) => m.speedBps));
+    // Sum every member that isn't explicitly down. Live CloudVision reports a port as 'up' (passing
+    // traffic) or 'unknown' (idle) but never 'down', so an idle member must still contribute its
+    // link capacity — filtering to 'up' only would under-count a bundle with idle members (common
+    // on switches). Members with no resolvable speed are skipped by sumOrNull, so an absent port
+    // (no transceiver → speedBps null) never inflates the total.
+    const summed = sumOrNull(members.filter((m) => m.operState !== 'down').map((m) => m.speedBps));
     if (summed === null || summed <= 0 || summed === lag.speedBps) continue;
     lag.speedBps = summed;
     lag.utilisationPercent = utilisationPercent(lag.primaryBps, summed);
