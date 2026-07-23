@@ -2,7 +2,7 @@
 // an average of percentages); classification, freshness, BGP normalisation, completeness and
 // warnings are all exercised through the shared scenario fixtures.
 import { describe, it, expect } from 'vitest';
-import { buildSnapshot, normaliseBgpState, bgpSessionRole, connectionFromLinkType, type AdapterConfig, type RawSnapshot } from '../src/cloudvision/adapter.js';
+import { buildSnapshot, normaliseBgpState, bgpSessionRole, connectionFromLinkType, type AdapterConfig, type RawSnapshot, type RawInterface } from '../src/cloudvision/adapter.js';
 import { scenarioSnapshot, MOCK_EDGE_DEVICE_IDS, EDGE1, EDGE2 } from '../src/cloudvision/fixtures.js';
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_PROVIDER_FOR_ASN } from '../src/cloudvision/classification-rules.js';
 import type { ClassificationRule } from '../src/cloudvision/classification.js';
@@ -174,6 +174,46 @@ describe('LAG members are excluded from summary throughput (no double-count)', (
     expect(snap.summary.totalEdgeThroughputBps).toBe(
       (snap.summary.totalPeeringThroughputBps ?? 0) + (snap.summary.totalTransitThroughputBps ?? 0),
     );
+  });
+});
+
+describe('LAG capacity is the sum of its member port speeds', () => {
+  // A 2×100G Port-Channel whose Sysdb speedMbps under-reports the bundle as a single member (100G).
+  // RADAR must derive the bundle's capacity from its members: 200G, not the reported 100G.
+  const at = new Date(NOW);
+  const mk = (name: string, out: number, speedBps: number | null, operState: 'up' | 'down', memberOf: string | null) => ({
+    deviceId: 'D1', name, description: 'CDN-MEM-PKW-6', adminState: 'up' as const, operState, speedBps,
+    reportedInBps: 0, reportedOutBps: out, inOctets: null, outOctets: null, inErrors: 0, outErrors: 0,
+    inDiscards: 0, outDiscards: 0, observedAt: at, memberOf,
+  });
+  const build = (interfaces: RawInterface[]) =>
+    buildSnapshot({ devices: [{ id: 'D1', hostname: 'd1', modelName: null, softwareVersion: null, streaming: true, reachable: true, observedAt: at }], interfaces, bgpPeers: [] },
+      cfg({ expectedDeviceIds: ['D1'], warningPercent: 60, criticalPercent: 80 }));
+
+  it('reports 200G for a 2×100G bundle the LAG record under-reported as 100G', () => {
+    const snap = build([
+      mk('Port-Channel11', 100e9, 100e9, 'up', null), // bundle carries 100G, Arista reports 100G speed
+      mk('Ethernet21/1', 60e9, 100e9, 'up', 'Port-Channel11'),
+      mk('Ethernet22/1', 40e9, 100e9, 'up', 'Port-Channel11'),
+    ]);
+    const po = snap.interfaces.find((i) => i.name === 'Port-Channel11')!;
+    expect(po.speedBps).toBe(200e9);
+    expect(po.utilisationPercent).toBeCloseTo(50); // 100G / 200G
+    expect(po.headroomBps).toBe(100e9); // 200G − 100G
+  });
+
+  it('counts only UP members toward capacity', () => {
+    const snap = build([
+      mk('Port-Channel11', 100e9, 100e9, 'up', null),
+      mk('Ethernet21/1', 100e9, 100e9, 'up', 'Port-Channel11'),
+      mk('Ethernet22/1', 0, 100e9, 'down', 'Port-Channel11'),
+    ]);
+    expect(snap.interfaces.find((i) => i.name === 'Port-Channel11')!.speedBps).toBe(100e9);
+  });
+
+  it('leaves a bundle with no visible members on its reported speed', () => {
+    const snap = build([mk('Port-Channel11', 30e9, 100e9, 'up', null)]);
+    expect(snap.interfaces.find((i) => i.name === 'Port-Channel11')!.speedBps).toBe(100e9);
   });
 });
 

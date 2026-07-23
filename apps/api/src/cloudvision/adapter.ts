@@ -336,6 +336,34 @@ function buildBgpPeer(raw: RawBgpPeer, deviceHostname: string, intfByKey: Map<st
   };
 }
 
+/** A Port-Channel's real capacity is the sum of its UP member ports' speeds. Arista's reported
+ *  LAG speed (Sysdb `speedMbps`, or a `speedEnum` per-lane fallback) can under-report — e.g. it
+ *  reflects only the currently LACP-bundled member — so a 2×100G bundle can arrive as 100G. When
+ *  we can see the member ports, derive the bundle's speed from them (the same total-capacity rule
+ *  buildGroup uses) and recompute the dependent utilisation/headroom/status so the whole row stays
+ *  consistent. Only overrides when members are visible and their summed speed differs from the
+ *  reported one — a bundle with no visible members keeps its reported speed. Mutates in place. */
+function reconcileLagCapacity(interfaces: NetworkInterface[], cfg: AdapterConfig): void {
+  const membersByParent = new Map<string, NetworkInterface[]>();
+  for (const i of interfaces) {
+    if (i.memberOf === null) continue;
+    const k = counterKey(i.deviceId, i.memberOf);
+    const list = membersByParent.get(k);
+    if (list) list.push(i);
+    else membersByParent.set(k, [i]);
+  }
+  for (const lag of interfaces) {
+    const members = membersByParent.get(counterKey(lag.deviceId, lag.name));
+    if (!members || members.length === 0) continue;
+    const summed = sumOrNull(members.filter((m) => m.operState === 'up').map((m) => m.speedBps));
+    if (summed === null || summed <= 0 || summed === lag.speedBps) continue;
+    lag.speedBps = summed;
+    lag.utilisationPercent = utilisationPercent(lag.primaryBps, summed);
+    lag.headroomBps = headroomBps(summed, lag.primaryBps);
+    lag.status = interfaceStatus(lag.operState, lag.utilisationPercent, lag.observedAt !== null, cfg);
+  }
+}
+
 // ---- Aggregation ----------------------------------------------------------------------------
 
 /** Build one link group from a set of interfaces. Capacity/headroom count only operationally
@@ -426,6 +454,9 @@ export function buildSnapshot(raw: RawSnapshot, cfg: AdapterConfig): NetworkStat
   const interfaces = raw.interfaces.map((i) =>
     buildInterface(i, raw.previousCounters?.get(counterKey(i.deviceId, i.name)), hostById.get(i.deviceId) ?? i.deviceId, cfg),
   );
+  // A LAG's capacity is the sum of its member ports' speeds — reconcile before it feeds the
+  // interface rows, utilisation, headroom and the summary capacity (Arista can under-report it).
+  reconcileLagCapacity(interfaces, cfg);
   // Index interfaces by device::name so a BGP session can inherit its interface's classification.
   const intfByKey = new Map(interfaces.map((i) => [`${i.deviceId}::${i.name}`, i]));
   const bgpPeers = raw.bgpPeers.map((p) => buildBgpPeer(p, hostById.get(p.deviceId) ?? p.deviceId, intfByKey, cfg));
