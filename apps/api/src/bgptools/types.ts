@@ -117,3 +117,39 @@ export interface BgpToolsProvenance {
   readOnly: true;
   note: string;
 }
+
+// --- bgp.tools Prometheus monitoring feed (per-account) --------------------------------------
+// The account's Prometheus endpoint (prometheus.bgp.tools/prom/<uuid>) exposes real visibility,
+// upstream and ASN-topology metrics for the monitored networks. These are the authoritative
+// visibility + upstream sources; the table.jsonl dump complements them with explicit origin data
+// for hijack/MOAS detection.
+
+/** Per-prefix metrics from the monitoring feed. */
+export interface PrefixMetrics {
+  prefix: string;
+  /** The ASN bgp.tools attributes the prefix to (the metric's `asn` label). */
+  originAsn: number;
+  /** Paths bgp.tools can see for the prefix (bgptools_asn_prefix_visible) — the visibility count. */
+  visiblePaths: number | null;
+  /** Number of upstreams for the prefix (bgptools_prefix_upstreams). */
+  upstreamCount: number | null;
+  /** Upstream ASNs currently seen for the prefix (bgptools_prefix_upstream_seen == 1). */
+  upstreams: number[];
+}
+
+/** Per-ASN topology metrics from the monitoring feed. */
+export interface AsnMetrics {
+  asn: number;
+  prefixesTotal: number | null;
+  prefixesLowVis: number | null;
+  cone: number | null;
+  upstreams: number | null;
+  downstreams: number | null;
+  peers: number | null;
+}
+
+export interface BgpToolsMetricsSnapshot {
+  observedAt: Date;
+  prefixes: PrefixMetrics[];
+  asns: AsnMetrics[];
+}
