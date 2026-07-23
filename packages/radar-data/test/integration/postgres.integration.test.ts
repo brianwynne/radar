@@ -58,7 +58,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
   const q = (): Queryable => pool as unknown as Queryable;
   const reset = () =>
     pool.query(
-      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, dns_observations, ns1_validation_results, connector_settings, schema_migrations CASCADE',
+      'DROP TABLE IF EXISTS configuration_snapshots, audit_events, change_detection_checkpoints, live_steering_states, steering_change_events, dns_observations, ns1_validation_results, connector_settings, bgptools_observations, bgptools_incidents, bgptools_monitored_prefixes, schema_migrations CASCADE',
     );
   const migrate = async () => {
     const c = await pool.connect();
@@ -166,9 +166,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
         }
       };
       const [a, b] = await Promise.all([runOnce(), runOnce()]);
-      expect([a.length, b.length].sort()).toEqual([0, 5]); // one applied all, the other found them applied
+      expect([a.length, b.length].sort()).toEqual([0, 6]); // one applied all, the other found them applied
       const count = await pool.query<{ n: number }>('SELECT count(*)::int n FROM schema_migrations');
-      expect(count.rows[0].n).toBe(5); // no duplicate
+      expect(count.rows[0].n).toBe(6); // no duplicate
     });
 
     it('releases the advisory lock after success and after failure', async () => {
