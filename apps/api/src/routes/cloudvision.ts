@@ -46,7 +46,7 @@ function presentInterface(i: NetworkInterface, detail: boolean): Record<string, 
   const core = {
     deviceId: i.deviceId, deviceHostname: i.deviceHostname, name: i.name, description: i.description,
     provider: i.provider, location: i.location, linkType: i.linkType, memberOf: i.memberOf, adminState: i.adminState, operState: i.operState,
-    speedBps: i.speedBps, inBps: i.inBps, outBps: i.outBps, primaryBps: i.primaryBps, bandwidthSource: i.bandwidthSource,
+    speedBps: i.speedBps, inBps: i.inBps, outBps: i.outBps, primaryBps: i.primaryBps, primaryDirection: i.primaryDirection, bandwidthSource: i.bandwidthSource,
     utilisationPercent: i.utilisationPercent, headroomBps: i.headroomBps,
     inErrors: i.inErrors, outErrors: i.outErrors, inDiscards: i.inDiscards, outDiscards: i.outDiscards,
     status: i.status, freshness: i.freshness, observedAt: i.observedAt, source: i.provenance.source,

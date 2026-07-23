@@ -252,9 +252,17 @@ function buildInterface(raw: RawInterface, prev: PreviousCounters | undefined, d
   const outBw = resolveBandwidth(raw.reportedOutBps, deriveBandwidthBps(prevOut, curOut, derOpts));
   for (const w of [...inBw.warnings, ...outBw.warnings]) if (!warnings.includes(w)) warnings.push(w);
 
-  const direction = cfg.primaryDirection ?? 'outbound';
-  const primary = direction === 'inbound' ? inBw : outBw;
+  // Primary = the busier direction. Edge routers deliver (outbound-heavy); DC switches ingest
+  // (inbound-heavy), so a fixed direction hides a switch's real load. Drive "current" + utilisation
+  // from whichever direction carries more; ties (incl. both-absent) fall to the configured
+  // primaryDirection (default outbound). The quieter direction is still reported (inBps/outBps).
+  const tieBreak = cfg.primaryDirection ?? 'outbound';
+  const inV = inBw.bps ?? -1;
+  const outV = outBw.bps ?? -1;
+  const primaryIsInbound = inV > outV || (inV === outV && tieBreak === 'inbound');
+  const primary = primaryIsInbound ? inBw : outBw;
   const primaryBps = primary.bps;
+  const primaryDirection: 'inbound' | 'outbound' = primaryIsInbound ? 'inbound' : 'outbound';
   const utilisation = utilisationPercent(primaryBps, raw.speedBps);
   const freshness = freshnessOf(raw.observedAt, cfg.now, cfg.staleAfterSeconds);
   const status = interfaceStatus(raw.operState, utilisation, raw.observedAt !== null, cfg);
@@ -278,6 +286,7 @@ function buildInterface(raw: RawInterface, prev: PreviousCounters | undefined, d
     inBps: inBw.bps,
     outBps: outBw.bps,
     primaryBps,
+    primaryDirection,
     bandwidthSource: primary.source,
     utilisationPercent: utilisation,
     headroomBps: headroomBps(raw.speedBps, primaryBps),

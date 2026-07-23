@@ -67,6 +67,19 @@ function CapacityBreakdown({ links, totalBps }: { links: NetworkInterface[]; tot
   );
 }
 
+// "Current" throughput cell: the busier direction (which drives utilisation) shown big, the
+// quieter direction small beneath it — so a switch's inbound-heavy load isn't hidden.
+function CurrentBps({ i }: { i: NetworkInterface }) {
+  const primaryIn = i.primaryDirection === 'inbound';
+  const secondaryBps = primaryIn ? i.outBps : i.inBps;
+  return (
+    <div className="bw-cell">
+      <span className="bw-primary">{formatBps(i.primaryBps)} <span className="bw-dir">{primaryIn ? 'in' : 'out'}</span></span>
+      <span className="bw-secondary">{formatBps(secondaryBps)} {primaryIn ? 'out' : 'in'}</span>
+    </div>
+  );
+}
+
 // Utilisation colour level with hysteresis lives in ../network/util-level (shared with the OTT Delivery
 // tab). Re-exported so existing imports (and unit tests of nextUtilLevel) keep working.
 export { nextUtilLevel } from '../network/util-level';
@@ -459,7 +472,7 @@ export function NetworkTelemetry() {
                   <td className="muted">{i.description ?? '—'}</td>
                   <td>{i.provider ?? '—'}</td>
                   <td>{formatBps(i.speedBps)}</td>
-                  <td>{formatBps(i.primaryBps)}</td>
+                  <td><CurrentBps i={i} /></td>
                   <td className={utilClass(levelByKey.get(key) ?? 'ok')}>{formatPercent(i.utilisationPercent)}</td>
                 </tr>
               );
@@ -546,7 +559,7 @@ export function NetworkTelemetry() {
                   <td>{i.provider ?? '—'}</td>
                   <td>{i.linkType}</td>
                   <td>{formatBps(i.speedBps)}</td>
-                  <td>{formatBps(i.primaryBps)}</td>
+                  <td><CurrentBps i={i} /></td>
                   <td className={utilClass(levelByKey.get(key) ?? 'ok')}>{formatPercent(i.utilisationPercent)}</td>
                   <td><span className={`badge ${bw.badge} badge-sm`}>{bw.label}</span></td>
                   <td>{num((i.inErrors ?? 0) + (i.outErrors ?? 0))}</td>

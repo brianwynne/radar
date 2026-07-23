@@ -68,6 +68,20 @@ describe('Network Telemetry page', () => {
     expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
   });
 
+  it('shows both traffic directions in the Current cell (busier big, quieter small)', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    // Each interface renders its busier direction with an "in"/"out" tag plus the quieter one beneath.
+    const cells = document.querySelectorAll('.bw-cell');
+    expect(cells.length).toBeGreaterThan(0);
+    const first = cells[0];
+    expect(first.querySelector('.bw-primary')).not.toBeNull();
+    expect(first.querySelector('.bw-secondary')).not.toBeNull();
+    // The mock is outbound-heavy, so the primary tag reads "out".
+    expect(within(first as HTMLElement).getByText('out')).toBeInTheDocument();
+  });
+
   it('splits devices into router/switch tabs and filters by datacentre', async () => {
     stubApi(NOC); // edge1 = router/Citywest, edge2 = switch/Parkwest
     renderAt('/network');

@@ -870,6 +870,8 @@ export interface NetworkInterface {
   inBps: number | null;
   outBps: number | null;
   primaryBps: number | null;
+  /** Which direction primaryBps + utilisation reflect (the busier of in/out). */
+  primaryDirection: 'inbound' | 'outbound';
   bandwidthSource: BandwidthSource;
   utilisationPercent: number | null;
   headroomBps: number | null;

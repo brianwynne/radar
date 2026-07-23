@@ -228,6 +228,34 @@ describe('LAG capacity is the sum of its member port speeds', () => {
   });
 });
 
+describe('primaryBps + utilisation follow the busier direction', () => {
+  const at = new Date(NOW);
+  const iface = (inBps: number, outBps: number): RawInterface => ({
+    deviceId: 'D1', name: 'Port-Channel1', description: 'cache uplink', adminState: 'up', operState: 'up',
+    speedBps: 200e9, reportedInBps: inBps, reportedOutBps: outBps, inOctets: null, outOctets: null,
+    inErrors: 0, outErrors: 0, inDiscards: 0, outDiscards: 0, observedAt: at, memberOf: null,
+  });
+  const build = (inBps: number, outBps: number) =>
+    buildSnapshot(
+      { devices: [{ id: 'D1', hostname: 'edge-citywest-switch', modelName: 'DCS-7050SDX4-48D8', softwareVersion: null, streaming: true, reachable: true, observedAt: at }], interfaces: [iface(inBps, outBps)], bgpPeers: [] },
+      cfg({ expectedDeviceIds: ['D1'] }),
+    ).interfaces[0];
+
+  it('inbound-heavy (switch ingest) → primary is inbound', () => {
+    const i = build(2.7e9, 167e6);
+    expect(i.primaryBps).toBe(2.7e9);
+    expect(i.primaryDirection).toBe('inbound');
+    expect(i.utilisationPercent).toBeCloseTo((2.7e9 / 200e9) * 100); // driven by the busy inbound side
+  });
+  it('outbound-heavy (edge delivery) → primary is outbound; both directions preserved', () => {
+    const i = build(118e9, 120e9);
+    expect(i.primaryBps).toBe(120e9);
+    expect(i.primaryDirection).toBe('outbound');
+    expect(i.inBps).toBe(118e9); // quieter direction still reported
+    expect(i.outBps).toBe(120e9);
+  });
+});
+
 describe('deviceTypeOf — router vs switch from hostname then model', () => {
   it('classifies the real RTÉ estate (hostname keyword wins, else model family)', () => {
     expect(deviceTypeOf('edge-citywest-router', '7289')).toBe('router');

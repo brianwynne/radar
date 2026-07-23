@@ -107,8 +107,10 @@ export interface NetworkInterface {
   // Observed throughput.
   inBps: number | null;
   outBps: number | null;
-  /** The direction that drives utilisation (outbound by default). */
+  /** The busier direction's bit-rate — drives "current" + utilisation. */
   primaryBps: number | null;
+  /** Which direction primaryBps + utilisation reflect (the busier of in/out). */
+  primaryDirection: 'inbound' | 'outbound';
   bandwidthSource: BandwidthSource;
   /** primaryBps / speedBps × 100 (null when either is unavailable). */
   utilisationPercent: number | null;

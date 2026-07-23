@@ -401,6 +401,12 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .subtab:hover { color: var(--ink); }
 .subtab.active { color: var(--brand-ink); border-bottom-color: var(--brand); }
 
+/* "Current" throughput cell: busier direction big, quieter direction small beneath it. */
+.bw-cell { display: flex; flex-direction: column; line-height: 1.2; }
+.bw-primary { font-weight: 600; }
+.bw-dir { color: var(--ink-soft); font-weight: 400; font-size: 0.78em; }
+.bw-secondary { font-size: 0.78em; color: var(--ink-soft); }
+
 /* ---- Resolver reader ---- */
 .rv-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
 .rv-bar-l { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
