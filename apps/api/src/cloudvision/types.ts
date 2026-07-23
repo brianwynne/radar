@@ -59,12 +59,21 @@ export interface CloudVisionProvenance {
   note: string;
 }
 
+/** Whether a device is a router or a switch — derived from what CloudVision reports (hostname
+ *  role keyword, else model family); `unknown` when neither carries a signal (never guessed). */
+export type DeviceType = 'router' | 'switch' | 'unknown';
+
 export interface NetworkDevice {
   /** CloudVision device id (serial). Stable across polls. */
   id: string;
   hostname: string;
   modelName: string | null;
   softwareVersion: string | null;
+  /** Router / switch, derived from hostname + model (see deviceTypeOf). */
+  deviceType: DeviceType;
+  /** Datacentre this device sits in, derived from its hostname (see datacentreOf); null when the
+   *  hostname carries no site/plane token — RADAR does not invent a location. */
+  datacentre: string | null;
   /** Whether the device is actively streaming telemetry to CloudVision. */
   streaming: boolean;
   /** Whether RADAR could retrieve current state for this device this poll. */

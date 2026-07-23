@@ -2,7 +2,7 @@
 // an average of percentages); classification, freshness, BGP normalisation, completeness and
 // warnings are all exercised through the shared scenario fixtures.
 import { describe, it, expect } from 'vitest';
-import { buildSnapshot, normaliseBgpState, bgpSessionRole, connectionFromLinkType, type AdapterConfig, type RawSnapshot, type RawInterface } from '../src/cloudvision/adapter.js';
+import { buildSnapshot, normaliseBgpState, bgpSessionRole, connectionFromLinkType, deviceTypeOf, datacentreOf, type AdapterConfig, type RawSnapshot, type RawInterface } from '../src/cloudvision/adapter.js';
 import { scenarioSnapshot, MOCK_EDGE_DEVICE_IDS, EDGE1, EDGE2 } from '../src/cloudvision/fixtures.js';
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_PROVIDER_FOR_ASN } from '../src/cloudvision/classification-rules.js';
 import type { ClassificationRule } from '../src/cloudvision/classification.js';
@@ -214,6 +214,46 @@ describe('LAG capacity is the sum of its member port speeds', () => {
   it('leaves a bundle with no visible members on its reported speed', () => {
     const snap = build([mk('Port-Channel11', 30e9, 100e9, 'up', null)]);
     expect(snap.interfaces.find((i) => i.name === 'Port-Channel11')!.speedBps).toBe(100e9);
+  });
+});
+
+describe('deviceTypeOf — router vs switch from hostname then model', () => {
+  it('classifies the real RTÉ estate (hostname keyword wins, else model family)', () => {
+    expect(deviceTypeOf('edge-citywest-router', '7289')).toBe('router');
+    expect(deviceTypeOf('edge-parkwest-router', '7289')).toBe('router');
+    expect(deviceTypeOf('edge-parkwest-switch', '7289')).toBe('switch'); // hostname beats model
+    expect(deviceTypeOf('Orion-Blue-Spine', 'DCS-7280CR3-96')).toBe('switch'); // "spine" keyword
+    expect(deviceTypeOf('Orion-Red-Leaf-CAR-1', 'DCS-7020TR-48')).toBe('switch'); // "leaf" keyword
+    expect(deviceTypeOf('Orion-Blue-Edge', 'DCS-7020SR-24C2')).toBe('switch'); // no keyword → model
+    expect(deviceTypeOf('mystery-box', null)).toBe('unknown');
+    expect(deviceTypeOf('router99', '7289')).toBe('router'); // model fallback when hostname is opaque
+  });
+});
+
+describe('datacentreOf — derived from hostname, null when unknown', () => {
+  it('places the edge routers by site and the Orion fabric by plane, else null', () => {
+    expect(datacentreOf('edge-citywest-router')).toBe('Citywest');
+    expect(datacentreOf('edge-parkwest-router')).toBe('Parkwest');
+    expect(datacentreOf('Orion-Blue-Leaf-Lab-1')).toBe('Orion Blue');
+    expect(datacentreOf('Orion-Red-Spine')).toBe('Orion Red');
+    expect(datacentreOf('some-unnamed-host')).toBeNull();
+  });
+});
+
+describe('buildSnapshot stamps deviceType + datacentre onto each device', () => {
+  const at = new Date(NOW);
+  const dev = (id: string, hostname: string, modelName: string | null) => ({ id, hostname, modelName, softwareVersion: null, streaming: true, reachable: true, observedAt: at });
+  const snap = buildSnapshot(
+    { devices: [dev('D1', 'edge-parkwest-router', '7289'), dev('D2', 'Orion-Red-Spine', 'DCS-7280CR3-96')], interfaces: [], bgpPeers: [] },
+    cfg({ expectedDeviceIds: ['D1', 'D2'] }),
+  );
+  it('derives both fields on the built devices', () => {
+    const r = snap.devices.find((d) => d.id === 'D1')!;
+    const s = snap.devices.find((d) => d.id === 'D2')!;
+    expect(r.deviceType).toBe('router');
+    expect(r.datacentre).toBe('Parkwest');
+    expect(s.deviceType).toBe('switch');
+    expect(s.datacentre).toBe('Orion Red');
   });
 });
 

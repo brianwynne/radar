@@ -49,7 +49,7 @@ describe('Network Telemetry page', () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin'); // an edge1 interface
-    fireEvent.change(screen.getAllByLabelText('Router')[0], { target: { value: 'JPE00000002' } }); // interface Router filter
+    fireEvent.change(screen.getAllByLabelText('Device')[0], { target: { value: 'JPE00000002' } }); // interface Router filter
     expect(within(mainTable()).queryByText('Eir PNI Dublin')).not.toBeInTheDocument(); // edge1 filtered out
     expect(within(mainTable()).getByText('Transit LAG')).toBeInTheDocument(); // edge2 interface remains
   });
@@ -66,6 +66,24 @@ describe('Network Telemetry page', () => {
     fireEvent.click(edge2);
     expect(await screen.findByText(/Showing/)).toBeInTheDocument();
     expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
+  });
+
+  it('splits devices into router/switch tabs and filters by datacentre', async () => {
+    stubApi(NOC); // edge1 = router/Citywest, edge2 = switch/Parkwest
+    renderAt('/network');
+    // Both devices listed under the default "All" tab (device ids are unique to the Devices table).
+    expect(await screen.findByText('JPE00000001')).toBeInTheDocument();
+    expect(screen.getByText('JPE00000002')).toBeInTheDocument();
+    // Switches tab → only the switch (edge2) remains; the router and its rows are scoped out.
+    fireEvent.click(screen.getByRole('button', { name: /Switches/ }));
+    expect(screen.queryByText('JPE00000001')).not.toBeInTheDocument();
+    expect(screen.getByText('JPE00000002')).toBeInTheDocument();
+    expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument(); // an edge1 interface, scoped out
+    // Back to All, then filter by datacentre = Citywest → only the router (edge1) remains.
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    fireEvent.change(screen.getByLabelText('Datacentre'), { target: { value: 'Citywest' } });
+    expect(screen.getByText('JPE00000001')).toBeInTheDocument();
+    expect(screen.queryByText('JPE00000002')).not.toBeInTheDocument();
   });
 
   it('groups Port-Channel members per device (no cross-device merge)', async () => {
@@ -134,7 +152,7 @@ describe('Network Telemetry page', () => {
     // Globally, edge1's Ethernet2 is among the busiest.
     expect(within(topTable()).getByText('Ethernet2')).toBeInTheDocument();
     // Select edge2 → the list follows, and edge1's Ethernet2 drops out.
-    fireEvent.change(screen.getAllByLabelText('Router')[0], { target: { value: 'JPE00000002' } }); // interface Router filter
+    fireEvent.change(screen.getAllByLabelText('Device')[0], { target: { value: 'JPE00000002' } }); // interface Router filter
     expect(within(topTable()).queryByText('Ethernet2')).not.toBeInTheDocument();
   });
 

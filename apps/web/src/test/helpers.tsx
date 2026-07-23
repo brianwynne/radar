@@ -230,8 +230,8 @@ export const NETWORK_STATUS_BODY = {
 export const NETWORK_DEVICES_BODY = {
   provenance: cvProv, count: 2,
   items: [
-    { id: 'JPE00000001', hostname: 'edge1.dub.rte.ie', modelName: 'DCS-7280SR3', softwareVersion: '4.31.2F', streaming: true, reachable: true, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
-    { id: 'JPE00000002', hostname: 'edge2.dub.rte.ie', modelName: 'DCS-7280SR3', softwareVersion: '4.31.2F', streaming: true, reachable: true, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+    { id: 'JPE00000001', hostname: 'edge1.dub.rte.ie', modelName: 'DCS-7280SR3', softwareVersion: '4.31.2F', deviceType: 'router', datacentre: 'Citywest', streaming: true, reachable: true, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
+    { id: 'JPE00000002', hostname: 'edge2.dub.rte.ie', modelName: 'DCS-7280SR3', softwareVersion: '4.31.2F', deviceType: 'switch', datacentre: 'Parkwest', streaming: true, reachable: true, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock' },
   ],
 };
 const cvItf = (device: string, name: string, desc: string, provider: string, linkType: string, speed: number, out: number, oper: string, status: string, memberOf: string | null = null) => ({

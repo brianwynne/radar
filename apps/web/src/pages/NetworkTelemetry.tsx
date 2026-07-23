@@ -95,6 +95,31 @@ export function NetworkTelemetry() {
   const selectedDevice = t.devices.find((d) => d.id === device) ?? null;
   const toggleDevice = (id: string) => setDevice((cur) => (cur === id ? '' : id));
 
+  // Device-type tabs (routers vs switches) + datacentre filter. Both are derived server-side from
+  // whatever devices the token page scopes in; the dropdown is built from the datacentres actually
+  // present. They scope the lower section (Devices list, interfaces, BGP); the summary tiles stay
+  // whole-edge. 'unknown'-type / unplaced devices appear only under "All".
+  const [deviceType, setDeviceType] = useState<'all' | 'router' | 'switch'>('all');
+  const [datacentre, setDatacentre] = useState(''); // '' = all, '__none__' = no derivable DC
+  const datacentres = useMemo(() => [...new Set(t.devices.map((d) => d.datacentre).filter((x): x is string => !!x))].sort(), [t.devices]);
+  const hasUnplaced = useMemo(() => t.devices.some((d) => d.datacentre === null), [t.devices]);
+  const typeCounts = useMemo(
+    () => ({ all: t.devices.length, router: t.devices.filter((d) => d.deviceType === 'router').length, switch: t.devices.filter((d) => d.deviceType === 'switch').length }),
+    [t.devices],
+  );
+  const filteredDevices = useMemo(
+    () => t.devices.filter((d) => {
+      if (deviceType !== 'all' && d.deviceType !== deviceType) return false;
+      if (datacentre === '__none__') return d.datacentre === null;
+      if (datacentre && d.datacentre !== datacentre) return false;
+      return true;
+    }),
+    [t.devices, deviceType, datacentre],
+  );
+  const visibleDeviceIds = useMemo(() => new Set(filteredDevices.map((d) => d.id)), [filteredDevices]);
+  // Drop a drill-down selection that the type/DC filter just hid.
+  useEffect(() => { if (device && !visibleDeviceIds.has(device)) setDevice(''); }, [device, visibleDeviceIds]);
+
   const providers = useMemo(() => [...new Set(t.interfaces.map((i) => i.provider).filter((p): p is string => !!p))].sort(), [t.interfaces]);
 
   // Busiest links: the top 10 interfaces by current bandwidth, scoped to the selected router
@@ -103,10 +128,10 @@ export function NetworkTelemetry() {
   const topInterfaces = useMemo(
     () =>
       t.interfaces
-        .filter((i) => (!device || i.deviceId === device) && i.memberOf === null && i.primaryBps !== null)
+        .filter((i) => visibleDeviceIds.has(i.deviceId) && (!device || i.deviceId === device) && i.memberOf === null && i.primaryBps !== null)
         .sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0))
         .slice(0, 10),
-    [t.interfaces, device],
+    [t.interfaces, device, visibleDeviceIds],
   );
 
   // Configured capacity per link for the Peering and Transit tiles. Global (not scoped to the
@@ -137,6 +162,7 @@ export function NetworkTelemetry() {
   const interfaces = useMemo(
     () =>
       t.interfaces.filter((i) => {
+        if (!visibleDeviceIds.has(i.deviceId)) return false;
         if (device && i.deviceId !== device) return false;
         if (provider && i.provider !== provider) return false;
         if (linkType && i.linkType !== linkType) return false;
@@ -148,7 +174,7 @@ export function NetworkTelemetry() {
         }
         return true;
       }),
-    [t.interfaces, device, provider, linkType, status, search, hideIdle],
+    [t.interfaces, device, provider, linkType, status, search, hideIdle, visibleDeviceIds],
   );
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -240,22 +266,23 @@ export function NetworkTelemetry() {
   const bgpPeers = useMemo(
     () =>
       t.bgpPeers.filter((p) => {
+        if (!visibleDeviceIds.has(p.deviceId)) return false; // device-type / datacentre scope
         if (isNonDelivery(p.role)) return false; // route-collector / iBGP are not delivery paths
         if (device && p.deviceId !== device) return false; // Router (shared with the rest of the page)
         if (bgpProvider && p.provider !== bgpProvider) return false;
         if (bgpAsn.trim() && !String(p.peerAsn ?? '').includes(bgpAsn.trim())) return false;
         return true;
       }),
-    [t.bgpPeers, device, bgpProvider, bgpAsn],
+    [t.bgpPeers, device, bgpProvider, bgpAsn, visibleDeviceIds],
   );
-  // Non-delivery sessions excluded from the delivery view (within the current router scope).
+  // Non-delivery sessions excluded from the delivery view (within the current scope).
   const bgpExcluded = useMemo(() => {
-    const scoped = t.bgpPeers.filter((p) => (device ? p.deviceId === device : true) && isNonDelivery(p.role));
+    const scoped = t.bgpPeers.filter((p) => visibleDeviceIds.has(p.deviceId) && (device ? p.deviceId === device : true) && isNonDelivery(p.role));
     return {
       routeCollector: scoped.filter((p) => p.role === 'route-collector').length,
       internal: scoped.filter((p) => p.role === 'internal').length,
     };
-  }, [t.bgpPeers, device]);
+  }, [t.bgpPeers, device, visibleDeviceIds]);
 
   // Group BGP sessions by provider (fallback ASN / peer address) — one operator may hold several
   // sessions (PNI + INEX, across both edge routers); the group summary expands to the sessions.
@@ -357,8 +384,25 @@ export function NetworkTelemetry() {
         <div className="card"><div className="muted">Devices / interfaces</div><div className="stat">{num(t.summary?.deviceCount)} / {num(t.summary?.interfaceCount)}</div></div>
       </div>
 
-      {/* Devices — selectable; click a device to drill into its interfaces + BGP peers */}
-      <h2>Devices {t.devices.length > 0 && <span className="muted">({t.devices.length})</span>}</h2>
+      {/* Devices — routers/switches split into tabs, with a datacentre filter. Click a device to
+          drill into its interfaces + BGP peers. */}
+      <h2>Devices {filteredDevices.length > 0 && <span className="muted">({filteredDevices.length}{filteredDevices.length !== t.devices.length ? ` of ${t.devices.length}` : ''})</span>}</h2>
+      <div className="subtabs" role="tablist" aria-label="Device type">
+        <button className={`subtab ${deviceType === 'all' ? 'active' : ''}`} onClick={() => setDeviceType('all')}>All <span className="muted">· {typeCounts.all}</span></button>
+        <button className={`subtab ${deviceType === 'router' ? 'active' : ''}`} onClick={() => setDeviceType('router')}>Routers <span className="muted">· {typeCounts.router}</span></button>
+        <button className={`subtab ${deviceType === 'switch' ? 'active' : ''}`} onClick={() => setDeviceType('switch')}>Switches <span className="muted">· {typeCounts.switch}</span></button>
+      </div>
+      {(datacentres.length > 0 || hasUnplaced) && (
+        <div className="filters">
+          <label className="field"><span>Datacentre</span>
+            <select value={datacentre} onChange={(e) => setDatacentre(e.target.value)}>
+              <option value="">All datacentres</option>
+              {datacentres.map((dc) => <option key={dc} value={dc}>{dc}</option>)}
+              {hasUnplaced && <option value="__none__">Unknown</option>}
+            </select>
+          </label>
+        </div>
+      )}
       {selectedDevice && (
         <div className="notice info">
           Showing <strong>{selectedDevice.hostname}</strong> only.{' '}
@@ -368,15 +412,17 @@ export function NetworkTelemetry() {
       <div className="matrix-wrap">
         <table className="matrix selectable">
           <thead>
-            <tr><th>Router</th><th>Device ID</th><th>Model</th><th>Software</th><th>Streaming</th><th>Interfaces</th><th>Age</th></tr>
+            <tr><th>Device</th><th>Type</th><th>Datacentre</th><th>Device ID</th><th>Model</th><th>Software</th><th>Streaming</th><th>Interfaces</th><th>Age</th></tr>
           </thead>
           <tbody>
-            {t.devices.length === 0 && <tr><td colSpan={7} className="center-note">No devices.</td></tr>}
-            {t.devices.map((d) => {
+            {filteredDevices.length === 0 && <tr><td colSpan={9} className="center-note">{t.devices.length === 0 ? 'No devices.' : 'No devices match this filter.'}</td></tr>}
+            {filteredDevices.map((d) => {
               const ifCount = t.interfaces.filter((i) => i.deviceId === d.id).length;
               return (
                 <tr key={d.id} className={device === d.id ? 'row-selected' : 'row-click'} onClick={() => toggleDevice(d.id)}>
                   <td>{d.hostname}</td>
+                  <td><span className={`badge badge-sm ${d.deviceType === 'router' ? 'info' : d.deviceType === 'switch' ? 'neutral' : 'warn'}`}>{d.deviceType}</span></td>
+                  <td className={d.datacentre ? undefined : 'muted'}>{d.datacentre ?? 'Unknown'}</td>
                   <td className="muted">{d.id}</td>
                   <td>{d.modelName ?? '—'}</td>
                   <td className="muted">{d.softwareVersion ?? '—'}</td>
@@ -400,7 +446,7 @@ export function NetworkTelemetry() {
       <div className="matrix-wrap">
         <table className="matrix">
           <thead>
-            <tr><th>Router</th><th>Interface</th><th>Description</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
+            <tr><th>Device</th><th>Interface</th><th>Description</th><th>Provider</th><th>Capacity</th><th>Current</th><th>Util</th></tr>
           </thead>
           <tbody>
             {topInterfaces.length === 0 && <tr><td colSpan={7} className="center-note">No interface utilisation yet.</td></tr>}
@@ -431,10 +477,10 @@ export function NetworkTelemetry() {
         <div className="notice info">Device inventory is live, but per-interface telemetry is not yet connected for this device set — interface throughput/state will populate once the interface feed is wired.</div>
       )}
       <div className="filters">
-        <label className="field"><span>Router</span>
+        <label className="field"><span>Device</span>
           <select value={device} onChange={(e) => setDevice(e.target.value)}>
             <option value="">All</option>
-            {t.devices.map((d) => <option key={d.id} value={d.id}>{d.hostname}</option>)}
+            {filteredDevices.map((d) => <option key={d.id} value={d.id}>{d.hostname}</option>)}
           </select>
         </label>
         <label className="field"><span>Provider</span>
@@ -469,7 +515,7 @@ export function NetworkTelemetry() {
         <table className="matrix">
           <thead>
             <tr>
-              <th>Router</th>
+              <th>Device</th>
               <th className="sortable" onClick={() => sortBy('name')}>Interface{arrow('name')}</th>
               <th>Description</th><th>Provider</th><th>Link type</th>
               <th>Capacity</th>
@@ -517,10 +563,10 @@ export function NetworkTelemetry() {
       {/* BGP table */}
       <h2>BGP peers {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
       <div className="filters">
-        <label className="field"><span>Router</span>
+        <label className="field"><span>Device</span>
           <select value={device} onChange={(e) => setDevice(e.target.value)}>
             <option value="">All</option>
-            {t.devices.map((d) => <option key={d.id} value={d.id}>{d.hostname}</option>)}
+            {filteredDevices.map((d) => <option key={d.id} value={d.id}>{d.hostname}</option>)}
           </select>
         </label>
         <label className="field"><span>Provider</span>

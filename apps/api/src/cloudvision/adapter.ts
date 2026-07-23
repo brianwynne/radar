@@ -7,7 +7,7 @@
 import { classifyInterface, type ClassificationRule } from './classification.js';
 import { deriveBandwidthBps, headroomBps, resolveBandwidth, utilisationPercent, type CounterSample } from './throughput.js';
 import type {
-  BgpPeer, BgpSessionRole, BgpState, CloudVisionProvenance, CloudVisionSource, Completeness, Freshness, FreshnessLevel,
+  BgpPeer, BgpSessionRole, BgpState, CloudVisionProvenance, CloudVisionSource, Completeness, DeviceType, Freshness, FreshnessLevel,
   HealthStatus, LinkGroupState, LinkType, NetworkDevice, NetworkInterface, NetworkStateSnapshot,
   NetworkSummary, OperState,
 } from './types.js';
@@ -179,6 +179,34 @@ const slug = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').
 
 // ---- Per-object builders --------------------------------------------------------------------
 
+/** Router vs switch, derived honestly from what CloudVision reports: the hostname's explicit role
+ *  keyword first (…-router / …-switch / spine / leaf), then the model family (Arista's 7289 is a
+ *  routing platform; DCS-7xxx are datacentre switches). `unknown` when neither carries a signal —
+ *  never guessed. Hostname wins over model so an explicitly-named device is classified as named. */
+export function deviceTypeOf(hostname: string, modelName: string | null): DeviceType {
+  const h = hostname.toLowerCase();
+  if (/(^|[^a-z])(router|rtr)([^a-z]|$)/.test(h)) return 'router';
+  if (/(^|[^a-z])(switch|sw|spine|leaf)([^a-z]|$)/.test(h)) return 'switch';
+  const m = (modelName ?? '').toLowerCase();
+  if (/^7289|router/.test(m)) return 'router';
+  if (/^dcs-7/.test(m)) return 'switch';
+  return 'unknown';
+}
+
+/** Datacentre a device sits in, derived from its hostname. RTÉ's edge routers name their site
+ *  (…-citywest-… / …-parkwest-…); the Orion fabric names its colour plane (Orion-Blue / Orion-Red),
+ *  which RADAR surfaces as its own label rather than guessing a physical site. Returns null when
+ *  the hostname carries no recognised site/plane token — a device with no derivable datacentre
+ *  stays explicitly unplaced rather than being invented into one. */
+export function datacentreOf(hostname: string): string | null {
+  const h = hostname.toLowerCase();
+  if (h.includes('citywest')) return 'Citywest';
+  if (h.includes('parkwest')) return 'Parkwest';
+  const orion = /orion[-_ ]?(blue|red)/.exec(h);
+  if (orion) return `Orion ${orion[1].charAt(0).toUpperCase()}${orion[1].slice(1)}`;
+  return null;
+}
+
 function buildDevice(raw: RawDevice, cfg: AdapterConfig): NetworkDevice {
   const freshness = freshnessOf(raw.observedAt, cfg.now, cfg.staleAfterSeconds);
   const warnings = [...(raw.warnings ?? [])];
@@ -189,6 +217,8 @@ function buildDevice(raw: RawDevice, cfg: AdapterConfig): NetworkDevice {
     hostname: raw.hostname,
     modelName: raw.modelName,
     softwareVersion: raw.softwareVersion,
+    deviceType: deviceTypeOf(raw.hostname, raw.modelName),
+    datacentre: datacentreOf(raw.hostname),
     streaming: raw.streaming,
     reachable: raw.reachable,
     freshness,

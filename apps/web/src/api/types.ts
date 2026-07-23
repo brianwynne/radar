@@ -835,11 +835,17 @@ export interface NetworkProvenance {
   retrievedAt: string;
 }
 
+export type DeviceType = 'router' | 'switch' | 'unknown';
+
 export interface NetworkDevice {
   id: string;
   hostname: string;
   modelName: string | null;
   softwareVersion: string | null;
+  /** Router / switch, derived server-side from hostname + model ('unknown' when undeterminable). */
+  deviceType: DeviceType;
+  /** Datacentre derived server-side from the hostname; null when none is derivable. */
+  datacentre: string | null;
   streaming: boolean;
   reachable: boolean;
   freshness: CvFreshness;

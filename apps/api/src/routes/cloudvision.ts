@@ -38,7 +38,7 @@ const historyQuery = z.object({ limit: z.coerce.number().int().min(1).max(1000).
 const badRequest = (issues: z.ZodError['issues']) => issues.map((i) => `${i.path.join('.') || '(query)'}: ${i.message}`).join('; ');
 
 function presentDevice(d: NetworkDevice, detail: boolean): Record<string, unknown> {
-  const core = { id: d.id, hostname: d.hostname, modelName: d.modelName, softwareVersion: d.softwareVersion, streaming: d.streaming, reachable: d.reachable, freshness: d.freshness, observedAt: d.observedAt, source: d.provenance.source };
+  const core = { id: d.id, hostname: d.hostname, modelName: d.modelName, softwareVersion: d.softwareVersion, deviceType: d.deviceType, datacentre: d.datacentre, streaming: d.streaming, reachable: d.reachable, freshness: d.freshness, observedAt: d.observedAt, source: d.provenance.source };
   return detail ? { ...core, warnings: d.warnings, provenance: d.provenance } : core;
 }
 
