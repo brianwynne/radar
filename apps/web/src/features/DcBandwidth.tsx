@@ -8,12 +8,12 @@ import { DATACENTRES, isDeliveryLink, type DcId } from '@radar/shed';
 import type { NetworkInterface } from '../api/types';
 
 const G = 1e9;
-const MAX_POINTS = 30; // ~5 min of history at the ~10s poll
+const MAX_POINTS = 90; // ~15 min of history at the ~10s poll (well over the 5-min minimum)
 const gbps = (bps: number | null): string => (bps === null ? '—' : `${(bps / G).toFixed(1)}`);
 
-/** A tiny inline sparkline of the paired-link difference over time, with a zero baseline so you can
- *  see whether the imbalance is converging (toward 0) or drifting. */
-function Sparkline({ data, width = 96, height = 22 }: { data: number[]; width?: number; height?: number }) {
+/** A wide inline sparkline of the paired-link difference over time, with a light-green "fully balanced"
+ *  reference line at 0 so you can see whether the imbalance is converging toward it or drifting away. */
+function Sparkline({ data, width = 220, height = 28 }: { data: number[]; width?: number; height?: number }) {
   if (data.length < 2) return <span className="muted" style={{ fontSize: '0.7rem' }}>collecting…</span>;
   const lo = Math.min(0, ...data);
   const hi = Math.max(0, ...data);
@@ -24,6 +24,7 @@ function Sparkline({ data, width = 96, height = 22 }: { data: number[]; width?: 
   const cls = Math.abs(last) >= 15 ? 'spark-hot' : Math.abs(last) >= 5 ? 'spark-warm' : 'spark-ok';
   return (
     <svg width={width} height={height} className="sparkline" role="img" aria-label="difference trend">
+      {/* fully-balanced (0%) reference line */}
       <line x1="0" y1={y(0)} x2={width} y2={y(0)} className="spark-zero" />
       <polyline points={pts} className={`spark-line ${cls}`} fill="none" />
     </svg>

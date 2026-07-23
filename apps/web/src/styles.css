@@ -543,7 +543,7 @@ tr.dc-subtotal td { border-top: 1px solid var(--line); background: var(--panel-m
 
 /* Paired-link difference trend sparkline */
 .sparkline { display: block; }
-.spark-zero { stroke: var(--line); stroke-width: 1; }
+.spark-zero { stroke: #74c69d; stroke-width: 1.25; } /* light green = fully balanced (0%) reference */
 .spark-line { stroke-width: 1.5; }
 .spark-line.spark-ok { stroke: var(--ok); }
 .spark-line.spark-warm { stroke: var(--warn); }
