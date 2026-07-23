@@ -60,6 +60,15 @@ describe('DcBandwidth', () => {
     expect(within(pairsTable).queryByText('Liberty')).not.toBeInTheDocument();
   });
 
+  it('accumulates a difference-trend sparkline across polls', () => {
+    const poll1: NetworkInterface[] = [itf(CW, 'PC7', 'Eir', 'PRIVATE_PEERING', 40 * G), itf(PW, 'PC7', 'Eir', 'PRIVATE_PEERING', 90 * G)];
+    const poll2: NetworkInterface[] = [itf(CW, 'PC7', 'Eir', 'PRIVATE_PEERING', 60 * G), itf(PW, 'PC7', 'Eir', 'PRIVATE_PEERING', 90 * G)];
+    const { rerender } = render(<DcBandwidth interfaces={poll1} />);
+    rerender(<DcBandwidth interfaces={poll2} />); // second poll → ≥2 points → the sparkline draws
+    const eirRow = within(screen.getByText('Paired link').closest('table')! as HTMLElement).getByText('Eir').closest('tr')! as HTMLElement;
+    expect(within(eirRow).getByRole('img', { name: /difference trend/i })).toBeInTheDocument();
+  });
+
   it('a pair with traffic on only one DC reads 100% difference', () => {
     const oneSided: NetworkInterface[] = [
       itf(CW, 'Port-Channel5', 'Three', 'PRIVATE_PEERING', 1.5 * G),
