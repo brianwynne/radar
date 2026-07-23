@@ -3,13 +3,14 @@
 //   2. the realtime bandwidth of each individual PNI (and the shared INEX link),
 //   3. the total across all PNIs.
 // Egress (primaryBps) is the delivery direction. Values refresh on the page's ~10s CloudVision poll.
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DATACENTRES, isDeliveryLink, type DcId } from '@radar/shed';
+import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
 import type { NetworkInterface } from '../api/types';
 
 const G = 1e9;
 const MAX_POINTS = 90; // ~15 min of history at the ~10s poll (well over the 5-min minimum)
-const gbps = (bps: number | null): string => (bps === null ? '—' : `${(bps / G).toFixed(1)}`);
+const gbps = (bps: number | null | undefined): string => (bps == null ? '—' : `${(bps / G).toFixed(1)}`);
 
 /** A wide inline sparkline of the paired-link difference over time, with a light-green "fully balanced"
  *  reference line at 0 so you can see whether the imbalance is converging toward it or drifting away. */
@@ -41,6 +42,19 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
   // excluding non-delivery cloud peers (e.g. Microsoft) even though they are PNIs.
   const delivery = interfaces.filter((i) => isDeliveryLink(i.linkType, i.provider) && i.memberOf === null);
   const sum = (list: NetworkInterface[]) => (list.some((i) => i.primaryBps !== null) ? list.reduce((s, i) => s + (i.primaryBps ?? 0), 0) : null);
+
+  // Hysteretic utilisation colour level per interface (amber ≥60% / red ≥80%, 55/75 release) — the SAME
+  // alerts as the main Network Telemetry page. Advanced once per poll, remembered across polls in a ref.
+  const levelsRef = useRef<Map<string, UtilLevel>>(new Map());
+  const levelByKey = useMemo(() => {
+    const next = new Map<string, UtilLevel>();
+    for (const i of interfaces) {
+      const key = `${i.deviceId}::${i.name}`;
+      next.set(key, nextUtilLevel(i.utilisationPercent, levelsRef.current.get(key) ?? 'ok'));
+    }
+    levelsRef.current = next;
+    return next;
+  }, [interfaces]);
 
   const dcTotal = (dcId: string) => {
     const dev = DATACENTRES.find((d) => d.id === dcId)?.deviceId;
@@ -87,14 +101,20 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interfaces]);
 
-  const row = (i: NetworkInterface) => (
-    <tr key={`${i.deviceId}::${i.name}`}>
-      <td><b>{i.provider ?? i.name}</b>{i.provider && <span className="mono muted" style={{ fontSize: '0.72rem' }}> {i.name}</span>}</td>
-      <td className="muted">{dcNameOf(i.deviceId)}</td>
-      <td>{isIx(i) ? <span className="badge neutral">IX</span> : <span className="badge info">PNI</span>}</td>
-      <td className="mono" style={{ textAlign: 'right' }}><b>{gbps(i.primaryBps)}</b> Gb/s</td>
-    </tr>
-  );
+  const row = (i: NetworkInterface) => {
+    const lvl = levelByKey.get(`${i.deviceId}::${i.name}`) ?? 'ok';
+    return (
+      <tr key={`${i.deviceId}::${i.name}`}>
+        <td><b>{i.provider ?? i.name}</b>{i.provider && <span className="mono muted" style={{ fontSize: '0.72rem' }}> {i.name}</span>}</td>
+        <td className="muted">{dcNameOf(i.deviceId)}</td>
+        <td>{isIx(i) ? <span className="badge neutral">IX</span> : <span className="badge info">PNI</span>}</td>
+        <td className="mono" style={{ textAlign: 'right' }}>{gbps(i.speedBps)} Gb/s</td>
+        <td className={`mono ${utilClass(lvl) ?? ''}`} style={{ textAlign: 'right' }}>
+          <b>{gbps(i.primaryBps)}</b> Gb/s{i.utilisationPercent != null && <span className="muted"> · {i.utilisationPercent.toFixed(0)}%</span>}
+        </td>
+      </tr>
+    );
+  };
 
   return (
     <div className="dc-bandwidth">
@@ -150,27 +170,27 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
       <div className="table-scroll">
         <table className="shed-table">
           <thead>
-            <tr><th>Link</th><th>Datacentre</th><th>Type</th><th style={{ textAlign: 'right' }}>Bandwidth</th></tr>
+            <tr><th>Link</th><th>Datacentre</th><th>Type</th><th style={{ textAlign: 'right' }}>Capacity</th><th style={{ textAlign: 'right' }}>Bandwidth (util)</th></tr>
           </thead>
           <tbody>
             {pnis.map(row)}
             {/* PNI subtotal — directly under the PNIs */}
             {pnis.length > 0 && (
-              <tr className="dc-subtotal"><td colSpan={3}><b>Total of PNIs</b></td><td className="mono" style={{ textAlign: 'right' }}><b>{gbps(totalPnis)} Gb/s</b></td></tr>
+              <tr className="dc-subtotal"><td colSpan={4}><b>Total of PNIs</b></td><td className="mono" style={{ textAlign: 'right' }}><b>{gbps(totalPnis)} Gb/s</b></td></tr>
             )}
             {ixs.length > 0 && (
-              <tr className="dc-sep"><td colSpan={4}>Internet Exchange (IX)</td></tr>
+              <tr className="dc-sep"><td colSpan={5}>Internet Exchange (IX)</td></tr>
             )}
             {ixs.map(row)}
             {/* IX subtotal — directly under the IX links */}
             {ixs.length > 0 && (
-              <tr className="dc-subtotal"><td colSpan={3} className="muted">Total INEX</td><td className="mono muted" style={{ textAlign: 'right' }}>{gbps(totalIx)} Gb/s</td></tr>
+              <tr className="dc-subtotal"><td colSpan={4} className="muted">Total INEX</td><td className="mono muted" style={{ textAlign: 'right' }}>{gbps(totalIx)} Gb/s</td></tr>
             )}
-            {scoped.length === 0 && <tr><td colSpan={4} className="muted">No delivery links found (CloudVision not connected, or no PNI/IX interfaces).</td></tr>}
+            {scoped.length === 0 && <tr><td colSpan={5} className="muted">No delivery links found (CloudVision not connected, or no PNI/IX interfaces).</td></tr>}
           </tbody>
           <tfoot>
             <tr>
-              <td colSpan={3}>Grand total (PNI + IX)</td>
+              <td colSpan={4}>Grand total (PNI + IX)</td>
               <td className="mono" style={{ textAlign: 'right' }}>{gbps(grand)} Gb/s</td>
             </tr>
           </tfoot>

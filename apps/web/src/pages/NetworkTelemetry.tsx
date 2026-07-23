@@ -9,6 +9,7 @@ import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
 import { ResolverView } from '../features/ResolverView';
 import { DcBandwidth } from '../features/DcBandwidth';
+import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
 import type { LinkType, NetworkHealth, NetworkInterface } from '../api/types';
 
 const LINK_TYPES: LinkType[] = ['PRIVATE_PEERING', 'IX_PEERING', 'TRANSIT', 'INTERNAL', 'UNKNOWN'];
@@ -66,23 +67,10 @@ function CapacityBreakdown({ links, totalBps }: { links: NetworkInterface[]; tot
   );
 }
 
-// Utilisation colour level with hysteresis. A link turns amber at 60% of capacity and red at
-// 80%, but only clears back once it drops a few points below (55% / 75%) — so the colour does
-// not bounce as the 10-second bandwidth jitters around a threshold. `prev` is the level from the
-// previous poll; the transition is single-step and a fixed point when re-applied to the same
-// value (so re-rendering with unchanged data never advances it).
-export type UtilLevel = 'ok' | 'warn' | 'crit';
-const RISE_WARN = 60;
-const FALL_WARN = 55;
-const RISE_CRIT = 80;
-const FALL_CRIT = 75;
-export function nextUtilLevel(util: number | null, prev: UtilLevel): UtilLevel {
-  if (util === null || !Number.isFinite(util)) return 'ok'; // no measurable load → no colour
-  if (prev === 'crit') return util < FALL_CRIT ? (util < FALL_WARN ? 'ok' : 'warn') : 'crit';
-  if (prev === 'warn') return util >= RISE_CRIT ? 'crit' : util < FALL_WARN ? 'ok' : 'warn';
-  return util >= RISE_CRIT ? 'crit' : util >= RISE_WARN ? 'warn' : 'ok';
-}
-const utilClass = (lvl: UtilLevel): string | undefined => (lvl === 'crit' ? 'util-crit' : lvl === 'warn' ? 'util-warn' : undefined);
+// Utilisation colour level with hysteresis lives in ../network/util-level (shared with the OTT Delivery
+// tab). Re-exported so existing imports (and unit tests of nextUtilLevel) keep working.
+export { nextUtilLevel } from '../network/util-level';
+export type { UtilLevel } from '../network/util-level';
 
 export function NetworkTelemetry() {
   // Poll on CloudVision's ~10-second publish grid — the interface `rates` node republishes

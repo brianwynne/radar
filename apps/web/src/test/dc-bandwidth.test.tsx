@@ -8,8 +8,8 @@ const CW = 'JPN2508A7QM'; // Citywest edge serial
 const PW = 'JPA2430A9R2'; // Parkwest edge serial
 const G = 1e9;
 
-const itf = (deviceId: string, name: string, provider: string, linkType: string, primaryBps: number): NetworkInterface =>
-  ({ deviceId, name, provider, linkType, memberOf: null, primaryBps } as unknown as NetworkInterface);
+const itf = (deviceId: string, name: string, provider: string, linkType: string, primaryBps: number, speedBps = 100 * G): NetworkInterface =>
+  ({ deviceId, name, provider, linkType, memberOf: null, primaryBps, speedBps, utilisationPercent: speedBps ? (primaryBps / speedBps) * 100 : null } as unknown as NetworkInterface);
 
 describe('DcBandwidth', () => {
   const interfaces: NetworkInterface[] = [
@@ -45,6 +45,16 @@ describe('DcBandwidth', () => {
   it('ignores non-delivery (transit) links', () => {
     render(<DcBandwidth interfaces={interfaces} />);
     expect(screen.queryByText('Cogent')).not.toBeInTheDocument();
+  });
+
+  it('shows capacity and the amber/red utilisation alert per link (same as the main page)', () => {
+    // A link at 85% of its 100G capacity → red (util-crit).
+    render(<DcBandwidth interfaces={[itf(CW, 'Port-Channel3', 'Liberty', 'PRIVATE_PEERING', 85 * G, 100 * G)]} />);
+    const detail = screen.getByText('Datacentre').closest('table')! as HTMLElement;
+    const row = within(detail).getByText('Liberty').closest('tr')! as HTMLElement;
+    expect(within(row).getByText('100.0 Gb/s')).toBeInTheDocument(); // capacity
+    const util = within(row).getByText(/85%/);
+    expect(util.closest('td')).toHaveClass('util-crit'); // red alert at ≥80%
   });
 
   it('shows the % difference between paired links (same provider at both DCs)', () => {
