@@ -161,4 +161,15 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
       return { provenance: envelope(now()), count: items.length, items };
     },
   );
+
+  app.get(
+    '/network/ott-history',
+    { preHandler: requirePermission('topology.summary.read'), schema: schema('OTT delivery trend history', 'Read-only bounded history of each delivery provider’s Citywest/Parkwest egress, so the OTT paired-link difference trend is populated immediately on page load. Filter: limit.') },
+    async (req, reply) => {
+      const parsed = historyQuery.safeParse(req.query);
+      if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: badRequest(parsed.error.issues), correlationId: req.id });
+      const items = opts.poller?.getDeliveryHistory(parsed.data.limit) ?? [];
+      return { provenance: envelope(now()), count: items.length, items };
+    },
+  );
 };

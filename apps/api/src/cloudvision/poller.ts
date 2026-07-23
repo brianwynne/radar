@@ -5,8 +5,16 @@
 // good snapshot so a failed cycle degrades rather than blanks. Observability is structured
 // logs (poll duration + failure counts as fields) — matching the house style; no NS1 or
 // device writes ever occur here.
+import { isDeliveryLink, DATACENTRES } from '@radar/shed';
 import { CloudVisionError } from './errors.js';
 import type { CloudVisionClient, CloudVisionSource, FreshnessLevel, NetworkStateSnapshot } from './types.js';
+
+/** A compact history point for the OTT-delivery trend: each delivery provider's egress at each DC, so
+ *  the paired-link (Citywest vs Parkwest) difference trend is available immediately on page load. */
+export interface DeliveryHistoryPoint {
+  at: string;
+  byProvider: Record<string, { citywest: number | null; parkwest: number | null }>;
+}
 
 export interface Logger {
   info: (obj: unknown, msg?: string) => void;
@@ -79,6 +87,7 @@ export class CloudVisionPoller {
 
   private latest: NetworkStateSnapshot | null = null;
   private history: CloudVisionHistoryPoint[] = [];
+  private deliveryHistory: DeliveryHistoryPoint[] = [];
   private running = false;
   private inFlight = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -108,6 +117,29 @@ export class CloudVisionPoller {
     return limit && limit > 0 ? this.history.slice(-limit) : [...this.history];
   }
 
+  getDeliveryHistory(limit?: number): DeliveryHistoryPoint[] {
+    return limit && limit > 0 ? this.deliveryHistory.slice(-limit) : [...this.deliveryHistory];
+  }
+
+  // Per-provider CW/PW delivery egress for this snapshot (delivery links only, Port-Channels, excluding
+  // non-delivery cloud peers) — the source for the OTT paired-link trend.
+  private pushDeliveryHistory(snapshot: NetworkStateSnapshot): void {
+    const cw = DATACENTRES.find((d) => d.id === 'citywest')?.deviceId;
+    const pw = DATACENTRES.find((d) => d.id === 'parkwest')?.deviceId;
+    const byProvider: Record<string, { citywest: number | null; parkwest: number | null }> = {};
+    for (const i of snapshot.interfaces) {
+      if (i.memberOf !== null || i.primaryBps === null || !isDeliveryLink(i.linkType, i.provider)) continue;
+      const dc = i.deviceId === cw ? 'citywest' : i.deviceId === pw ? 'parkwest' : null;
+      if (!dc) continue;
+      const provider = i.provider ?? i.name;
+      const entry = byProvider[provider] ?? { citywest: null, parkwest: null };
+      entry[dc] = (entry[dc] ?? 0) + i.primaryBps;
+      byProvider[provider] = entry;
+    }
+    this.deliveryHistory.push({ at: snapshot.capturedAt, byProvider });
+    if (this.deliveryHistory.length > this.historyLimit) this.deliveryHistory.splice(0, this.deliveryHistory.length - this.historyLimit);
+  }
+
   /** One poll cycle. Never throws; the last good snapshot is preserved on failure. */
   async runOnce(correlationId?: string): Promise<{ ok: boolean; error?: string }> {
     if (this.inFlight) return { ok: false, error: 'IN_FLIGHT' }; // no overlapping polls
@@ -118,6 +150,7 @@ export class CloudVisionPoller {
       const snapshot = await this.client.getSnapshot(correlationId);
       this.latest = snapshot;
       this.pushHistory(snapshot);
+      this.pushDeliveryHistory(snapshot);
       this.lastDurationMs = this.now() - start;
       this.lastSuccessAt = new Date(this.now()).toISOString();
       this.consecutiveFailures = 0;

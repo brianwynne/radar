@@ -1093,6 +1093,10 @@ export interface NetworkLinkGroupsResponse { provenance: NetworkProvenance; coun
 export interface NetworkBgpPeersResponse { provenance: NetworkProvenance; count: number; items: BgpPeer[] }
 export interface NetworkHistoryResponse { provenance: NetworkProvenance; count: number; items: HistoryPoint[] }
 
+// OTT delivery trend history — per-provider Citywest/Parkwest egress over time (seeds the paired-link trend).
+export interface OttHistoryPoint { at: string; byProvider: Record<string, { citywest: number | null; parkwest: number | null }> }
+export interface OttHistoryResponse { provenance: NetworkProvenance; count: number; items: OttHistoryPoint[] }
+
 // --- CloudVision connection settings (Engineer-managed; token write-only) ---
 
 export interface ConnectorSettingsView {

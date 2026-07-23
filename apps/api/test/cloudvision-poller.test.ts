@@ -33,6 +33,27 @@ class ScriptedClient implements CloudVisionClient {
   }
 }
 
+describe('CloudVisionPoller delivery history (OTT trend)', () => {
+  const iface = (deviceId: string, name: string, provider: string, linkType: string, primaryBps: number) =>
+    ({ deviceId, name, provider, linkType, memberOf: null, primaryBps } as unknown as NetworkStateSnapshot['interfaces'][number]);
+  it('accumulates per-provider Citywest/Parkwest delivery egress, excluding cloud peers', async () => {
+    const snap: NetworkStateSnapshot = {
+      ...snapshot(0),
+      interfaces: [
+        iface('JPN2508A7QM', 'Port-Channel7', 'Eir', 'PRIVATE_PEERING', 40e9), // Citywest
+        iface('JPA2430A9R2', 'Port-Channel7', 'Eir', 'PRIVATE_PEERING', 90e9), // Parkwest
+        iface('JPN2508A7QM', 'Port-Channel9', 'Microsoft', 'PRIVATE_PEERING', 70e9), // cloud peer — excluded
+      ],
+    };
+    const poller = new CloudVisionPoller({ client: new ScriptedClient(() => snap), source: 'mock', intervalMs: 10_000, now });
+    await poller.runOnce();
+    const h = poller.getDeliveryHistory();
+    expect(h).toHaveLength(1);
+    expect(h[0].byProvider.Eir).toEqual({ citywest: 40e9, parkwest: 90e9 });
+    expect(h[0].byProvider.Microsoft).toBeUndefined();
+  });
+});
+
 describe('CloudVisionPoller', () => {
   it('retains the latest snapshot and appends bounded history', async () => {
     const client = new ScriptedClient((n) => snapshot(n * 10e9));

@@ -6,7 +6,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DATACENTRES, isDeliveryLink, type DcId } from '@radar/shed';
 import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
+import { api } from '../api/client';
 import type { NetworkInterface } from '../api/types';
+
+// Signed % difference between two bandwidths, relative to the LARGER side (0–100%; sign: + = b higher).
+function diffOf(a: number | null, b: number | null): number | null {
+  if (a == null || b == null) return null;
+  const hi = Math.max(a, b);
+  const mag = hi > 0 ? ((hi - Math.min(a, b)) / hi) * 100 : 0;
+  return b >= a ? mag : -mag;
+}
 
 const G = 1e9;
 const MAX_POINTS = 90; // ~15 min of history at the ~10s poll (well over the 5-min minimum)
@@ -77,15 +86,8 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
     .map((provider) => {
       const cw = providerBps(provider, 'citywest');
       const pw = providerBps(provider, 'parkwest');
-      // % difference relative to the LARGER side (0–100%): one side carrying nothing reads 100%.
-      let diff: number | null = null;
-      if (cw !== null && pw !== null) {
-        const hi = Math.max(cw, pw);
-        const mag = hi > 0 ? ((hi - Math.min(cw, pw)) / hi) * 100 : 0;
-        diff = pw >= cw ? mag : -mag; // sign = direction (positive ⇒ Parkwest higher)
-      }
       const ix = delivery.some((i) => (i.provider ?? i.name) === provider && isIx(i));
-      return { provider, cw, pw, diff, ix };
+      return { provider, cw, pw, diff: diffOf(cw, pw), ix };
     })
     .filter((x) => x.cw !== null && x.pw !== null) // only providers present at both DCs
     .sort((a, b) => Math.abs(b.diff ?? 0) - Math.abs(a.diff ?? 0));
@@ -100,6 +102,26 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [interfaces]);
+
+  // Seed the trend from the backend history on mount, so it's populated from FIRST access (not only
+  // built up live as you watch).
+  useEffect(() => {
+    let alive = true;
+    api.ottHistory(MAX_POINTS).then((res) => {
+      if (!alive) return;
+      const seed: Record<string, number[]> = {};
+      for (const pt of res.items) for (const [provider, v] of Object.entries(pt.byProvider)) {
+        const d = diffOf(v.citywest, v.parkwest);
+        if (d !== null) (seed[provider] ??= []).push(d);
+      }
+      setHistory((prev) => {
+        const next = { ...prev };
+        for (const [k, arr] of Object.entries(seed)) if (!next[k] || next[k].length < arr.length) next[k] = arr.slice(-MAX_POINTS);
+        return next;
+      });
+    }).catch(() => { /* trend history is best-effort */ });
+    return () => { alive = false; };
+  }, []);
 
   const row = (i: NetworkInterface) => {
     const lvl = levelByKey.get(`${i.deviceId}::${i.name}`) ?? 'ok';

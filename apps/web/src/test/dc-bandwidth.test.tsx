@@ -1,8 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { DcBandwidth } from '../features/DcBandwidth';
 import type { NetworkInterface } from '../api/types';
+
+afterEach(() => vi.unstubAllGlobals());
 
 const CW = 'JPN2508A7QM'; // Citywest edge serial
 const PW = 'JPA2430A9R2'; // Parkwest edge serial
@@ -77,6 +79,22 @@ describe('DcBandwidth', () => {
     rerender(<DcBandwidth interfaces={poll2} />); // second poll → ≥2 points → the sparkline draws
     const eirRow = within(screen.getByText('Paired link').closest('table')! as HTMLElement).getByText('Eir').closest('tr')! as HTMLElement;
     expect(within(eirRow).getByRole('img', { name: /difference trend/i })).toBeInTheDocument();
+  });
+
+  it('seeds the trend from backend history so it is populated on first access', async () => {
+    // Backend history: Eir CW/PW over three prior samples → the sparkline draws immediately (no waiting).
+    const G = 1e9;
+    const ottHistory = { count: 3, items: [
+      { at: 't1', byProvider: { Eir: { citywest: 40 * G, parkwest: 90 * G } } },
+      { at: 't2', byProvider: { Eir: { citywest: 55 * G, parkwest: 90 * G } } },
+      { at: 't3', byProvider: { Eir: { citywest: 70 * G, parkwest: 90 * G } } },
+    ] };
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+      new Response(JSON.stringify(String(input).includes('/network/ott-history') ? ottHistory : {}), { status: 200, headers: { 'content-type': 'application/json' } })));
+    render(<DcBandwidth interfaces={[itf(CW, 'PC7', 'Eir', 'PRIVATE_PEERING', 70 * G), itf(PW, 'PC7', 'Eir', 'PRIVATE_PEERING', 90 * G)]} />);
+    const eirRow = within(await screen.findByText('Paired link').then((el) => el.closest('table')! as HTMLElement)).getByText('Eir').closest('tr')! as HTMLElement;
+    // ≥2 seeded points → the sparkline (not "collecting…") is present right away.
+    expect(await within(eirRow).findByRole('img', { name: /difference trend/i })).toBeInTheDocument();
   });
 
   it('a pair with traffic on only one DC reads 100% difference', () => {
