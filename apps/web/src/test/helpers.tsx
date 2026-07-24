@@ -248,7 +248,7 @@ export const ROUTING_INCIDENTS_BODY = {
 };
 
 export const ROUTING_CONNECTION_BODY = {
-  settings: { connector: 'bgptools', enabled: true, mode: 'live', prometheusHost: 'prometheus.bgp.tools', tableEnabled: false, monitoredPrefixCount: 1, prometheusUrlConfigured: true, prometheusUrlSetAt: '2026-07-24T10:00:00Z', updatedBy: 'eng', updatedAt: '2026-07-24T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null },
+  settings: { connector: 'bgptools', enabled: true, mode: 'live', prometheusHost: 'prometheus.bgp.tools', userAgent: 'RADAR bgp.tools - noc@rte.ie', userAgentValid: true, tableEnabled: false, monitoredPrefixCount: 1, prometheusUrlConfigured: true, prometheusUrlSetAt: '2026-07-24T10:00:00Z', updatedBy: 'eng', updatedAt: '2026-07-24T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null },
 };
 export const ROUTING_MONITORED_BODY = {
   count: 1,

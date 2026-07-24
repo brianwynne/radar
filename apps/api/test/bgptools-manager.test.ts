@@ -101,6 +101,18 @@ describe('BgpToolsConnectorManager', () => {
     expect(view.prometheusUrlConfigured).toBe(false);
   });
 
+  it('User-Agent can be set via updateSettings and unblocks live mode', async () => {
+    // Live + a URL but NO User-Agent → the Prometheus client can't build (bgp.tools blocks it).
+    const m = manager({}, baseConfig({ userAgent: '', prometheusUrl: URL_SECRET }));
+    expect(m.view().userAgentValid).toBe(false);
+    expect(m.view().degraded).toMatch(/User-Agent/i);
+    // Setting an identifying UA with a contact email clears the block.
+    const view = await m.updateSettings({ userAgent: 'RADAR bgp.tools - noc@rte.ie' }, { subject: 'eng' });
+    expect(view.userAgent).toBe('RADAR bgp.tools - noc@rte.ie');
+    expect(view.userAgentValid).toBe(true);
+    expect(view.degraded).toBeNull();
+  });
+
   it('disabled connector → test reports an error', async () => {
     const m = manager({}, baseConfig({ enabled: false }));
     expect((await m.test()).ok).toBe(false);

@@ -43,6 +43,7 @@ function BgpToolsConnectorForm() {
   const [enabled, setEnabled] = useState(false);
   const [mode, setMode] = useState<'mock' | 'live'>('mock');
   const [tableEnabled, setTableEnabled] = useState(false);
+  const [userAgent, setUserAgent] = useState('');
   const [prometheusUrl, setPrometheusUrl] = useState('');
   const [clearUrl, setClearUrl] = useState(false);
 
@@ -58,6 +59,7 @@ function BgpToolsConnectorForm() {
     setEnabled(v.enabled);
     setMode(v.mode);
     setTableEnabled(v.tableEnabled);
+    setUserAgent(v.userAgent ?? '');
     setPrometheusUrl('');
     setClearUrl(false);
   };
@@ -80,6 +82,7 @@ function BgpToolsConnectorForm() {
     setError(null);
     setSaved(false);
     const body: BgpToolsConnectionUpdate = { enabled, mode, tableEnabled };
+    if (userAgent.trim().length > 0) body.userAgent = userAgent.trim();
     if (clearUrl) body.clearPrometheusUrl = true;
     else if (prometheusUrl.trim().length > 0) body.prometheusUrl = prometheusUrl.trim();
     try {
@@ -145,6 +148,10 @@ function BgpToolsConnectorForm() {
                 <option value="live">live (bgp.tools)</option>
               </select>
             </label>
+            <label className="field"><span>User-Agent (contact email) {mode === 'live' && view && !view.userAgentValid && <span className="badge warn badge-sm">required for live</span>}</span>
+              <input value={userAgent} onChange={(e) => setUserAgent(e.target.value)} placeholder="RADAR bgp.tools - noc@rte.ie" />
+            </label>
+            <p className="muted field-hint">bgp.tools blocks generic User-Agents — set an app name plus a contact email (required for live mode).</p>
             <label className="field"><span>Prometheus monitoring URL {view?.prometheusUrlConfigured && <span className="badge ok badge-sm">configured</span>}</span>
               <input type="password" autoComplete="off" value={prometheusUrl} disabled={clearUrl} onChange={(e) => setPrometheusUrl(e.target.value)}
                 placeholder={view?.prometheusUrlConfigured ? `•••• configured (${view.prometheusHost ?? 'set'}) — leave blank to keep` : 'https://prometheus.bgp.tools/prom/<your-uuid>'} />

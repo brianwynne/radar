@@ -16,6 +16,7 @@ const updateSchema = z
     enabled: z.boolean().optional(),
     mode: z.enum(['mock', 'live']).optional(),
     tableEnabled: z.boolean().optional(),
+    userAgent: z.string().max(500).optional(),
     // Write-only: omitted/blank retains, non-empty replaces. Never returned.
     prometheusUrl: z.string().max(4000).optional(),
     clearPrometheusUrl: z.boolean().optional(),

@@ -33,6 +33,10 @@ export interface BgpToolsConnectionView {
   mode: 'mock' | 'live';
   /** Host of the Prometheus URL for display — NEVER the full URL or the UUID. */
   prometheusHost: string | null;
+  /** Identifying User-Agent (app + contact email) — non-secret; required for live mode. */
+  userAgent: string;
+  /** Whether the User-Agent is acceptable to bgp.tools (contains a contact email). */
+  userAgentValid: boolean;
   tableEnabled: boolean;
   monitoredPrefixCount: number;
   /** Whether a Prometheus URL is stored — the URL itself is never returned. */
@@ -50,6 +54,8 @@ export interface BgpToolsConnectionInput {
   enabled?: boolean;
   mode?: 'mock' | 'live';
   tableEnabled?: boolean;
+  /** Identifying User-Agent (app + contact email). Blank/omitted retains the current one. */
+  userAgent?: string;
   /** Write-only full Prometheus URL. Omitted/blank ⇒ retain the stored one; non-empty ⇒ replace. */
   prometheusUrl?: string;
   /** Explicitly remove the stored Prometheus URL. */
@@ -133,6 +139,9 @@ export class BgpToolsConnectorManager {
 
   private effEnabled(): boolean { return this.persisted?.enabled ?? this.base.enabled; }
   private effMode(): 'mock' | 'live' { return (this.persisted?.mode as 'mock' | 'live' | undefined) ?? this.base.mode; }
+  // The identifying User-Agent is non-secret; store it in the connector row's edge_device_ids
+  // column (unused by this connector) so it can be managed in the UI, else fall back to env.
+  private effUserAgent(): string { return this.persisted?.edgeDeviceIds ?? this.base.userAgent; }
 
   private pollerConfig(): BgpToolsPollerConfig {
     return {
@@ -182,19 +191,20 @@ export class BgpToolsConnectorManager {
 
     // Live.
     this.source = 'bgptools';
+    const userAgent = this.effUserAgent();
     const url = this.resolvePrometheusUrl();
     if (url) {
       try {
-        this.metricsClient = new PrometheusBgpToolsClient({ metricsUrl: url, userAgent: this.base.userAgent, timeoutMs: this.base.timeoutSeconds * 1000, fetchImpl: this.fetchImpl, now: this.now });
+        this.metricsClient = new PrometheusBgpToolsClient({ metricsUrl: url, userAgent, timeoutMs: this.base.timeoutSeconds * 1000, fetchImpl: this.fetchImpl, now: this.now });
       } catch (err) {
         this.degraded = err instanceof Error ? err.message : 'Prometheus client could not be built.';
       }
     } else if (!this.degraded) {
       this.degraded = 'No Prometheus monitoring URL configured.';
     }
-    if (this.base.tableEnabled && /\S+@\S+/.test(this.base.userAgent)) {
+    if (this.base.tableEnabled && /\S+@\S+/.test(userAgent)) {
       try {
-        this.tableClient = new HttpBgpToolsClient({ tableUrl: this.base.tableUrl, userAgent: this.base.userAgent, token: this.base.token, timeoutMs: this.base.timeoutSeconds * 1000, fetchImpl: this.fetchImpl, now: this.now });
+        this.tableClient = new HttpBgpToolsClient({ tableUrl: this.base.tableUrl, userAgent, token: this.base.token, timeoutMs: this.base.timeoutSeconds * 1000, fetchImpl: this.fetchImpl, now: this.now });
       } catch (err) {
         this.logger?.warn({ code: err instanceof Error ? err.name : 'error' }, 'bgptools: table client unavailable');
       }
@@ -208,6 +218,8 @@ export class BgpToolsConnectorManager {
       enabled: this.effEnabled(),
       mode: this.effMode(),
       prometheusHost: hostOf(this.base.prometheusUrl) ?? (p?.endpoint ?? null),
+      userAgent: this.effUserAgent(),
+      userAgentValid: /\S+@\S+/.test(this.effUserAgent()),
       tableEnabled: this.base.tableEnabled,
       monitoredPrefixCount: this.base.monitoredPrefixes.length,
       prometheusUrlConfigured: Boolean(p?.tokenCiphertext) || Boolean(this.base.prometheusUrl),
@@ -243,13 +255,15 @@ export class BgpToolsConnectorManager {
 
     const enabled = input.enabled ?? this.effEnabled();
     const mode = input.mode ?? this.effMode();
+    // User-Agent (non-secret) persisted in edge_device_ids: a supplied value replaces, else retain.
+    const userAgent = input.userAgent && input.userAgent.trim().length > 0 ? input.userAgent.trim() : this.persisted?.edgeDeviceIds ?? (this.base.userAgent || null);
     await this.repo.upsert({
       connector: CONNECTOR,
       enabled,
       mode,
       endpoint: endpointHost,
       verifyTls: true,
-      edgeDeviceIds: null,
+      edgeDeviceIds: userAgent,
       updatedBy: actor.subject ?? null,
       tokenAction,
       ...(sealed ? { tokenCiphertext: sealed.ciphertext, tokenNonce: sealed.nonce, tokenTag: sealed.tag } : {}),

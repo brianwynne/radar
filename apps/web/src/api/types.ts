@@ -1389,6 +1389,8 @@ export interface BgpToolsConnection {
   enabled: boolean;
   mode: 'mock' | 'live';
   prometheusHost: string | null;
+  userAgent: string;
+  userAgentValid: boolean;
   tableEnabled: boolean;
   monitoredPrefixCount: number;
   prometheusUrlConfigured: boolean;
@@ -1403,6 +1405,7 @@ export interface BgpToolsConnectionUpdate {
   enabled?: boolean;
   mode?: 'mock' | 'live';
   tableEnabled?: boolean;
+  userAgent?: string;
   prometheusUrl?: string;
   clearPrometheusUrl?: boolean;
 }
