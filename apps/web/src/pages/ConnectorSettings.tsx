@@ -10,6 +10,7 @@ import type {
   FastlyConnection, FastlyConnectionUpdate, FastlyConnectionTestResult,
   AkamaiConnectionSettings, AkamaiConnectionUpdate, AkamaiConnectionTestResult,
   Ns1ConnectionSettings, Ns1ConnectionUpdate, Ns1ConnectionTestResult,
+  BgpToolsConnection, BgpToolsConnectionUpdate, BgpToolsConnectionTest, MonitoredPrefixItem,
 } from '../api/types';
 
 export function ConnectorSettings() {
@@ -24,7 +25,190 @@ export function ConnectorSettings() {
       <CloudflareConnectorForm />
       <FastlyConnectorForm />
       <AkamaiConnectorForm />
+      <BgpToolsConnectorForm />
     </section>
+  );
+}
+
+// ---- bgp.tools (external routing intelligence) ----------------------------------------------
+
+function BgpToolsConnectorForm() {
+  const [view, setView] = useState<BgpToolsConnection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [testResult, setTestResult] = useState<BgpToolsConnectionTest | null>(null);
+
+  // Editable form state (the Prometheus URL is write-only — never populated from the server).
+  const [enabled, setEnabled] = useState(false);
+  const [mode, setMode] = useState<'mock' | 'live'>('mock');
+  const [tableEnabled, setTableEnabled] = useState(false);
+  const [prometheusUrl, setPrometheusUrl] = useState('');
+  const [clearUrl, setClearUrl] = useState(false);
+
+  // Monitored watch list.
+  const [prefixes, setPrefixes] = useState<MonitoredPrefixItem[]>([]);
+  const [newPrefix, setNewPrefix] = useState('');
+  const [newAsn, setNewAsn] = useState('');
+  const [newFamily, setNewFamily] = useState<'ipv4' | 'ipv6'>('ipv4');
+  const [newDesc, setNewDesc] = useState('');
+
+  const hydrate = (v: BgpToolsConnection) => {
+    setView(v);
+    setEnabled(v.enabled);
+    setMode(v.mode);
+    setTableEnabled(v.tableEnabled);
+    setPrometheusUrl('');
+    setClearUrl(false);
+  };
+
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      hydrate((await api.routingConnection()).settings);
+      setPrefixes((await api.routingMonitored()).items);
+      setError(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Failed to load bgp.tools settings.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { void loadAll(); }, [loadAll]);
+
+  const save = async () => {
+    setError(null);
+    setSaved(false);
+    const body: BgpToolsConnectionUpdate = { enabled, mode, tableEnabled };
+    if (clearUrl) body.clearPrometheusUrl = true;
+    else if (prometheusUrl.trim().length > 0) body.prometheusUrl = prometheusUrl.trim();
+    try {
+      hydrate((await api.routingConnectionUpdate(body)).settings);
+      setSaved(true);
+      setTestResult(null);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Save failed.');
+    }
+  };
+
+  const runTest = async () => {
+    setTestResult(null);
+    setError(null);
+    try {
+      setTestResult((await api.routingConnectionTest()).result);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Test failed.');
+    }
+  };
+
+  const addPrefix = async () => {
+    setError(null);
+    const asn = Number(newAsn);
+    if (!newPrefix.trim() || !Number.isInteger(asn) || asn <= 0) { setError('A prefix and a positive expected-origin ASN are required.'); return; }
+    try {
+      await api.routingMonitoredUpsert({ prefix: newPrefix.trim(), addressFamily: newFamily, expectedOriginAsn: asn, description: newDesc.trim() || undefined });
+      setNewPrefix(''); setNewAsn(''); setNewDesc('');
+      setPrefixes((await api.routingMonitored()).items);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not add the prefix.');
+    }
+  };
+  const removePrefix = async (prefix: string) => {
+    try {
+      await api.routingMonitoredDelete(prefix);
+      setPrefixes((await api.routingMonitored()).items);
+    } catch (e) {
+      setError(e instanceof ApiError ? `${e.code}: ${e.message}` : 'Could not remove the prefix.');
+    }
+  };
+
+  return (
+    <div className="connector-section">
+      <div className="section-head">
+        <h2>bgp.tools (routing intelligence)</h2>
+        {view && <span className={`badge ${view.source === 'database' ? 'info' : 'neutral'}`}>{view.source === 'database' ? 'managed here' : 'from environment'}</span>}
+      </div>
+      {loading ? <div className="center-note">Loading…</div> : (
+        <>
+          {view && !view.masterKeyAvailable && (
+            <div className="notice warn">No master key is available (<code>/run/secrets/radar_master_key</code>). You can edit non-secret settings, but the Prometheus URL cannot be stored until the master key is provisioned.</div>
+          )}
+          {view?.degraded && <div className="notice warn">{view.degraded}</div>}
+          {error && <div className="notice danger">{error}</div>}
+          {saved && <div className="notice ok">Saved. The connector was reconfigured.</div>}
+
+          <div className="card">
+            <div className="field-row"><label className="switch"><input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Enabled</label></div>
+            <label className="field"><span>Mode</span>
+              <select value={mode} onChange={(e) => setMode(e.target.value as 'mock' | 'live')}>
+                <option value="mock">mock (synthetic, no credentials)</option>
+                <option value="live">live (bgp.tools)</option>
+              </select>
+            </label>
+            <label className="field"><span>Prometheus monitoring URL {view?.prometheusUrlConfigured && <span className="badge ok badge-sm">configured</span>}</span>
+              <input type="password" autoComplete="off" value={prometheusUrl} disabled={clearUrl} onChange={(e) => setPrometheusUrl(e.target.value)}
+                placeholder={view?.prometheusUrlConfigured ? `•••• configured (${view.prometheusHost ?? 'set'}) — leave blank to keep` : 'https://prometheus.bgp.tools/prom/<your-uuid>'} />
+            </label>
+            <p className="muted field-hint">The whole URL (including the UUID) is your credential — stored encrypted, never displayed. Set an identifying <code>BGPTOOLS_USER_AGENT</code> with a contact email in the environment for live mode.</p>
+            {view?.prometheusUrlConfigured && (
+              <div className="field-row"><label className="switch"><input type="checkbox" checked={clearUrl} onChange={(e) => setClearUrl(e.target.checked)} /> Clear the stored URL</label></div>
+            )}
+            <div className="field-row"><label className="switch"><input type="checkbox" checked={tableEnabled} onChange={(e) => setTableEnabled(e.target.checked)} /> Also poll table.jsonl (foreign-origin / hijack detection)</label></div>
+            <div className="actions">
+              <button className="btn primary" onClick={() => void save()}>Save</button>
+              <button className="btn" onClick={() => void runTest()}>Test connection</button>
+            </div>
+          </div>
+
+          {testResult && (
+            <div className={`notice ${testResult.ok ? 'ok' : 'danger'}`}>
+              {testResult.ok ? `Connection OK (${testResult.source})${testResult.summary ? ` — ${testResult.summary}` : ''}.` : `Connection failed (${testResult.source})${testResult.error ? `: ${testResult.error}` : ''}.`}
+            </div>
+          )}
+
+          {view && (
+            <div className="card">
+              <div className="kv"><span>Prometheus URL configured</span><span>{view.prometheusUrlConfigured ? 'yes' : 'no'}</span></div>
+              <div className="kv"><span>Host</span><span>{view.prometheusHost ?? '—'}</span></div>
+              <div className="kv"><span>URL set at</span><span>{view.prometheusUrlSetAt ?? '—'}</span></div>
+              <div className="kv"><span>Monitored prefixes</span><span>{view.monitoredPrefixCount}</span></div>
+              <div className="kv"><span>Master key available</span><span>{view.masterKeyAvailable ? 'yes' : 'no'}</span></div>
+            </div>
+          )}
+
+          {/* Monitored watch list */}
+          <h3>Monitored prefixes</h3>
+          <div className="matrix-wrap">
+            <table className="matrix">
+              <thead><tr><th>Prefix</th><th>AF</th><th>Expected origin</th><th>Description</th><th></th></tr></thead>
+              <tbody>
+                {prefixes.length === 0 && <tr><td colSpan={5} className="center-note">No prefixes monitored yet.</td></tr>}
+                {prefixes.map((p) => (
+                  <tr key={p.prefix}>
+                    <td>{p.prefix}</td>
+                    <td className="muted">{p.addressFamily === 'ipv6' ? 'v6' : 'v4'}</td>
+                    <td>AS{p.expectedOriginAsn}</td>
+                    <td className="muted">{p.description ?? '—'}</td>
+                    <td><button className="btn danger btn-sm" onClick={() => void removePrefix(p.prefix)}>Remove</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="card">
+            <div className="field-inline-row">
+              <label className="field"><span>Prefix</span><input value={newPrefix} onChange={(e) => setNewPrefix(e.target.value)} placeholder="89.207.56.0/21" /></label>
+              <label className="field"><span>Family</span>
+                <select value={newFamily} onChange={(e) => setNewFamily(e.target.value as 'ipv4' | 'ipv6')}><option value="ipv4">IPv4</option><option value="ipv6">IPv6</option></select>
+              </label>
+              <label className="field"><span>Expected origin ASN</span><input value={newAsn} onChange={(e) => setNewAsn(e.target.value)} placeholder="41073" /></label>
+              <label className="field"><span>Description</span><input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="optional" /></label>
+              <button className="btn primary" onClick={() => void addPrefix()}>Add</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 

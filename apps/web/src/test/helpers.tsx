@@ -247,6 +247,14 @@ export const ROUTING_INCIDENTS_BODY = {
   ],
 };
 
+export const ROUTING_CONNECTION_BODY = {
+  settings: { connector: 'bgptools', enabled: true, mode: 'live', prometheusHost: 'prometheus.bgp.tools', tableEnabled: false, monitoredPrefixCount: 1, prometheusUrlConfigured: true, prometheusUrlSetAt: '2026-07-24T10:00:00Z', updatedBy: 'eng', updatedAt: '2026-07-24T10:00:00Z', source: 'database', masterKeyAvailable: true, degraded: null },
+};
+export const ROUTING_MONITORED_BODY = {
+  count: 1,
+  items: [{ prefix: '89.207.56.0/21', addressFamily: 'ipv4', expectedOriginAsn: 41073, description: 'RTÉ delivery', createdBy: 'eng', createdAt: '2026-07-24T10:00:00Z', updatedAt: '2026-07-24T10:00:00Z' }],
+};
+
 export const NETWORK_STATUS_BODY = {
   provenance: cvProv,
   status: { enabled: true, running: true, source: 'mock', intervalMs: 10000, lastPollAt: '2026-07-15T12:00:00Z', lastSuccessAt: '2026-07-15T12:00:00Z', lastDurationMs: 12, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: 4, historyLength: 3, deviceCount: 2, interfaceCount: 3, unknownInterfaceCount: 0 },
@@ -423,6 +431,9 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/telemetry/origin')) body = ORIGIN_BODY;
       else if (p.endsWith('/routing/snapshot')) body = ROUTING_SNAPSHOT_BODY;
       else if (p.includes('/routing/incidents')) body = ROUTING_INCIDENTS_BODY;
+      else if (p.endsWith('/routing/connection/test')) body = { result: { ok: true, source: 'bgptools', summary: 'monitoring 1 prefix(es) across 1 ASN(s)' } };
+      else if (p.endsWith('/routing/connection')) body = ROUTING_CONNECTION_BODY;
+      else if (p.endsWith('/routing/monitored')) body = init?.method === 'PUT' ? { record: ROUTING_MONITORED_BODY.items[0] } : init?.method === 'DELETE' ? { removed: true } : ROUTING_MONITORED_BODY;
       else if (p.endsWith('/network/status')) body = NETWORK_STATUS_BODY;
       else if (p.endsWith('/network/devices')) body = NETWORK_DEVICES_BODY;
       else if (p.endsWith('/network/interfaces')) body = NETWORK_INTERFACES_BODY;

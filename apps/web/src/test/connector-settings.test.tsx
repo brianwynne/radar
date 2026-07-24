@@ -11,7 +11,7 @@ afterEach(() => vi.unstubAllGlobals());
 // All connector sections load independently; wait for every token field (order = CloudVision,
 // Cloudflare, Fastly) before scoping queries to a section's card so identical controls don't collide.
 const cards = async () => {
-  await waitFor(() => expect(screen.getAllByPlaceholderText(/leave blank to keep/i)).toHaveLength(3));
+  await waitFor(() => expect(screen.getAllByPlaceholderText(/leave blank to keep/i)).toHaveLength(4));
   const tokens = screen.getAllByPlaceholderText(/leave blank to keep/i) as HTMLInputElement[];
   return {
     cloudVision: tokens[0].closest('.card') as HTMLElement,
@@ -42,7 +42,7 @@ describe('Integrations Token Management', () => {
     stubApi(ENGINEER);
     renderAt('/network/connection');
     const tokens = (await screen.findAllByPlaceholderText(/leave blank to keep/i)) as HTMLInputElement[];
-    expect(tokens).toHaveLength(3);
+    expect(tokens).toHaveLength(4);
     for (const t of tokens) expect(t.value).toBe(''); // never populated from the server
   });
 
@@ -136,5 +136,30 @@ describe('Integrations Token Management', () => {
 
     fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
     expect(await screen.findByText(/Connection OK.*12 zones/i)).toBeInTheDocument();
+  });
+
+  it('saves the bgp.tools Prometheus URL (write-only), tests, and manages the watch list', async () => {
+    stubApi(ENGINEER);
+    renderAt('/network/connection');
+    const heading = await screen.findByRole('heading', { name: /bgp\.tools \(routing intelligence\)/i });
+    const card = within(heading.closest('.connector-section') as HTMLElement);
+
+    // The URL field is write-only — blank even though one is configured. Await it so the section
+    // has finished loading (the heading renders before the async load resolves).
+    const url = (await card.findByPlaceholderText(/leave blank to keep/i)) as HTMLInputElement;
+    expect(url.value).toBe('');
+    fireEvent.change(url, { target: { value: 'https://prometheus.bgp.tools/prom/new-uuid' } });
+    fireEvent.click(card.getByRole('button', { name: 'Save' }));
+    await screen.findByText(/Saved/i);
+    expect(putBody('/routing/connection')).toMatchObject({ prometheusUrl: 'https://prometheus.bgp.tools/prom/new-uuid' });
+
+    fireEvent.click(card.getByRole('button', { name: 'Test connection' }));
+    expect(await screen.findByText(/Connection OK.*monitoring 1 prefix/i)).toBeInTheDocument();
+
+    // Add a monitored prefix.
+    fireEvent.change(card.getByPlaceholderText('89.207.56.0/21'), { target: { value: '203.0.113.0/24' } });
+    fireEvent.change(card.getByPlaceholderText('41073'), { target: { value: '2110' } });
+    fireEvent.click(card.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(putBody('/routing/monitored')).toMatchObject({ prefix: '203.0.113.0/24', expectedOriginAsn: 2110 }));
   });
 });

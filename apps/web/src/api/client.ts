@@ -5,6 +5,11 @@ import type {
   AuditListResponse,
   RoutingSnapshotResponse,
   RoutingIncidentsResponse,
+  BgpToolsConnection,
+  BgpToolsConnectionUpdate,
+  BgpToolsConnectionTest,
+  MonitoredPrefixItem,
+  RoutingMonitoredResponse,
   CompareCurrentResponse,
   CompareResponse,
   ExplainRequest,
@@ -271,6 +276,14 @@ export const api = {
     const qs = p.toString();
     return request<RoutingIncidentsResponse>(`/api/v1/routing/incidents${qs ? `?${qs}` : ''}`);
   },
+  // bgp.tools connection settings (Engineer). Prometheus URL is write-only.
+  routingConnection: () => request<{ settings: BgpToolsConnection }>('/api/v1/routing/connection'),
+  routingConnectionUpdate: (body: BgpToolsConnectionUpdate) => request<{ settings: BgpToolsConnection }>('/api/v1/routing/connection', { method: 'PUT', body: JSON.stringify(body) }),
+  routingConnectionTest: () => request<{ result: BgpToolsConnectionTest }>('/api/v1/routing/connection/test', { method: 'POST' }),
+  routingMonitored: () => request<RoutingMonitoredResponse>('/api/v1/routing/monitored'),
+  routingMonitoredUpsert: (body: { prefix: string; addressFamily: 'ipv4' | 'ipv6'; expectedOriginAsn: number; description?: string }) =>
+    request<{ record: MonitoredPrefixItem }>('/api/v1/routing/monitored', { method: 'PUT', body: JSON.stringify(body) }),
+  routingMonitoredDelete: (prefix: string) => request<{ removed: boolean }>('/api/v1/routing/monitored', { method: 'DELETE', body: JSON.stringify({ prefix }) }),
 
   // CloudVision connection settings (Engineer only). The token is write-only.
   networkConnection: () => request<ConnectorSettingsResponse>('/api/v1/network/connection'),

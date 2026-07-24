@@ -1382,3 +1382,30 @@ export interface RoutingIncident {
 export interface RoutingSnapshotResponse { status: RoutingStatus; snapshot: RoutingSnapshot | null }
 export interface RoutingPrefixesResponse { count: number; items: RoutingAssessment[]; capturedAt: string | null; provenance: RoutingProvenance | null }
 export interface RoutingIncidentsResponse { count: number; items: RoutingIncident[] }
+
+// bgp.tools connection settings (Engineer). The Prometheus URL is write-only.
+export interface BgpToolsConnection {
+  connector: 'bgptools';
+  enabled: boolean;
+  mode: 'mock' | 'live';
+  prometheusHost: string | null;
+  tableEnabled: boolean;
+  monitoredPrefixCount: number;
+  prometheusUrlConfigured: boolean;
+  prometheusUrlSetAt: string | null;
+  updatedBy: string | null;
+  updatedAt: string | null;
+  source: 'database' | 'environment';
+  masterKeyAvailable: boolean;
+  degraded: string | null;
+}
+export interface BgpToolsConnectionUpdate {
+  enabled?: boolean;
+  mode?: 'mock' | 'live';
+  tableEnabled?: boolean;
+  prometheusUrl?: string;
+  clearPrometheusUrl?: boolean;
+}
+export interface BgpToolsConnectionTest { ok: boolean; source: string; error?: string; summary?: string }
+export interface MonitoredPrefixItem { prefix: string; addressFamily: 'ipv4' | 'ipv6'; expectedOriginAsn: number; description?: string; createdBy?: string; createdAt: string; updatedAt: string }
+export interface RoutingMonitoredResponse { count: number; items: MonitoredPrefixItem[] }
