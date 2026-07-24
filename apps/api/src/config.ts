@@ -8,6 +8,7 @@ import { loadTelemetryConfig, type TelemetryConfig } from './telemetry/config.js
 import { loadCacheTelemetryConfig, type CacheTelemetryConfig } from './telemetry/cache-config.js';
 import { loadCloudVisionConfig, type CloudVisionConfig } from './cloudvision/config.js';
 import { loadBgpToolsConfig, type BgpToolsConfig } from './bgptools/config.js';
+import { loadRipeConfig, type RipeConfig } from './ripe/config.js';
 import { loadCloudflareConfig, type CloudflareConfig } from './cloudflare/config.js';
 import { loadFastlyConfig, type FastlyConfig } from './fastly/config.js';
 import { loadAkamaiConfig, type AkamaiConfig } from './akamai/config.js';
@@ -136,6 +137,8 @@ export interface Config {
   akamai: AkamaiConfig;
   /** bgp.tools external routing intelligence (disabled by default; mock or read-only live). */
   bgpTools: BgpToolsConfig;
+  /** RIPE BGP intelligence (disabled by default; read-only public RIPEstat + RIS Live). */
+  ripe: RipeConfig;
   /** Tier-2 active DNS observation (disabled by default). */
   dnsObservation: DnsObservationConfig;
   /** Read-only NS1 live-validation (live runs gated by NS1_VALIDATION_ENABLED). */
@@ -233,6 +236,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // CloudVision network telemetry: disabled by default; mock needs no creds, live fails fast.
   const cloudVision = loadCloudVisionConfig(env);
   const bgpTools = loadBgpToolsConfig(env);
+  const ripe = loadRipeConfig(env);
   const cloudflare = loadCloudflareConfig(env);
   const fastly = loadFastlyConfig(env);
   const akamai = loadAkamaiConfig(env);
@@ -262,6 +266,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cacheTelemetry,
     cloudVision,
     bgpTools,
+    ripe,
     cloudflare,
     fastly,
     akamai,
