@@ -21,6 +21,8 @@ describe('BGP Intelligence page', () => {
     // Source status live + a RIS event (the announcement badge in the timeline).
     expect(screen.getByText(/RIPE source: live/)).toBeInTheDocument();
     expect(screen.getAllByText('announcement').length).toBeGreaterThan(0);
+    // ASN names resolve OUTSIDE the drawer too — the event path 174 → Cogent appears without expanding.
+    expect((await screen.findAllByText(/Cogent/)).length).toBeGreaterThan(0);
   });
 
   it('opens the evidence drawer with paths and the CloudVision-not-yet-available note', async () => {

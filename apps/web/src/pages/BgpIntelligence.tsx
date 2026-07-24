@@ -156,13 +156,17 @@ function PrefixDetail({ p, owners }: { p: RouteVisibility; owners: Owners }) {
   );
 }
 
-function EventRow({ e }: { e: RisEvent }) {
+function EventRow({ e, owners }: { e: RisEvent; owners: Owners }) {
   return (
     <tr className={e.kind === 'withdrawal' ? 'warn' : undefined}>
       <td><span className={`badge ${e.kind === 'withdrawal' ? 'warn' : 'info'} badge-sm`}>{e.kind}</span></td>
       <td>{e.prefix}</td>
-      <td>{e.origin != null ? `AS${e.origin}` : '—'}</td>
-      <td className="muted">{e.path.length ? e.path.map((a) => `AS${a}`).join(' → ') : '—'}</td>
+      <td>{e.origin != null ? <Asn n={e.origin} owners={owners} /> : '—'}</td>
+      <td>{e.path.length ? (
+        <span className="bgi-asnlist">
+          {e.path.map((a, j) => <Fragment key={j}><Asn n={a} owners={owners} />{j < e.path.length - 1 && <span className="bgi-arrow">→</span>}</Fragment>)}
+        </span>
+      ) : <span className="muted">—</span>}</td>
       <td>{e.observationCount}</td>
       <td className="muted">{ago(e.lastAt)}</td>
     </tr>
@@ -235,8 +239,8 @@ export function BgpIntelligence() {
                   <tr className="row-click" onClick={() => setOpen(isOpen ? null : p.prefix)} title={p.reasons[0]}>
                     <td><b>{p.prefix}</b></td>
                     <td className="muted">{p.addressFamily === 'ipv6' ? 'v6' : 'v4'}</td>
-                    <td>AS{p.expectedOrigin}</td>
-                    <td className={p.unexpectedOrigin ? 'danger' : undefined}>{p.observedOrigins.length ? p.observedOrigins.map((o) => `AS${o}`).join(', ') : '—'}</td>
+                    <td><Asn n={p.expectedOrigin} owners={owners} origin /></td>
+                    <td className={p.unexpectedOrigin ? 'danger' : undefined}>{p.observedOrigins.length ? <span className="bgi-asnlist">{p.observedOrigins.map((o) => <Asn key={o} n={o} owners={owners} origin={o === p.expectedOrigin} />)}</span> : '—'}</td>
                     <td><span className={`badge ${RPKI[p.rpkiState].cls} badge-sm`} title={RPKI[p.rpkiState].help}>{RPKI[p.rpkiState].label}</span></td>
                     <td>{p.freshness === 'unknown' ? <span className="muted">unknown</span> : <VisBar r={p.collectorVisibilityPercent} cls={HEALTH[p.health].cls} />}</td>
                     <td className="muted">{p.coveringPrefix ?? '—'}</td>
@@ -258,7 +262,7 @@ export function BgpIntelligence() {
           <thead><tr><th>Type</th><th>Prefix</th><th>Origin</th><th>Path</th><th>Obs</th><th>Last</th></tr></thead>
           <tbody>
             {t.events.length === 0 && <tr><td colSpan={6} className="center-note">{source?.risLiveState === 'disabled' ? 'RIS Live is disabled.' : 'No BGP events observed yet.'}</td></tr>}
-            {t.events.slice(0, 100).map((e) => <EventRow key={e.id} e={e} />)}
+            {t.events.slice(0, 100).map((e) => <EventRow key={e.id} e={e} owners={owners} />)}
           </tbody>
         </table>
       </div>
