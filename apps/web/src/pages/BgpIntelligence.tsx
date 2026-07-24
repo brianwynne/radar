@@ -4,9 +4,60 @@
 // whether the monitoring SOURCE itself is unavailable (never shown as a withdrawal). CloudVision
 // correlation fields are present but explicitly "not yet available" — RADAR never infers local
 // advertisement from RIPE observations.
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRipeIntelligence } from '../telemetry/use-ripe-intelligence';
-import type { RipeRpkiState, RisEvent, RouteHealth, RouteVisibility } from '../api/types';
+import { api } from '../api/client';
+import type { RipeRpkiState, RisEvent, RouteHealth, RouteVisibility, RouteVisibilitySnapshot } from '../api/types';
+
+// ASN → owner name, resolved via RIPEstat (same resolver as the bgp.tools page). Shown side-by-side
+// with each AS number so an operator reads "AS174 Cogent" without a second lookup. Ownership is
+// external routing metadata — it never changes RADAR's health assessment.
+type Owners = Record<string, string | null>;
+const shortOwner = (name: string | null | undefined): string | null => {
+  if (!name) return null;
+  // RIPEstat holders look like "COGENT-174, US" — take the leading label, trimmed for the chip.
+  const head = name.split(',')[0].trim();
+  return head.length > 22 ? `${head.slice(0, 21)}…` : head;
+};
+function asnsOf(snap: RouteVisibilitySnapshot | null, events: RisEvent[]): number[] {
+  const set = new Set<number>();
+  for (const p of snap?.prefixes ?? []) {
+    set.add(p.expectedOrigin);
+    p.observedOrigins.forEach((o) => set.add(o));
+    p.upstreams.forEach((u) => set.add(u));
+    p.representativePaths.forEach((rp) => rp.asPath.forEach((a) => set.add(a)));
+  }
+  for (const e of events) {
+    if (e.origin != null) set.add(e.origin);
+    e.path.forEach((a) => set.add(a));
+  }
+  return [...set].filter((n) => Number.isFinite(n) && n > 0).sort((a, b) => a - b);
+}
+
+// Fetch owner names for whichever ASNs are currently on screen; refetch only when that set changes.
+function useAsnOwners(snap: RouteVisibilitySnapshot | null, events: RisEvent[]): Owners {
+  const [owners, setOwners] = useState<Owners>({});
+  const asns = useMemo(() => asnsOf(snap, events), [snap, events]);
+  const key = asns.join(',');
+  useEffect(() => {
+    if (asns.length === 0) return;
+    let live = true;
+    api.routingAsnNames(asns).then((r) => { if (live) setOwners((prev) => ({ ...prev, ...r.owners })); }).catch(() => {});
+    return () => { live = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+  return owners;
+}
+
+// An AS number with its owner name beside it (chip form). Origin is emphasised.
+function Asn({ n, owners, origin }: { n: number; owners: Owners; origin?: boolean }) {
+  const name = shortOwner(owners[String(n)]);
+  return (
+    <span className={`bgi-asn${origin ? ' origin' : ''}`} title={owners[String(n)] ?? undefined}>
+      AS{n}{name && <span className="bgi-asn-name"> {name}</span>}
+    </span>
+  );
+}
 
 const HEALTH: Record<RouteHealth, { cls: string; label: string }> = {
   healthy: { cls: 'ok', label: 'Healthy' },
@@ -45,8 +96,9 @@ function VisBar({ r, cls }: { r: number | null; cls: string }) {
   );
 }
 
-// Compact observed collector path: peer → … → origin, grouped, most-frequent first.
-function PathChips({ p }: { p: RouteVisibility }) {
+// Compact observed collector path: peer → … → origin, grouped, most-frequent first. Each hop shows
+// its owner name beside the AS number.
+function PathChips({ p, owners }: { p: RouteVisibility; owners: Owners }) {
   if (p.representativePaths.length === 0) return <span className="muted">No representative path observed.</span>;
   return (
     <div className="bgi-paths">
@@ -54,7 +106,7 @@ function PathChips({ p }: { p: RouteVisibility }) {
         <div key={i} className="bgi-path" title={`${rp.collector} · ${rp.count} peer observation(s)`}>
           {rp.asPath.map((asn, j) => (
             <Fragment key={j}>
-              <span className={`bgi-asn${asn === p.expectedOrigin ? ' origin' : ''}`}>AS{asn}</span>
+              <Asn n={asn} owners={owners} origin={asn === p.expectedOrigin} />
               {j < rp.asPath.length - 1 && <span className="bgi-arrow">→</span>}
             </Fragment>
           ))}
@@ -65,7 +117,7 @@ function PathChips({ p }: { p: RouteVisibility }) {
   );
 }
 
-function PrefixDetail({ p }: { p: RouteVisibility }) {
+function PrefixDetail({ p, owners }: { p: RouteVisibility; owners: Owners }) {
   const ripestat = `https://stat.ripe.net/${encodeURIComponent(p.prefix)}`;
   const bgptools = `https://bgp.tools/prefix/${encodeURIComponent(p.prefix)}`;
   return (
@@ -74,17 +126,17 @@ function PrefixDetail({ p }: { p: RouteVisibility }) {
         <div className="bgi-detail">
           <ul className="ri-reasons">{p.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>
           <div className="bgi-grid">
-            <div><b>Expected origin</b><div>AS{p.expectedOrigin}</div></div>
-            <div><b>Observed origin(s)</b><div className={p.unexpectedOrigin ? 'danger' : undefined}>{p.observedOrigins.length ? p.observedOrigins.map((o) => `AS${o}`).join(', ') : '— (none seen)'}</div></div>
+            <div><b>Expected origin</b><div className="bgi-asnlist"><Asn n={p.expectedOrigin} owners={owners} origin /></div></div>
+            <div><b>Observed origin(s)</b><div className={`bgi-asnlist${p.unexpectedOrigin ? ' danger' : ''}`}>{p.observedOrigins.length ? p.observedOrigins.map((o) => <Asn key={o} n={o} owners={owners} origin={o === p.expectedOrigin} />) : '— (none seen)'}</div></div>
             <div><b>RPKI</b><div title={RPKI[p.rpkiState].help}>{RPKI[p.rpkiState].label}{p.rpkiMaxLength != null ? ` (maxLength /${p.rpkiMaxLength})` : ''}</div></div>
-            <div><b>Upstreams (before AS{p.expectedOrigin})</b><div>{p.upstreams.length ? p.upstreams.map((u) => `AS${u}`).join(', ') : '—'}</div></div>
+            <div><b>Upstreams (before AS{p.expectedOrigin})</b><div className="bgi-asnlist">{p.upstreams.length ? p.upstreams.map((u) => <Asn key={u} n={u} owners={owners} />) : '—'}</div></div>
             <div><b>RIS collector visibility</b><div>{p.collectorPeersSeen ?? '—'} of {p.collectorPeersEligible ?? '—'} peers · {p.collectorCount ?? '—'} collectors</div></div>
             <div><b>Covering aggregate</b><div>{p.coveringPrefix ?? '—'}</div></div>
             <div><b>More-specifics</b><div>{p.moreSpecifics.length ? p.moreSpecifics.join(', ') : '—'}</div></div>
             <div><b>First / last seen</b><div>{ago(p.firstSeen)} / {ago(p.lastSeen)}</div></div>
           </div>
           <div className="bgi-subhead">Observed collector paths <span className="muted">(RIPE RIS — an observed path, not the physical network)</span></div>
-          <PathChips p={p} />
+          <PathChips p={p} owners={owners} />
           <div className="bgi-subhead">CloudVision correlation</div>
           <div className="bgi-cv muted">
             <span>Local route present: <b>not yet available</b></span>
@@ -119,6 +171,7 @@ function EventRow({ e }: { e: RisEvent }) {
 
 export function BgpIntelligence() {
   const t = useRipeIntelligence(20000);
+  const owners = useAsnOwners(t.snapshot, t.events);
   const [open, setOpen] = useState<string | null>(null);
   const snap = t.snapshot;
   const source = t.source ?? snap?.source ?? null;
@@ -190,7 +243,7 @@ export function BgpIntelligence() {
                     <td><span className={`badge ${HEALTH[p.health].cls}`}>{HEALTH[p.health].label}</span></td>
                     <td className="muted">{isOpen ? '▾' : '▸'}</td>
                   </tr>
-                  {isOpen && <PrefixDetail p={p} />}
+                  {isOpen && <PrefixDetail p={p} owners={owners} />}
                 </Fragment>
               );
             })}

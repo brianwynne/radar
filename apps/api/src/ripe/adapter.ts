@@ -104,9 +104,15 @@ export function normalizePrefix(prefix: string, expectedOrigin: number, input: R
   const { representative, upstreams, collectorCount } = paths(input.lookingGlass?.data, expectedOrigin);
   const { state: rpkiState, maxLength } = rpkiStateOf(input.rpki?.data, input.rpki !== undefined);
 
+  // RIPEstat routing-status is a periodic BATCH product — its query_time only advances every ~8h,
+  // so "observed 8h ago" is normal, not a fault. Freshness must therefore reflect how long ago RADAR
+  // last fetched (our monitoring recency), NOT RIPE's batch reference time. We keep query_time as an
+  // informational "RIPE observed at" field; staleness = our fetch is older than maxAge (e.g. polling
+  // stopped). This avoids alarming "treat with caution" on data we just pulled.
   const sourceObservedAt = rs?.query_time ?? rs?.last_seen?.time ?? null;
-  const ageSeconds = sourceObservedAt ? Math.max(0, (nowMs - Date.parse(`${sourceObservedAt}Z`.replace('ZZ', 'Z'))) / 1000) : null;
-  const freshness: Freshness = !rsOk ? 'unknown' : ageSeconds !== null && ageSeconds > cfg.maxAgeSeconds ? 'stale' : 'fresh';
+  const fetchedAt = input.routingStatus?.fetchedAt ?? new Date(nowMs).toISOString();
+  const fetchAgeSeconds = Math.max(0, (nowMs - Date.parse(fetchedAt)) / 1000);
+  const freshness: Freshness = !rsOk ? 'unknown' : fetchAgeSeconds > cfg.maxAgeSeconds ? 'stale' : 'fresh';
 
   const originAsExpected = observedOrigins.length > 0 && observedOrigins.every((o) => o === expectedOrigin);
   const unexpectedOrigin = observedOrigins.some((o) => o !== expectedOrigin);
@@ -119,7 +125,7 @@ export function normalizePrefix(prefix: string, expectedOrigin: number, input: R
     rpkiState, rpkiMaxLength: maxLength, representativePaths: representative, upstreams,
     coveringPrefix, moreSpecifics,
     firstSeen: rs?.first_seen?.time ?? null, lastSeen: rs?.last_seen?.time ?? null,
-    sourceObservedAt, sourceFetchedAt: input.routingStatus?.fetchedAt ?? new Date(nowMs).toISOString(),
+    sourceObservedAt, sourceFetchedAt: fetchedAt,
     freshness, health: 'unknown', reasons: [], cloudVision: NOT_YET, partial, warnings,
   };
   return assess(record, cfg);

@@ -34,6 +34,9 @@ describe('BGP Intelligence page', () => {
     expect(await screen.findByText(/observed path, not the physical network/i)).toBeInTheDocument();
     // CloudVision correlation is explicitly not-yet-available (never inferred from RIPE).
     expect(screen.getAllByText(/not yet available/i).length).toBeGreaterThan(0);
+    // ASN owner names are resolved and shown side-by-side (174 → Cogent in the stub) — in the
+    // upstreams list and again in the observed path.
+    expect((await screen.findAllByText(/Cogent/)).length).toBeGreaterThan(0);
     // External links.
     expect(screen.getByText(/RIPEstat ↗/)).toHaveAttribute('href', expect.stringContaining('stat.ripe.net'));
   });

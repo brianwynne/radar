@@ -61,6 +61,17 @@ describe('assess — operational verdicts', () => {
     expect(r.reasons.join(' ')).toMatch(/NOT a route withdrawal/i);
   });
 
+  it('freshness tracks OUR fetch, not RIPEstat batch query_time (routing-status updates ~8-hourly)', async () => {
+    // RIPE's routing-status query_time is 08:00 (FT); poll 8h later. The record is freshly fetched,
+    // so it must read fresh — never "stale / treat with caution" just because the batch is old.
+    const later = Date.parse('2026-07-24T16:05:00Z');
+    const c = new MockRipestatClient({ scenarioFor: () => 'healthy', now: () => later });
+    const r = await fetchPrefix(c, '89.207.56.0/21', RTE_ORIGIN, DEFAULT_ASSESS, later);
+    expect(r.freshness).toBe('fresh');
+    expect(r.reasons.join(' ')).not.toMatch(/treat with caution/i);
+    expect(r.lastSeen).toBe('2026-07-24T08:00:00'); // RIPE's observation time still surfaced as-is
+  });
+
   it('IPv6 healthy prefix with its own upstream', async () => {
     const r = await health('2a00:1ed8::/29', 'healthy');
     expect(r.addressFamily).toBe('ipv6');
