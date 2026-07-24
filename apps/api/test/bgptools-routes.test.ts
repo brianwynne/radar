@@ -80,6 +80,33 @@ describe('bgp.tools routes — RBAC + data', () => {
     await a.close();
   });
 
+  it('resolves ASN owner names (feeds Routing Intelligence + BGP Intelligence); source carried', async () => {
+    const h = await harness();
+    // Inject a stub resolver — proves owners flow through. In production server.ts injects none, so
+    // the route falls back to a live RIPEstat resolver (regression: it used to return empty owners).
+    const resolver = { source: 'stub', resolve: async (asns: number[]) => new Map(asns.map((n) => [n, n === 174 ? 'Cogent Communications' : `Holder AS${n}`])) };
+    const a = await buildApp(loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', RADAR_DEV_AUTH: 'true', RADAR_DEV_ROLE: 'NOC_VIEWER' }),
+      { bgpToolsManager: h.manager, bgpToolsIncidents: h.incidents, bgpToolsMonitored: h.monitored, asnResolver: resolver });
+    await a.ready();
+    const res = await a.inject({ url: '/api/v1/routing/asn-names?asns=174,1299' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().owners['174']).toBe('Cogent Communications');
+    expect(res.json().source).toBe('stub');
+    await a.close();
+  });
+
+  it('asn-names without an injected resolver still defaults (does not return empty by construction)', async () => {
+    const h = await harness();
+    // No asnResolver in deps (as in production). With no asns the default resolver is used but not
+    // called — the key assertion is the route no longer short-circuits to source:'none' when a
+    // resolver is absent. (asns omitted so no live network call is made.)
+    const a = await app('NOC_VIEWER', h);
+    const res = await a.inject({ url: '/api/v1/routing/asn-names' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().source).not.toBe('none');
+    await a.close();
+  });
+
   it('connection management is Engineer-only', async () => {
     const h = await harness();
     const ve = await app('VIEWING_ENGINEER', h);

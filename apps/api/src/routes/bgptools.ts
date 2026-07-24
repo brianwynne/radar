@@ -5,7 +5,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { requirePermission } from '../auth/guards.js';
 import type { BgpToolsConnectorManager } from '../bgptools/manager.js';
-import type { AsnResolver } from '../ns1/asn-resolver.js';
+import { createRipestatResolver, type AsnResolver } from '../ns1/asn-resolver.js';
 import { createRipestatWhoisResolver, type PrefixWhoisResolver } from '../bgptools/prefix-whois.js';
 import type { BgpToolsIncidentRepository, BgpToolsMonitoredPrefixRepository, IncidentState } from '@radar/data';
 
@@ -30,6 +30,10 @@ export const bgpToolsRoutes: FastifyPluginAsync<BgpToolsRouteOptions> = async (a
   const schema = (summary: string) => ({ tags: ['routing-intelligence'], summary, security: [{ bearerAuth: [] }] });
   const unavailable = (id: string) => ({ code: 'CONNECTOR_UNAVAILABLE', message: 'bgp.tools connector is not configured.', correlationId: id });
   const whoisResolver = opts.whois ?? createRipestatWhoisResolver();
+  // Default to a live RIPEstat resolver when none is injected (server.ts doesn't wire one), matching
+  // the whois resolver above and the NS1 asn-owners route. Without this the endpoint returned empty
+  // owners and NO ASN on any page (bgp.tools or BGP Intelligence) ever resolved to a name.
+  const asnResolver = opts.resolver ?? createRipestatResolver();
 
   // Current routing-intelligence snapshot + connector status.
   app.get('/routing/snapshot', { preHandler: requirePermission('topology.summary.read'), schema: schema('Current routing-intelligence snapshot') }, async (req, reply) => {
@@ -60,11 +64,11 @@ export const bgpToolsRoutes: FastifyPluginAsync<BgpToolsRouteOptions> = async (a
   app.get('/routing/asn-names', { preHandler: requirePermission('topology.summary.read'), schema: schema('Resolve ASN owners') }, async (req) => {
     const q = z.object({ asns: z.string().optional() }).safeParse(req.query);
     const asns = (q.success ? q.data.asns ?? '' : '').split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0).slice(0, 200);
-    if (!opts.resolver || asns.length === 0) return { source: opts.resolver?.source ?? 'none', owners: {} as Record<string, string | null> };
-    const map = await opts.resolver.resolve(asns);
+    if (asns.length === 0) return { source: asnResolver.source, owners: {} as Record<string, string | null> };
+    const map = await asnResolver.resolve(asns);
     const owners: Record<string, string | null> = {};
     for (const [asn, holder] of map) owners[String(asn)] = holder;
-    return { source: opts.resolver.source, owners };
+    return { source: asnResolver.source, owners };
   });
 
   // WHOIS (RIR registration) for a prefix — netname / organisation / country / registry.
