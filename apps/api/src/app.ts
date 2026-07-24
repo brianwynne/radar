@@ -255,7 +255,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(akamaiConnectionRoutes, { prefix: '/api/v1', manager: deps.akamaiManager });
   await app.register(fastlyConnectionRoutes, { prefix: '/api/v1', manager: deps.fastlyManager });
   await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
-  await app.register(bgpToolsRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager, incidents: deps.bgpToolsIncidents, monitored: deps.bgpToolsMonitored });
+  await app.register(bgpToolsRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager, incidents: deps.bgpToolsIncidents, monitored: deps.bgpToolsMonitored, resolver: deps.asnResolver });
   await app.register(bgpToolsConnectionRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager });
   await app.register(resolverRoutes, { prefix: '/api/v1', manager: deps.atlasManager ?? createAtlasManager(loadAtlasConfig()) });
 

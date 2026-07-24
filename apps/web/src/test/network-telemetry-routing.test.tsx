@@ -33,6 +33,8 @@ describe('Routing Intelligence tab', () => {
     const asnTable = screen.getByRole('columnheader', { name: 'Peers' }).closest('table')! as HTMLElement;
     const asnRow = within(asnTable).getByText('AS41073').closest('tr')! as HTMLElement;
     expect(within(asnRow).getByText('101')).toBeInTheDocument(); // peers
+    // ASN owner resolved (RIPEstat) and shown next to the ASN.
+    expect(await within(asnRow).findByText('RTE')).toBeInTheDocument();
   });
 
   it('opens the evidence drawer for a prefix', async () => {

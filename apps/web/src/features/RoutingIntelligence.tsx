@@ -2,9 +2,10 @@
 // Telemetry: overall integrity, a prefix visibility matrix (expected vs observed origin, visibility
 // %, upstreams, integrity state), and the incident feed. Every conclusion is traceable to the
 // evidence in the drawer. RADAR never modifies BGP or NS1 — this is evidence + a safety signal.
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRoutingIntelligence } from '../telemetry/use-routing-intelligence';
 import { formatFreshness } from '../telemetry/format';
+import { api } from '../api/client';
 import type { RoutingAssessment, RoutingIncident, RoutingIntegrityState } from '../api/types';
 
 const STATE_BADGE: Record<RoutingIntegrityState, string> = { healthy: 'ok', degraded: 'warn', critical: 'danger', unknown: 'neutral' };
@@ -41,19 +42,20 @@ function VisibilityBar({ ratio, state }: { ratio: number | null; state: RoutingI
   );
 }
 
-function PrefixDrawer({ a }: { a: RoutingAssessment }) {
+function PrefixDrawer({ a, ownerOf }: { a: RoutingAssessment; ownerOf: (asn: number | null | undefined) => string | null }) {
   const s = a.signals;
   if (!s) return null;
+  const asn = (n: number) => `AS${n}${ownerOf(n) ? ` (${ownerOf(n)})` : ''}`;
   return (
     <tr className="ri-drawer">
       <td colSpan={8}>
         <div className="ri-drawer-body">
           <ul className="ri-reasons">{a.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul>
           <div className="ri-evidence">
-            <span><b>Observed origins:</b> {s.observedOrigins.length ? s.observedOrigins.map((o) => `AS${o.asn}`).join(', ') : '—'}</span>
-            <span><b>Upstreams:</b> {s.observedUpstreams.length ? s.observedUpstreams.map((u) => `AS${u}`).join(', ') : '—'}</span>
-            {s.missingUpstreams.length > 0 && <span className="danger"><b>Missing:</b> {s.missingUpstreams.map((u) => `AS${u}`).join(', ')}</span>}
-            {s.newUpstreams.length > 0 && <span className="warn"><b>New:</b> {s.newUpstreams.map((u) => `AS${u}`).join(', ')}</span>}
+            <span><b>Observed origins:</b> {s.observedOrigins.length ? s.observedOrigins.map((o) => asn(o.asn)).join(', ') : '—'}</span>
+            <span><b>Upstreams:</b> {s.observedUpstreams.length ? s.observedUpstreams.map(asn).join(', ') : '—'}</span>
+            {s.missingUpstreams.length > 0 && <span className="danger"><b>Missing:</b> {s.missingUpstreams.map(asn).join(', ')}</span>}
+            {s.newUpstreams.length > 0 && <span className="warn"><b>New:</b> {s.newUpstreams.map(asn).join(', ')}</span>}
             <span><b>Visible paths:</b> {s.visiblePaths ?? '—'}</span>
             <span><b>Confidence:</b> {s.sourceConfidence}</span>
             <span><b>First seen:</b> {ago(s.firstObservedAt)}</span>
@@ -85,6 +87,32 @@ export function RoutingIntelligence() {
   const status = t.status;
   const snap = t.snapshot;
   const conn = t.connection;
+
+  // Resolve the ASNs on the page (origin + upstreams + topology) to their network owners — ASN
+  // ownership is external to bgp.tools, so RADAR resolves it via RIPEstat (cached server-side).
+  const [owners, setOwners] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    if (!snap) return;
+    const asns = new Set<number>();
+    for (const a of snap.assessments) {
+      const s = a.signals;
+      if (!s) continue;
+      asns.add(s.expectedOriginAsn);
+      if (s.observedOriginAsn != null) asns.add(s.observedOriginAsn);
+      s.observedUpstreams.forEach((u) => asns.add(u));
+    }
+    (snap.asns ?? []).forEach((a) => asns.add(a.asn));
+    const need = [...asns].filter((n) => !(String(n) in owners));
+    if (need.length === 0) return;
+    api.routingAsnNames(need).then((r) => setOwners((prev) => ({ ...prev, ...r.owners }))).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snap]);
+  const ownerOf = (asn: number | null | undefined): string | null => (asn == null ? null : owners[String(asn)] ?? null);
+  const asnCell = (asn: number | null | undefined) => {
+    if (asn == null) return '—';
+    const o = ownerOf(asn);
+    return <>AS{asn}{o && <span className="muted"> {o}</span>}</>;
+  };
 
   const source = status?.source ?? 'disabled';
   const modeBadge = source === 'bgptools' ? { cls: 'ok', label: 'LIVE · bgp.tools' } : source === 'mock' ? { cls: 'warn', label: 'MOCK · SYNTHETIC' } : { cls: 'neutral', label: 'NOT CONNECTED' };
@@ -153,7 +181,7 @@ export function RoutingIntelligence() {
               <tbody>
                 {snap.asns.map((a) => (
                   <tr key={a.asn}>
-                    <td><b>AS{a.asn}</b></td>
+                    <td><b>AS{a.asn}</b>{ownerOf(a.asn) && <span className="muted"> {ownerOf(a.asn)}</span>}</td>
                     <td>{a.peers ?? '—'}</td>
                     <td>{a.upstreams ?? '—'}</td>
                     <td>{a.downstreams ?? '—'}</td>
@@ -185,14 +213,14 @@ export function RoutingIntelligence() {
                   <tr className={s ? 'row-click' : undefined} onClick={() => s && setOpenPrefix(open ? null : a.prefix ?? null)}>
                     <td>{a.prefix}</td>
                     <td className="muted">{s?.addressFamily === 'ipv6' ? 'v6' : 'v4'}</td>
-                    <td>AS{s?.expectedOriginAsn ?? '—'}</td>
-                    <td className={s && !s.originAsExpected ? 'danger' : undefined}>{s?.prefixWithdrawn ? '—' : s?.observedOriginAsn != null ? `AS${s.observedOriginAsn}` : '—'}{s?.moas ? ' +MOAS' : ''}</td>
+                    <td>{asnCell(s?.expectedOriginAsn)}</td>
+                    <td className={s && !s.originAsExpected ? 'danger' : undefined}>{s?.prefixWithdrawn ? '—' : asnCell(s?.observedOriginAsn)}{s?.moas ? ' +MOAS' : ''}</td>
                     <td>{s?.prefixWithdrawn ? <span className="badge danger badge-sm">withdrawn</span> : <VisibilityBar ratio={s?.prefixVisibilityRatio ?? null} state={a.state} />}</td>
                     <td>{s?.upstreamCount ?? '—'}{s && s.missingUpstreams.length > 0 ? <span className="danger"> −{s.missingUpstreams.length}</span> : ''}{s && s.newUpstreams.length > 0 ? <span className="warn"> +{s.newUpstreams.length}</span> : ''}</td>
                     <td><StateBadge state={a.state} /></td>
                     <td className="muted">{s ? (open ? '▾' : '▸') : ''}</td>
                   </tr>
-                  {open && <PrefixDrawer a={a} />}
+                  {open && <PrefixDrawer a={a} ownerOf={ownerOf} />}
                 </Fragment>
               );
             })}

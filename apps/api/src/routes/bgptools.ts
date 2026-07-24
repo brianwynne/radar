@@ -5,12 +5,15 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { requirePermission } from '../auth/guards.js';
 import type { BgpToolsConnectorManager } from '../bgptools/manager.js';
+import type { AsnResolver } from '../ns1/asn-resolver.js';
 import type { BgpToolsIncidentRepository, BgpToolsMonitoredPrefixRepository, IncidentState } from '@radar/data';
 
 export interface BgpToolsRouteOptions {
   manager?: BgpToolsConnectorManager;
   incidents?: BgpToolsIncidentRepository;
   monitored?: BgpToolsMonitoredPrefixRepository;
+  /** ASN → owner resolver (RIPEstat); ASN ownership is external, not in bgp.tools. */
+  resolver?: AsnResolver;
 }
 
 const prefixSchema = z.object({
@@ -46,6 +49,18 @@ export const bgpToolsRoutes: FastifyPluginAsync<BgpToolsRouteOptions> = async (a
     if (!q.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: q.error.issues.map((i) => i.message).join('; '), correlationId: req.id });
     const items = await opts.incidents.list({ state: q.data.state as IncidentState | undefined, openOnly: q.data.openOnly, prefix: q.data.prefix, limit: q.data.limit });
     return { count: items.length, items };
+  });
+
+  // Resolve ASN → network-owner names (origin + upstream ASNs). ASN ownership is external to
+  // bgp.tools, so RADAR resolves it via RIPEstat and carries the source.
+  app.get('/routing/asn-names', { preHandler: requirePermission('topology.summary.read'), schema: schema('Resolve ASN owners') }, async (req) => {
+    const q = z.object({ asns: z.string().optional() }).safeParse(req.query);
+    const asns = (q.success ? q.data.asns ?? '' : '').split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n > 0).slice(0, 200);
+    if (!opts.resolver || asns.length === 0) return { source: opts.resolver?.source ?? 'none', owners: {} as Record<string, string | null> };
+    const map = await opts.resolver.resolve(asns);
+    const owners: Record<string, string | null> = {};
+    for (const [asn, holder] of map) owners[String(asn)] = holder;
+    return { source: opts.resolver.source, owners };
   });
 
   // ---- Monitored watch list ----------------------------------------------------------------
