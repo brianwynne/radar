@@ -18,7 +18,7 @@ import type { BgpToolsSource, MonitoredPrefix } from './types.js';
 const CONNECTOR = 'bgptools';
 
 export interface AuditSink {
-  record(event: { action: string; actor?: { subject?: string; roles?: string[] }; details?: Record<string, unknown>; correlationId?: string }): void | Promise<void>;
+  record(event: { actorSubject?: string; actorRoles?: string[]; action: string; resourceType?: string; resourceKey?: string; outcome: string; correlationId?: string; details?: Record<string, unknown> }): Promise<unknown>;
 }
 
 interface Logger {
@@ -256,7 +256,7 @@ export class BgpToolsConnectorManager {
     });
     this.persisted = await this.repo.get(CONNECTOR);
     this.rebuildClients();
-    await this.audit?.record({ action: 'bgptools.connection.update', actor, details: { enabled, mode, tokenAction }, correlationId: actor.correlationId });
+    await this.audit?.record({ actorSubject: actor.subject, actorRoles: actor.roles, action: 'bgptools.connection.update', resourceType: 'connector', resourceKey: CONNECTOR, outcome: 'success', details: { enabled, mode, tokenAction }, correlationId: actor.correlationId });
     return this.view();
   }
 
