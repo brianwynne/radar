@@ -422,7 +422,9 @@ table.shed-table td.util-crit { background: var(--danger-bg); color: var(--dange
 .ri-vis-danger { background: var(--danger, #c0392b); }
 .ri-vis-neutral { background: var(--ink-soft); }
 .ri-vis-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; color: var(--ink); mix-blend-mode: difference; }
-.ri-drawer > td { background: var(--surface-2, rgba(127, 127, 127, 0.06)); padding: 0.6rem 0.8rem; }
+/* The matrix sets `white-space: nowrap` on every td for the compact data rows; the expanded drawer
+   holds prose + wrapping chip lists, so reset it here or its content overlaps / overflows. */
+.ri-drawer > td { background: var(--surface-2, rgba(127, 127, 127, 0.06)); padding: 0.6rem 0.8rem; white-space: normal; }
 .ri-drawer-body { display: flex; flex-direction: column; gap: 0.5rem; }
 .ri-reasons { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.82rem; }
 .ri-evidence { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; font-size: 0.8rem; }
