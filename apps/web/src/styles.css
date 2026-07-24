@@ -369,6 +369,10 @@ table.matrix td.util-warn { background: var(--warn-bg); color: var(--warn); font
 table.matrix td.util-crit { background: var(--danger-bg); color: var(--danger); font-weight: 700; }
 table.matrix tr.lag-member > td.util-warn { background: var(--warn-bg); }
 table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
+/* Same amber/red utilisation alerts on the OTT Delivery tab (shed-table), which the matrix-scoped
+   rules above did not reach. */
+table.shed-table td.util-warn { background: var(--warn-bg); color: var(--warn); font-weight: 700; }
+table.shed-table td.util-crit { background: var(--danger-bg); color: var(--danger); font-weight: 700; }
 
 /* Commercial CDN page: CDN platforms side by side, each a self-contained column. */
 .cdn-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 1rem; align-items: start; }

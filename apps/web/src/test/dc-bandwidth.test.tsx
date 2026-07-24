@@ -22,6 +22,8 @@ describe('DcBandwidth', () => {
     itf(PW, 'Port-Channel3', 'Liberty', 'PRIVATE_PEERING', 50 * G),
     itf(CW, 'Ethernet9', 'Cogent', 'TRANSIT', 99 * G), // transit — must be ignored
     itf(CW, 'Port-Channel9', 'Microsoft', 'PRIVATE_PEERING', 70 * G), // a PNI, but cloud peering — must be excluded
+    itf(CW, 'Port-Channel50', 'edge-citywest-switch', 'PRIVATE_PEERING', 200 * G), // router↔switch uplink — must be excluded
+    itf(CW, 'Port-Channel30', 'Core', 'PRIVATE_PEERING', 150 * G), // inter-DC/core link — must be excluded
   ];
 
   it('shows Citywest and Parkwest total delivery bandwidth (PNI + IX)', () => {
@@ -44,9 +46,12 @@ describe('DcBandwidth', () => {
     expect(within(totalRow).getByText('240.0 Gb/s')).toBeInTheDocument();
   });
 
-  it('ignores non-delivery (transit) links', () => {
+  it('lists eyeball ISPs only — excludes transit, cloud peers, router uplinks and core links', () => {
     render(<DcBandwidth interfaces={interfaces} />);
-    expect(screen.queryByText('Cogent')).not.toBeInTheDocument();
+    expect(screen.queryByText('Cogent')).not.toBeInTheDocument(); // transit
+    expect(screen.queryByText('Microsoft')).not.toBeInTheDocument(); // cloud peer
+    expect(screen.queryByText('edge-citywest-switch')).not.toBeInTheDocument(); // router↔switch uplink
+    expect(screen.queryByText('Core')).not.toBeInTheDocument(); // inter-DC / core
   });
 
   it('shows capacity and the amber/red utilisation alert per link (same as the main page)', () => {

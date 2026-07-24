@@ -4,7 +4,7 @@
 //   3. the total across all PNIs.
 // Egress (primaryBps) is the delivery direction. Values refresh on the page's ~10s CloudVision poll.
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { DATACENTRES, isDeliveryLink, type DcId } from '@radar/shed';
+import { DATACENTRES, type DcId } from '@radar/shed';
 import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
 import { api } from '../api/client';
 import type { NetworkInterface } from '../api/types';
@@ -43,13 +43,19 @@ function Sparkline({ data, width = 220, height = 28 }: { data: number[]; width?:
 const dcNameOf = (deviceId: string): string => DATACENTRES.find((d) => d.deviceId === deviceId)?.name ?? deviceId;
 const isPni = (i: NetworkInterface) => i.linkType === 'PRIVATE_PEERING';
 const isIx = (i: NetworkInterface) => i.linkType === 'IX_PEERING';
+// Eyeball / audience ISPs whose PNIs carry OTT delivery. An allow-list, so ONLY genuine eyeball
+// networks appear — transit, cloud peers (Microsoft), router↔switch uplinks, inter-DC/core links
+// and anything a greedy description parse mislabelled as PRIVATE_PEERING are all excluded.
+const EYEBALL = /\b(eir|eircom|vodafone|three|sky|virgin|liberty|digiweb|magnet|imagine|pure ?telecom|bt)\b/i;
+const isEyeballPni = (i: NetworkInterface) => isPni(i) && EYEBALL.test(i.provider ?? i.name);
 
 export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) {
   const [focus, setFocus] = useState<'' | DcId>(''); // '' = both DCs; else focus one
 
-  // Delivery links = the PNI + IX Port-Channels (memberOf === null so we don't double-count members),
-  // excluding non-delivery cloud peers (e.g. Microsoft) even though they are PNIs.
-  const delivery = interfaces.filter((i) => isDeliveryLink(i.linkType, i.provider) && i.memberOf === null);
+  // Delivery links = eyeball-ISP PNIs + the internet exchange (INEX). memberOf === null so LAG
+  // members aren't double-counted. Only genuine eyeball networks: router uplinks, inter-DC/core
+  // links, transit and cloud peers are excluded by the eyeball allow-list (INEX is kept as an IX).
+  const delivery = interfaces.filter((i) => i.memberOf === null && (isEyeballPni(i) || isIx(i)));
   const sum = (list: NetworkInterface[]) => (list.some((i) => i.primaryBps !== null) ? list.reduce((s, i) => s + (i.primaryBps ?? 0), 0) : null);
 
   // Hysteretic utilisation colour level per interface (amber ≥60% / red ≥80%, 55/75 release) — the SAME
@@ -72,8 +78,11 @@ export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) 
   // The per-link table + its totals honour the DC focus filter; the DC total cards always show both.
   const focusDevice = DATACENTRES.find((d) => d.id === focus)?.deviceId ?? null;
   const scoped = focus ? delivery.filter((i) => i.deviceId === focusDevice) : delivery;
-  const pnis = scoped.filter(isPni).sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0));
-  const ixs = scoped.filter(isIx).sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0));
+  // Stable alphabetical order (provider, then DC) — the table does NOT reshuffle as live traffic
+  // changes, so a given ISP keeps its row instead of jumping to the top when it serves most.
+  const byName = (a: NetworkInterface, b: NetworkInterface) => (a.provider ?? a.name).localeCompare(b.provider ?? b.name) || dcNameOf(a.deviceId).localeCompare(dcNameOf(b.deviceId));
+  const pnis = scoped.filter(isPni).sort(byName);
+  const ixs = scoped.filter(isIx).sort(byName);
   const totalPnis = sum(pnis);
   const totalIx = sum(ixs);
   const grand = sum(scoped);
