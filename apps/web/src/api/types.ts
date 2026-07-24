@@ -1337,12 +1337,23 @@ export interface RoutingCounts { healthy: number; degraded: number; critical: nu
 
 export interface RoutingProvenance { source: string; synthetic: boolean; readOnly: boolean; note: string }
 
+export interface AsnTopology {
+  asn: number;
+  prefixesTotal: number | null;
+  prefixesLowVis: number | null;
+  cone: number | null;
+  upstreams: number | null;
+  downstreams: number | null;
+  peers: number | null;
+}
+
 export interface RoutingSnapshot {
   capturedAt: string;
   source: string;
   overall: RoutingIntegrityState;
   counts: RoutingCounts;
   assessments: RoutingAssessment[];
+  asns?: AsnTopology[];
   provenance: RoutingProvenance;
   warnings: string[];
 }

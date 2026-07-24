@@ -28,6 +28,11 @@ describe('Routing Intelligence tab', () => {
 
     // Incident feed shows the visibility-loss incident.
     expect(screen.getByText('Visibility loss')).toBeInTheDocument();
+
+    // ASN topology panel shows AS41073's peers/upstreams.
+    const asnTable = screen.getByRole('columnheader', { name: 'Peers' }).closest('table')! as HTMLElement;
+    const asnRow = within(asnTable).getByText('AS41073').closest('tr')! as HTMLElement;
+    expect(within(asnRow).getByText('101')).toBeInTheDocument(); // peers
   });
 
   it('opens the evidence drawer for a prefix', async () => {

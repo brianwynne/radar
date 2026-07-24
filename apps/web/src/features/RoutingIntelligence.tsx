@@ -143,6 +143,31 @@ export function RoutingIntelligence() {
         </div>
       </div>
 
+      {/* ASN topology (from the monitoring feed) */}
+      {snap?.asns && snap.asns.length > 0 && (
+        <>
+          <h3>ASN topology</h3>
+          <div className="matrix-wrap">
+            <table className="matrix">
+              <thead><tr><th>ASN</th><th>Peers</th><th>Upstreams</th><th>Downstreams</th><th>Cone</th><th>Prefixes visible</th><th>incl. low-vis</th></tr></thead>
+              <tbody>
+                {snap.asns.map((a) => (
+                  <tr key={a.asn}>
+                    <td><b>AS{a.asn}</b></td>
+                    <td>{a.peers ?? '—'}</td>
+                    <td>{a.upstreams ?? '—'}</td>
+                    <td>{a.downstreams ?? '—'}</td>
+                    <td>{a.cone ?? '—'}</td>
+                    <td>{a.prefixesTotal ?? '—'}</td>
+                    <td className={a.prefixesLowVis != null && a.prefixesTotal != null && a.prefixesLowVis > a.prefixesTotal ? 'warn' : 'muted'}>{a.prefixesLowVis ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
       {/* Prefix visibility matrix */}
       <h3>Prefix visibility</h3>
       <div className="matrix-wrap">

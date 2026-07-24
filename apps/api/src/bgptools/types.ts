@@ -124,6 +124,8 @@ export interface RoutingIntelligenceSnapshot {
   overall: RoutingIntegrityState;
   counts: RoutingIntegrityCounts;
   assessments: RoutingIntegrityAssessment[];
+  /** Per-ASN topology from the monitoring feed (peers, upstreams, cone, prefix totals). */
+  asns?: AsnMetrics[];
   /** Honest provenance — synthetic vs observed, read-only, and a note. */
   provenance: BgpToolsProvenance;
   /** Non-fatal issues (stale data, prefixes with no expected origin, …). */

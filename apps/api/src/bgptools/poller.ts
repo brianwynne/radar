@@ -195,11 +195,11 @@ export class BgpToolsPoller {
       }
       this.openIncidentCount = (await this.opts.incidents.list({ openOnly: true })).length;
 
-      this.lastSnapshot = snapshot;
+      this.lastSnapshot = { ...snapshot, asns: metrics?.asns ?? [] };
       this.lastSuccessAt = this.now();
       this.lastError = null;
       this.opts.logger?.info({ prefixes: monitored.length, overall: snapshot.overall, opened: plan.opens.length, resolved: plan.resolves.length }, 'bgptools: poll ok');
-      return snapshot;
+      return this.lastSnapshot;
     } finally {
       this.polling = false;
     }

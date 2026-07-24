@@ -235,6 +235,7 @@ export const ROUTING_SNAPSHOT_BODY = {
       { prefix: '185.54.104.0/22', state: 'healthy', reasons: ['Originated solely by the expected AS41073 at 100% visibility.'], signals: riSignal('185.54.104.0/22', 'ipv4', 2673, 1, [174, 1299, 6461]), assessedAt: '2026-07-24T12:00:00Z' },
       { prefix: '89.207.57.0/24', state: 'critical', reasons: ['Visibility 0% is below the critical threshold 50% — the prefix is widely unseen.'], signals: riSignal('89.207.57.0/24', 'ipv4', 2, 0.0007, []), assessedAt: '2026-07-24T12:00:00Z' },
     ],
+    asns: [{ asn: 41073, prefixesTotal: 3, prefixesLowVis: 5, cone: 0, upstreams: 3, downstreams: 0, peers: 101 }],
     provenance: { source: 'bgptools', synthetic: false, readOnly: true, note: 'Observed bgp.tools routing data (read-only).' },
     warnings: [],
   },
