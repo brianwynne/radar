@@ -9,6 +9,7 @@ import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
 import { ResolverView } from '../features/ResolverView';
 import { DcBandwidth } from '../features/DcBandwidth';
+import { RoutingIntelligence } from '../features/RoutingIntelligence';
 import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
 import type { LinkType, NetworkHealth, NetworkInterface } from '../api/types';
 
@@ -89,7 +90,7 @@ export function NetworkTelemetry() {
   // Poll on CloudVision's ~10-second publish grid — the interface `rates` node republishes
   // every ~10s, so this is the freshest the analytics API meaningfully offers.
   const t = useCloudVision(10_000);
-  const [tab, setTab] = useState<'telemetry' | 'bandwidth' | 'resolvers'>('telemetry');
+  const [tab, setTab] = useState<'telemetry' | 'bandwidth' | 'resolvers' | 'routing'>('telemetry');
   const [provider, setProvider] = useState('');
   const [linkType, setLinkType] = useState('');
   const [status, setStatus] = useState('');
@@ -361,10 +362,12 @@ export function NetworkTelemetry() {
         <button className={`subtab ${tab === 'telemetry' ? 'active' : ''}`} onClick={() => setTab('telemetry')}>Telemetry</button>
         <button className={`subtab ${tab === 'bandwidth' ? 'active' : ''}`} onClick={() => setTab('bandwidth')}>OTT Delivery</button>
         <button className={`subtab ${tab === 'resolvers' ? 'active' : ''}`} onClick={() => setTab('resolvers')}>Resolvers</button>
+        <button className={`subtab ${tab === 'routing' ? 'active' : ''}`} onClick={() => setTab('routing')}>Routing Intelligence</button>
       </nav>
 
       {tab === 'bandwidth' && <DcBandwidth interfaces={t.interfaces} />}
       {tab === 'resolvers' && <ResolverView />}
+      {tab === 'routing' && <RoutingIntelligence />}
       {tab === 'telemetry' && (<>
       {t.notice && t.mode !== 'disabled' && <div className="notice info">{t.notice}</div>}
       {t.mode === 'disabled' && <div className="notice info">Telemetry not connected — the CloudVision connector is disabled. Enable it to see live edge-router state.</div>}

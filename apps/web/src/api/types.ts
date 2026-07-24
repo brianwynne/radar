@@ -1295,3 +1295,90 @@ export interface Ns1ConnectionResponse { settings: Ns1ConnectionSettings }
 export interface Ns1ConnectionUpdate { mode?: 'mock' | 'live'; apiBase?: string | null; key?: string; clearKey?: boolean; writeKey?: string; clearWriteKey?: boolean }
 export interface Ns1ConnectionTestResult { ok: boolean; source: string; error?: string; summary?: { zones: number } }
 export interface Ns1ConnectionTestResponse { result: Ns1ConnectionTestResult }
+
+// --- bgp.tools routing intelligence (read-only) -----------------------------
+
+export type RoutingIntegrityState = 'healthy' | 'degraded' | 'critical' | 'unknown';
+
+export interface RoutingObservedOrigin { asn: number; hits: number }
+
+export interface RoutingSignal {
+  prefix: string;
+  addressFamily: 'ipv4' | 'ipv6';
+  expectedOriginAsn: number;
+  observedOriginAsn: number | null;
+  observedOrigins: RoutingObservedOrigin[];
+  originAsExpected: boolean;
+  prefixWithdrawn: boolean;
+  unexpectedOrigin: boolean;
+  moas: boolean;
+  prefixVisibilityRatio: number | null;
+  visiblePaths: number | null;
+  observationCount: number;
+  observedUpstreams: number[];
+  upstreamCount: number | null;
+  newUpstreams: number[];
+  missingUpstreams: number[];
+  firstObservedAt: string;
+  lastObservedAt: string;
+  sourceConfidence: 'high' | 'medium' | 'low';
+  stale: boolean;
+}
+
+export interface RoutingAssessment {
+  prefix?: string;
+  state: RoutingIntegrityState;
+  reasons: string[];
+  signals?: RoutingSignal;
+  assessedAt: string;
+}
+
+export interface RoutingCounts { healthy: number; degraded: number; critical: number; unknown: number; total: number }
+
+export interface RoutingProvenance { source: string; synthetic: boolean; readOnly: boolean; note: string }
+
+export interface RoutingSnapshot {
+  capturedAt: string;
+  source: string;
+  overall: RoutingIntegrityState;
+  counts: RoutingCounts;
+  assessments: RoutingAssessment[];
+  provenance: RoutingProvenance;
+  warnings: string[];
+}
+
+export interface RoutingStatus {
+  enabled: boolean;
+  mode: 'mock' | 'live';
+  running: boolean;
+  source: string;
+  monitoredPrefixCount: number;
+  overall: RoutingIntegrityState;
+  counts: RoutingCounts | null;
+  lastPollAt: string | null;
+  lastSuccessAt: string | null;
+  snapshotAgeSeconds: number | null;
+  openIncidentCount: number | null;
+  lastError: string | null;
+}
+
+export type RoutingIncidentKind = 'withdrawn' | 'hijack' | 'moas' | 'visibility_loss' | 'missing_upstream' | 'new_upstream';
+export type RoutingIncidentState = 'detected' | 'active' | 'acknowledged' | 'resolved' | 'suppressed';
+
+export interface RoutingIncident {
+  id: string;
+  prefix: string;
+  kind: RoutingIncidentKind;
+  severity: 'degraded' | 'critical';
+  state: RoutingIncidentState;
+  firstDetectedAt: string;
+  lastObservedAt: string;
+  resolvedAt?: string;
+  observationCount: number;
+  evidence: unknown;
+  updatedAt: string;
+}
+
+export interface RoutingSnapshotResponse { status: RoutingStatus; snapshot: RoutingSnapshot | null }
+export interface RoutingPrefixesResponse { count: number; items: RoutingAssessment[]; capturedAt: string | null; provenance: RoutingProvenance | null }
+export interface RoutingIncidentsResponse { count: number; items: RoutingIncident[] }

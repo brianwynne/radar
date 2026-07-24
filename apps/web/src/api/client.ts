@@ -3,6 +3,8 @@
 import type {
   ActivityResponse,
   AuditListResponse,
+  RoutingSnapshotResponse,
+  RoutingIncidentsResponse,
   CompareCurrentResponse,
   CompareResponse,
   ExplainRequest,
@@ -257,6 +259,18 @@ export const api = {
   },
   networkHistory: (limit?: number) => request<NetworkHistoryResponse>(`/api/v1/network/history${limit ? `?limit=${limit}` : ''}`),
   ottHistory: (limit?: number) => request<OttHistoryResponse>(`/api/v1/network/ott-history${limit ? `?limit=${limit}` : ''}`),
+
+  // bgp.tools routing intelligence (read-only). Snapshot + status, per-prefix assessments, incidents.
+  routingSnapshot: () => request<RoutingSnapshotResponse>('/api/v1/routing/snapshot'),
+  routingIncidents: (q: { openOnly?: boolean; state?: string; prefix?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.openOnly) p.set('openOnly', 'true');
+    if (q.state) p.set('state', q.state);
+    if (q.prefix) p.set('prefix', q.prefix);
+    if (q.limit) p.set('limit', String(q.limit));
+    const qs = p.toString();
+    return request<RoutingIncidentsResponse>(`/api/v1/routing/incidents${qs ? `?${qs}` : ''}`);
+  },
 
   // CloudVision connection settings (Engineer only). The token is write-only.
   networkConnection: () => request<ConnectorSettingsResponse>('/api/v1/network/connection'),

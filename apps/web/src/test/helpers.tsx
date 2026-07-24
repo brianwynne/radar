@@ -218,6 +218,35 @@ export const ORIGIN_BODY = {
 const cvProv = { source: 'radar', telemetryMode: 'mock', readOnly: true, informationalOnly: true, notice: 'Network telemetry is read-only and informational. RADAR issues no device, CloudVision or NS1 writes.', retrievedAt: '2026-07-15T12:00:00Z' };
 const cvFresh = { level: 'FRESH', ageSeconds: 4, staleAfterSeconds: 30 };
 
+const riSignal = (prefix: string, af: 'ipv4' | 'ipv6', visiblePaths: number, ratio: number, upstreams: number[], over: Record<string, unknown> = {}) => ({
+  prefix, addressFamily: af, expectedOriginAsn: 41073, observedOriginAsn: 41073, observedOrigins: [{ asn: 41073, hits: visiblePaths }],
+  originAsExpected: true, prefixWithdrawn: false, unexpectedOrigin: false, moas: false, prefixVisibilityRatio: ratio, visiblePaths,
+  observationCount: visiblePaths, observedUpstreams: upstreams, upstreamCount: upstreams.length, newUpstreams: [], missingUpstreams: [],
+  firstObservedAt: '2026-07-24T10:00:00Z', lastObservedAt: '2026-07-24T12:00:00Z', sourceConfidence: 'high', stale: false, ...over,
+});
+
+export const ROUTING_SNAPSHOT_BODY = {
+  status: { enabled: true, mode: 'live', running: true, source: 'bgptools', monitoredPrefixCount: 2, overall: 'critical',
+    counts: { healthy: 1, degraded: 0, critical: 1, unknown: 0, total: 2 }, lastPollAt: '2026-07-24T12:00:00Z', lastSuccessAt: '2026-07-24T12:00:00Z', snapshotAgeSeconds: 5, openIncidentCount: 1, lastError: null },
+  snapshot: {
+    capturedAt: '2026-07-24T12:00:00Z', source: 'bgptools', overall: 'critical',
+    counts: { healthy: 1, degraded: 0, critical: 1, unknown: 0, total: 2 },
+    assessments: [
+      { prefix: '185.54.104.0/22', state: 'healthy', reasons: ['Originated solely by the expected AS41073 at 100% visibility.'], signals: riSignal('185.54.104.0/22', 'ipv4', 2673, 1, [174, 1299, 6461]), assessedAt: '2026-07-24T12:00:00Z' },
+      { prefix: '89.207.57.0/24', state: 'critical', reasons: ['Visibility 0% is below the critical threshold 50% — the prefix is widely unseen.'], signals: riSignal('89.207.57.0/24', 'ipv4', 2, 0.0007, []), assessedAt: '2026-07-24T12:00:00Z' },
+    ],
+    provenance: { source: 'bgptools', synthetic: false, readOnly: true, note: 'Observed bgp.tools routing data (read-only).' },
+    warnings: [],
+  },
+};
+
+export const ROUTING_INCIDENTS_BODY = {
+  count: 1,
+  items: [
+    { id: 'inc-1', prefix: '89.207.57.0/24', kind: 'visibility_loss', severity: 'critical', state: 'active', firstDetectedAt: '2026-07-24T11:30:00Z', lastObservedAt: '2026-07-24T12:00:00Z', observationCount: 3, evidence: {}, updatedAt: '2026-07-24T12:00:00Z' },
+  ],
+};
+
 export const NETWORK_STATUS_BODY = {
   provenance: cvProv,
   status: { enabled: true, running: true, source: 'mock', intervalMs: 10000, lastPollAt: '2026-07-15T12:00:00Z', lastSuccessAt: '2026-07-15T12:00:00Z', lastDurationMs: 12, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: 4, historyLength: 3, deviceCount: 2, interfaceCount: 3, unknownInterfaceCount: 0 },
@@ -392,6 +421,8 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/telemetry/cache-pools')) body = CACHE_POOLS_BODY;
       else if (p.endsWith('/telemetry/cache-nodes')) body = CACHE_NODES_BODY;
       else if (p.endsWith('/telemetry/origin')) body = ORIGIN_BODY;
+      else if (p.endsWith('/routing/snapshot')) body = ROUTING_SNAPSHOT_BODY;
+      else if (p.includes('/routing/incidents')) body = ROUTING_INCIDENTS_BODY;
       else if (p.endsWith('/network/status')) body = NETWORK_STATUS_BODY;
       else if (p.endsWith('/network/devices')) body = NETWORK_DEVICES_BODY;
       else if (p.endsWith('/network/interfaces')) body = NETWORK_INTERFACES_BODY;

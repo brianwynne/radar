@@ -407,6 +407,24 @@ table.matrix tr.lag-member > td.util-crit { background: var(--danger-bg); }
 .bw-dir { color: var(--ink-soft); font-weight: 400; font-size: 0.78em; }
 .bw-secondary { font-size: 0.78em; color: var(--ink-soft); }
 
+/* Routing Intelligence (bgp.tools) tab */
+.ri h3 { margin: 1.6rem 0 0.6rem; }
+.ri-counts { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.4rem; }
+.ri-foot { margin-top: 1.4rem; font-size: 0.8rem; }
+.ri-vis { position: relative; height: 1.15rem; min-width: 90px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.ri-vis-fill { position: absolute; inset: 0 auto 0 0; border-radius: 4px; }
+.ri-vis-ok { background: var(--ok, #2f9e57); }
+.ri-vis-warn { background: var(--warn, #c98a00); }
+.ri-vis-danger { background: var(--danger, #c0392b); }
+.ri-vis-neutral { background: var(--ink-soft); }
+.ri-vis-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 600; color: var(--ink); mix-blend-mode: difference; }
+.ri-drawer > td { background: var(--surface-2, rgba(127, 127, 127, 0.06)); padding: 0.6rem 0.8rem; }
+.ri-drawer-body { display: flex; flex-direction: column; gap: 0.5rem; }
+.ri-reasons { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.82rem; }
+.ri-evidence { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; font-size: 0.8rem; }
+.ri-evidence .danger { color: var(--danger, #c0392b); }
+.ri-evidence .warn { color: var(--warn, #c98a00); }
+
 /* ---- Resolver reader ---- */
 .rv-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
 .rv-bar-l { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
