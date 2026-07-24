@@ -21,6 +21,8 @@ import { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { CloudflareConnectorManager } from './cloudflare/manager.js';
 import { FastlyConnectorManager } from './fastly/manager.js';
 import { AkamaiConnectorManager } from './akamai/manager.js';
+import { BgpToolsConnectorManager } from './bgptools/manager.js';
+import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository } from '@radar/data';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -81,6 +83,23 @@ async function main(): Promise<void> {
   });
   await cloudVisionManager.init();
   const cloudVisionPoller = cloudVisionManager.getPoller();
+
+  // bgp.tools external routing intelligence: read-only connector. Non-secret settings come from
+  // Postgres (Engineer-managed) when present, else the env base config; the Prometheus monitoring
+  // URL (whose UUID is the credential) is stored encrypted, its master key sourced only from
+  // /run/secrets/radar_master_key. The manager owns the poller.
+  const bgpToolsIncidents = new PostgresBgpToolsIncidentRepository(pool);
+  const bgpToolsMonitored = new PostgresBgpToolsMonitoredPrefixRepository(pool);
+  const bgpToolsManager = new BgpToolsConnectorManager({
+    baseConfig: config.bgpTools,
+    repository: createConnectorSettingsStore(pool),
+    secretBox: SecretBox.fromMasterKey(),
+    observations: new PostgresBgpToolsObservationRepository(pool),
+    incidents: bgpToolsIncidents,
+    loadMonitoredPrefixes: () => bgpToolsMonitored.list(),
+    audit: database.audit,
+  });
+  await bgpToolsManager.init();
 
   // Cloudflare Load Balancing: read-only connector managed by the connector manager. Non-secret
   // settings (account id, zones, mode) come from Postgres when an Engineer has set them, else the
@@ -150,6 +169,9 @@ async function main(): Promise<void> {
     fastlyManager,
     akamaiConnector,
     akamaiManager,
+    bgpToolsManager,
+    bgpToolsIncidents,
+    bgpToolsMonitored,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -164,6 +186,7 @@ async function main(): Promise<void> {
     cloudflareManager.stop();
     fastlyManager.stop();
     akamaiManager.stop();
+    bgpToolsManager.stop();
     await app.close();
     await pool.end();
     process.exit(0);
@@ -186,6 +209,7 @@ async function main(): Promise<void> {
     cloudflareManager.start();
     fastlyManager.start(); // self-guards: only polls when the effective config is enabled
     akamaiManager.start(); // self-guards: only polls S3 when enabled with credentials
+    bgpToolsManager.start(); // self-guards: only polls when the effective config is enabled
     app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

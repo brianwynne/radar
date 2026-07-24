@@ -40,6 +40,10 @@ import type { FastlyConnectorManager } from './fastly/manager.js';
 import type { CloudflarePoller } from './cloudflare/poller.js';
 import type { CloudflareConnectorManager } from './cloudflare/manager.js';
 import { cloudVisionConnectionRoutes } from './routes/cloudvision-connection.js';
+import { bgpToolsConnectionRoutes } from './routes/bgptools-connection.js';
+import { bgpToolsRoutes } from './routes/bgptools.js';
+import type { BgpToolsConnectorManager } from './bgptools/manager.js';
+import type { BgpToolsIncidentRepository, BgpToolsMonitoredPrefixRepository } from '@radar/data';
 import type { CloudVisionConnectorManager } from './cloudvision/manager.js';
 import { registerAuth, type AuthDeps } from './auth/plugin.js';
 import { createOidcVerifier, resolveJwks } from './auth/oidc.js';
@@ -97,6 +101,9 @@ export interface BuildDeps extends AuthDeps {
   fastlyManager?: FastlyConnectorManager;
   akamaiConnector?: AkamaiConnector;
   akamaiManager?: AkamaiConnectorManager;
+  bgpToolsManager?: BgpToolsConnectorManager;
+  bgpToolsIncidents?: BgpToolsIncidentRepository;
+  bgpToolsMonitored?: BgpToolsMonitoredPrefixRepository;
   atlasManager?: ResolverManager;
 }
 
@@ -187,6 +194,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
         { name: 'audit', description: 'RADAR audit history (read-only)' },
         { name: 'change-detection', description: 'NS1 change-detection service status (read-only)' },
         { name: 'network-telemetry', description: 'CloudVision network telemetry (read-only)' },
+        { name: 'routing-intelligence', description: 'bgp.tools external routing intelligence (read-only)' },
       ],
       components: {
         securitySchemes: {
@@ -247,6 +255,8 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(akamaiConnectionRoutes, { prefix: '/api/v1', manager: deps.akamaiManager });
   await app.register(fastlyConnectionRoutes, { prefix: '/api/v1', manager: deps.fastlyManager });
   await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
+  await app.register(bgpToolsRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager, incidents: deps.bgpToolsIncidents, monitored: deps.bgpToolsMonitored });
+  await app.register(bgpToolsConnectionRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager });
   await app.register(resolverRoutes, { prefix: '/api/v1', manager: deps.atlasManager ?? createAtlasManager(loadAtlasConfig()) });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.
