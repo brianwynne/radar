@@ -85,6 +85,21 @@ describe('BgpToolsPoller', () => {
     expect(await incidents.list({ state: 'resolved' })).toHaveLength(1);
   });
 
+  it('resolves incidents for prefixes no longer monitored (orphans)', async () => {
+    const inc = new PostgresBgpToolsIncidentRepository(db);
+    // An incident left open for a prefix that is NOT in the current watch list (e.g. a prior mock run).
+    await inc.openOrUpdate({ prefix: '203.0.113.0/24', kind: 'withdrawn', severity: 'critical', observedAt: new Date(NOW - 1000), evidence: {} });
+    expect(await inc.list({ openOnly: true })).toHaveLength(1);
+    const metrics = new FakeMetrics(metricsSnap([pfx('185.54.104.0/22', 2673, [174, 1299, 6461]), pfx('89.207.57.0/24', 2673, [174, 1299])]));
+    const poller = new BgpToolsPoller({
+      observations: new PostgresBgpToolsObservationRepository(db), incidents: inc,
+      loadMonitored: async () => MONITORED, getConfig: () => CONFIG, getMetricsClient: () => metrics, getTableClient: () => null, now: () => NOW,
+    });
+    await poller.poll();
+    expect(await inc.list({ openOnly: true, prefix: '203.0.113.0/24' })).toHaveLength(0); // orphan resolved
+    expect(await inc.list({ state: 'resolved', prefix: '203.0.113.0/24' })).toHaveLength(1);
+  });
+
   it('auto-discovers the watch list from the Prometheus feed when none is configured', async () => {
     // No monitored prefixes configured (loadMonitored returns []), but the feed reports two.
     const metrics = new FakeMetrics(metricsSnap([pfx('185.54.104.0/22', 2673, [174, 1299, 6461]), pfx('2a00:1ed8::/29', 3667, [174, 1299])]));

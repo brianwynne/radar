@@ -186,6 +186,13 @@ export class BgpToolsPoller {
       const plan = planIncidentActions(snapshot.assessments, openByPrefix, cfg.thresholds);
       for (const s of plan.opens) await this.opts.incidents.openOrUpdate(s);
       for (const r of plan.resolves) await this.opts.incidents.resolveOpen(r.prefix, r.kind, observedAt);
+      // Resolve incidents for prefixes NO LONGER monitored (removed from the watch list, or the
+      // synthetic fixtures a prior mock run left behind) — otherwise they stay 'active' forever with
+      // no assessment to clear them.
+      const monitoredPrefixes = new Set(snapshot.assessments.map((a) => a.prefix));
+      for (const inc of open) {
+        if (!monitoredPrefixes.has(inc.prefix)) await this.opts.incidents.resolveOpen(inc.prefix, inc.kind, observedAt);
+      }
       this.openIncidentCount = (await this.opts.incidents.list({ openOnly: true })).length;
 
       this.lastSnapshot = snapshot;
