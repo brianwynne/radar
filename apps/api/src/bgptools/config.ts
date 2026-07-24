@@ -20,6 +20,12 @@ export interface BgpToolsConfig {
   userAgent: string;
   /** Optional API token (live only). In memory only; never logged or returned to the browser. */
   token?: string;
+  /** Full Prometheus monitoring URL incl. the account UUID (the credential). SECRET — never logged
+   *  or returned to the browser. From /run/secrets/bgptools_prometheus_url then BGPTOOLS_PROMETHEUS_URL,
+   *  or set per-connector on the Integrations page (encrypted). Absent ⇒ no Prometheus source. */
+  prometheusUrl?: string;
+  /** Whether to ALSO poll the table.jsonl dump (secondary source for explicit origin/MOAS/hijack). */
+  tableEnabled: boolean;
   /** Prefixes RADAR watches, each with an expected origin ASN. */
   monitoredPrefixes: MonitoredPrefix[];
   /** Visibility hits representing full/global visibility (the table's collector-session count). */
@@ -36,6 +42,7 @@ export interface BgpToolsConfig {
 }
 
 const TOKEN_SECRET = '/run/secrets/bgptools_token';
+const PROMETHEUS_URL_SECRET = '/run/secrets/bgptools_prometheus_url';
 const DEFAULT_TABLE_URL = 'https://bgp.tools/table.jsonl';
 
 const boolFrom = (def: boolean) =>
@@ -47,6 +54,8 @@ const schema = z.object({
   BGPTOOLS_TABLE_URL: z.string().url().default(DEFAULT_TABLE_URL),
   BGPTOOLS_USER_AGENT: z.string().optional(),
   BGPTOOLS_TOKEN: z.string().optional(),
+  BGPTOOLS_PROMETHEUS_URL: z.string().url().optional(),
+  BGPTOOLS_TABLE_ENABLED: boolFrom(false),
   BGPTOOLS_MONITORED_FILE: z.string().optional(),
   BGPTOOLS_FULL_VISIBILITY_HITS: z.coerce.number().int().positive().max(100000).default(100),
   BGPTOOLS_VISIBILITY_WARN_RATIO: z.coerce.number().min(0).max(1).default(DEFAULT_THRESHOLDS.visibilityWarnRatio),
@@ -90,12 +99,15 @@ function loadMonitored(path: string | undefined, mode: BgpToolsMode): MonitoredP
 export function loadBgpToolsConfig(env: NodeJS.ProcessEnv = process.env): BgpToolsConfig {
   const p = schema.parse(env);
   const token = readSecretFile(TOKEN_SECRET) ?? p.BGPTOOLS_TOKEN;
+  const prometheusUrl = readSecretFile(PROMETHEUS_URL_SECRET) ?? p.BGPTOOLS_PROMETHEUS_URL;
   const base: BgpToolsConfig = {
     enabled: p.BGPTOOLS_ENABLED,
     mode: p.BGPTOOLS_MODE,
     tableUrl: p.BGPTOOLS_TABLE_URL,
     userAgent: p.BGPTOOLS_USER_AGENT ?? '',
     token,
+    prometheusUrl,
+    tableEnabled: p.BGPTOOLS_TABLE_ENABLED,
     monitoredPrefixes: loadMonitored(p.BGPTOOLS_MONITORED_FILE, p.BGPTOOLS_MODE),
     fullVisibilityHits: p.BGPTOOLS_FULL_VISIBILITY_HITS,
     thresholds: {
