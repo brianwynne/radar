@@ -137,12 +137,19 @@ export class BgpToolsPoller {
     this.lastPollAt = this.now();
     try {
       const cfg = this.opts.getConfig();
-      const monitored = await this.opts.loadMonitored();
+      let monitored = await this.opts.loadMonitored();
       const observedAt = new Date(this.now());
 
       const metricsClient = this.opts.getMetricsClient();
       const tableClient = this.opts.getTableClient();
       const metrics = metricsClient ? await metricsClient.fetchMetrics() : null;
+      // Auto-discover the watch list from the Prometheus feed when nothing is explicitly configured:
+      // the account's own monitored prefixes, each with its expected origin = the ASN the feed
+      // attributes it to. An Engineer can still add specific prefixes (with a chosen expected origin
+      // for hijack detection); those take precedence via loadMonitored.
+      if (monitored.length === 0 && metrics && metrics.prefixes.length > 0) {
+        monitored = metrics.prefixes.map((p) => ({ prefix: p.prefix, addressFamily: p.prefix.includes(':') ? 'ipv6' as const : 'ipv4' as const, expectedOriginAsn: p.originAsn }));
+      }
       const table = tableClient ? await tableClient.fetchObservations(monitored) : null;
       const raws = mergeObservations(monitored, metrics, table, observedAt);
 

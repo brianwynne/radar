@@ -6,7 +6,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { DEFAULT_THRESHOLDS, type AssessmentThresholds } from './adapter.js';
-import { MOCK_MONITORED_PREFIXES } from './fixtures.js';
 import type { AddressFamily, MonitoredPrefix } from './types.js';
 
 export type BgpToolsMode = 'mock' | 'live';
@@ -89,9 +88,12 @@ const monitoredSchema = z.array(
   }),
 );
 
-/** Load and validate the monitored-prefix list from a JSON file, if provided. */
-function loadMonitored(path: string | undefined, mode: BgpToolsMode): MonitoredPrefix[] {
-  if (!path) return mode === 'mock' ? MOCK_MONITORED_PREFIXES : [];
+/** Load and validate the monitored-prefix list from a JSON file, if provided. Returns [] when no
+ *  file is set — the SYNTHETIC mock fixtures are NEVER injected here (they must not be monitored
+ *  against live bgp.tools). The manager supplies the mock fixtures only in mock mode, and the
+ *  poller auto-discovers prefixes from the Prometheus feed when nothing is configured. */
+function loadMonitored(path: string | undefined): MonitoredPrefix[] {
+  if (!path) return [];
   const parsed = monitoredSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
   return parsed.map((p) => ({ ...p, addressFamily: p.addressFamily as AddressFamily }));
 }
@@ -108,7 +110,7 @@ export function loadBgpToolsConfig(env: NodeJS.ProcessEnv = process.env): BgpToo
     token,
     prometheusUrl,
     tableEnabled: p.BGPTOOLS_TABLE_ENABLED,
-    monitoredPrefixes: loadMonitored(p.BGPTOOLS_MONITORED_FILE, p.BGPTOOLS_MODE),
+    monitoredPrefixes: loadMonitored(p.BGPTOOLS_MONITORED_FILE),
     fullVisibilityHits: p.BGPTOOLS_FULL_VISIBILITY_HITS,
     thresholds: {
       visibilityWarnRatio: p.BGPTOOLS_VISIBILITY_WARN_RATIO,

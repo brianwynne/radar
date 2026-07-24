@@ -2,15 +2,14 @@
 // requirement. Mock mode needs no credentials; live mode fails fast without a proper UA.
 import { describe, it, expect } from 'vitest';
 import { loadBgpToolsConfig } from '../src/bgptools/config.js';
-import { MOCK_MONITORED_PREFIXES } from '../src/bgptools/fixtures.js';
 
 describe('loadBgpToolsConfig', () => {
-  it('defaults to disabled mock mode with the fixture prefixes and no credentials', () => {
+  it('defaults to disabled mock mode with an EMPTY watch list and no credentials', () => {
     const c = loadBgpToolsConfig({});
     expect(c.enabled).toBe(false);
     expect(c.mode).toBe('mock');
     expect(c.token).toBeUndefined();
-    expect(c.monitoredPrefixes).toEqual(MOCK_MONITORED_PREFIXES);
+    expect(c.monitoredPrefixes).toEqual([]); // synthetic fixtures are NOT injected here
     expect(c.pollIntervalSeconds).toBeGreaterThanOrEqual(1800); // honours the table cache guidance
   });
 

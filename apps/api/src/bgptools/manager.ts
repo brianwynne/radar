@@ -11,6 +11,7 @@ import type { BgpToolsMetricsClient, BgpToolsPing, BgpToolsReadClient } from './
 import type { BgpToolsConfig } from './config.js';
 import { HttpBgpToolsClient } from './http-client.js';
 import { MockBgpToolsClient } from './mock-client.js';
+import { MOCK_MONITORED_PREFIXES } from './fixtures.js';
 import { BgpToolsPoller, type BgpToolsPollerConfig } from './poller.js';
 import { PrometheusBgpToolsClient } from './prometheus-client.js';
 import type { BgpToolsSource, MonitoredPrefix } from './types.js';
@@ -158,7 +159,10 @@ export class BgpToolsConnectorManager {
       const rows = await this.loadMonitoredPrefixes();
       if (rows.length > 0) return rows.map((r) => ({ prefix: r.prefix, addressFamily: r.addressFamily, expectedOriginAsn: r.expectedOriginAsn, description: r.description }));
     }
-    return this.base.monitoredPrefixes;
+    if (this.base.monitoredPrefixes.length > 0) return this.base.monitoredPrefixes; // from BGPTOOLS_MONITORED_FILE
+    // Synthetic demo fixtures ONLY in mock mode; in live mode the poller auto-discovers the watch
+    // list from the Prometheus feed (the account's own monitored prefixes), so we return nothing.
+    return this.effMode() === 'mock' ? MOCK_MONITORED_PREFIXES : [];
   }
 
   /** Resolve the effective Prometheus URL, decrypting the stored secret when present. The ONLY

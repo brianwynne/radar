@@ -85,6 +85,21 @@ describe('BgpToolsPoller', () => {
     expect(await incidents.list({ state: 'resolved' })).toHaveLength(1);
   });
 
+  it('auto-discovers the watch list from the Prometheus feed when none is configured', async () => {
+    // No monitored prefixes configured (loadMonitored returns []), but the feed reports two.
+    const metrics = new FakeMetrics(metricsSnap([pfx('185.54.104.0/22', 2673, [174, 1299, 6461]), pfx('2a00:1ed8::/29', 3667, [174, 1299])]));
+    const poller = new BgpToolsPoller({
+      observations: new PostgresBgpToolsObservationRepository(db), incidents: new PostgresBgpToolsIncidentRepository(db),
+      loadMonitored: async () => [], getConfig: () => CONFIG, getMetricsClient: () => metrics, getTableClient: () => null, now: () => NOW,
+    });
+    const snap = await poller.poll();
+    expect(snap.counts.total).toBe(2); // discovered from the feed
+    expect(snap.assessments.map((a) => a.prefix).sort()).toEqual(['185.54.104.0/22', '2a00:1ed8::/29']);
+    // The v6 prefix's address family is inferred correctly.
+    expect(snap.assessments.find((a) => a.prefix === '2a00:1ed8::/29')!.signals?.addressFamily).toBe('ipv6');
+    expect(snap.overall).toBe('healthy');
+  });
+
   it('opens a missing-upstream incident when an upstream disappears (learned baseline)', async () => {
     const metrics = new FakeMetrics(metricsSnap([pfx('185.54.104.0/22', 2673, [174, 1299, 6461]), pfx('89.207.57.0/24', 2673, [174, 1299])]));
     const poller = makePoller(db, metrics);
