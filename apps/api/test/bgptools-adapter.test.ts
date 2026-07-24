@@ -1,10 +1,10 @@
 // bgp.tools adapter: normalisation + routing-integrity assessment across the documented-core
 // scenarios. Deterministic (injected clock), evidence-based, and honest about withdrawn/stale.
 import { describe, it, expect } from 'vitest';
-import { buildSnapshot, normalizePrefix, assessPrefix, DEFAULT_THRESHOLDS, type BuildOptions } from '../src/bgptools/adapter.js';
+import { buildSnapshot, normalizePrefix, assessPrefix, mergeObservations, visibilityBaselines, DEFAULT_THRESHOLDS, type BuildOptions } from '../src/bgptools/adapter.js';
 import { MockBgpToolsClient } from '../src/bgptools/mock-client.js';
 import { MOCK_MONITORED_PREFIXES, MOCK_FULL_VISIBILITY_HITS, RTE_ORIGIN_ASN, type MockScenario } from '../src/bgptools/fixtures.js';
-import type { MonitoredPrefix, RawRoutingObservation } from '../src/bgptools/types.js';
+import type { BgpToolsMetricsSnapshot, MonitoredPrefix, RawRoutingObservation } from '../src/bgptools/types.js';
 
 const NOW = Date.UTC(2026, 6, 24, 12, 0, 0);
 const opts = (over: Partial<BuildOptions> = {}): BuildOptions => ({
@@ -122,5 +122,72 @@ describe('buildSnapshot — scenario roll-ups', () => {
     const s = buildSnapshot([] as MonitoredPrefix[], [], opts());
     expect(s.overall).toBe('unknown');
     expect(s.warnings.join(' ')).toMatch(/no prefixes/i);
+  });
+});
+
+describe('Prometheus visibility (paths) + per-family baseline', () => {
+  const at = new Date(NOW);
+  const mp = (prefix: string, af: 'ipv4' | 'ipv6'): MonitoredPrefix => ({ prefix, addressFamily: af, expectedOriginAsn: RTE_ORIGIN_ASN });
+  const raw = (prefix: string, af: 'ipv4' | 'ipv6', visiblePaths: number): RawRoutingObservation =>
+    ({ prefix, addressFamily: af, origins: [{ asn: RTE_ORIGIN_ASN, hits: visiblePaths }], observedAt: at, visiblePaths });
+
+  it('derives a per-family baseline and flags a low-visibility prefix critical', () => {
+    const monitored = [mp('185.54.104.0/22', 'ipv4'), mp('89.207.57.0/24', 'ipv4'), mp('2a00:1ed8::/29', 'ipv6')];
+    const raws = [raw('185.54.104.0/22', 'ipv4', 2673), raw('89.207.57.0/24', 'ipv4', 2), raw('2a00:1ed8::/29', 'ipv6', 3667)];
+    expect(visibilityBaselines(raws)).toEqual({ ipv4: 2673, ipv6: 3667 });
+    const snap = buildSnapshot(monitored, raws, opts());
+    expect(snap.overall).toBe('critical');
+    expect(snap.counts).toMatchObject({ critical: 1, healthy: 2 });
+    const low = snap.assessments.find((a) => a.prefix === '89.207.57.0/24')!;
+    expect(low.state).toBe('critical'); // 2 / 2673 ≈ 0.07% visibility
+    expect(low.signals?.visiblePaths).toBe(2);
+  });
+});
+
+describe('upstream baseline change', () => {
+  const at = new Date(NOW);
+  const P = MOCK_MONITORED_PREFIXES[0];
+  const norm = (upstreams: number[], prior?: number[]) =>
+    normalizePrefix(P, { prefix: P.prefix, addressFamily: 'ipv4', origins: [{ asn: RTE_ORIGIN_ASN, hits: 90 }], observedAt: at, upstreams, visiblePaths: 2600 },
+      opts({ visibilityBaselineByFamily: { ipv4: 2600 }, priorUpstreams: prior ? new Map([[P.prefix, prior]]) : undefined }));
+
+  it('reports new and missing upstreams vs the learned baseline', () => {
+    const s = norm([174, 1299, 3356], [174, 1299, 6461]);
+    expect(s.newUpstreams).toEqual([3356]);
+    expect(s.missingUpstreams).toEqual([6461]);
+    expect(s.observedUpstreams).toEqual([174, 1299, 3356]);
+  });
+
+  it('no change signals on the first observation (no baseline)', () => {
+    const s = norm([174, 1299]);
+    expect(s.newUpstreams).toEqual([]);
+    expect(s.missingUpstreams).toEqual([]);
+  });
+});
+
+describe('mergeObservations (Prometheus + table)', () => {
+  const at = new Date(NOW);
+  const monitored = MOCK_MONITORED_PREFIXES;
+  const metrics: BgpToolsMetricsSnapshot = {
+    observedAt: at,
+    prefixes: [{ prefix: monitored[0].prefix, originAsn: RTE_ORIGIN_ASN, visiblePaths: 2600, upstreamCount: 2, upstreams: [174, 1299] }],
+    asns: [],
+  };
+
+  it('takes visibility+upstreams from metrics and an explicit foreign origin from the table', () => {
+    const table: RawRoutingObservation[] = [{ prefix: monitored[0].prefix, addressFamily: 'ipv4', origins: [{ asn: RTE_ORIGIN_ASN, hits: 80 }, { asn: 64500, hits: 20 }], observedAt: at }];
+    const merged = mergeObservations(monitored, metrics, table, at);
+    const m0 = merged.find((m) => m.prefix === monitored[0].prefix)!;
+    expect(m0.visiblePaths).toBe(2600);
+    expect(m0.upstreams).toEqual([174, 1299]);
+    expect(m0.origins).toEqual([{ asn: RTE_ORIGIN_ASN, hits: 80 }, { asn: 64500, hits: 20 }]); // table origins win (MOAS)
+  });
+
+  it('synthesises an origin from the metric when the table has none', () => {
+    const merged = mergeObservations(monitored, metrics, null, at);
+    const m0 = merged.find((m) => m.prefix === monitored[0].prefix)!;
+    expect(m0.origins).toEqual([{ asn: RTE_ORIGIN_ASN, hits: 2600 }]);
+    // The v6 prefix has no metric and no table → withdrawn (empty origins).
+    expect(merged.find((m) => m.prefix === monitored[1].prefix)!.origins).toEqual([]);
   });
 });

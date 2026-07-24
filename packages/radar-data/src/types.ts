@@ -415,7 +415,7 @@ export interface BgpToolsObservationRepository {
   prune(olderThan: Date): Promise<number>;
 }
 
-export type IncidentKind = 'withdrawn' | 'hijack' | 'moas' | 'visibility_loss';
+export type IncidentKind = 'withdrawn' | 'hijack' | 'moas' | 'visibility_loss' | 'missing_upstream' | 'new_upstream';
 export type IncidentSeverity = 'degraded' | 'critical';
 export type IncidentState = 'detected' | 'active' | 'acknowledged' | 'resolved' | 'suppressed';
 

@@ -4,9 +4,9 @@
 // are kept separate so an operator can trace every conclusion back to documented evidence. Nothing
 // is invented: an absent origin is "withdrawn", stale data is "unknown" — never a healthy guess.
 import type {
-  BgpToolsProvenance, BgpToolsSource, MonitoredPrefix, NormalizedRoutingSignal, RawRoutingObservation,
-  RoutingIntegrityAssessment, RoutingIntegrityCounts, RoutingIntegrityState, RoutingIntelligenceSnapshot,
-  SourceConfidence,
+  AddressFamily, BgpToolsMetricsSnapshot, BgpToolsProvenance, BgpToolsSource, MonitoredPrefix,
+  NormalizedRoutingSignal, RawRoutingObservation, RoutingIntegrityAssessment, RoutingIntegrityCounts,
+  RoutingIntegrityState, RoutingIntelligenceSnapshot, SourceConfidence,
 } from './types.js';
 
 /** Tunable thresholds for the assessment. Ratios are 0..1 of the full-visibility baseline. */
@@ -30,6 +30,12 @@ export interface BuildOptions {
   /** Optional prior first-seen timestamps (epoch ms) per prefix, so first_observed_at persists
    *  across polls when the caller supplies history. Absent → firstObservedAt = the observation. */
   firstSeen?: Map<string, number>;
+  /** Per-family visibility baseline (max visible paths for that family). When absent, buildSnapshot
+   *  derives it from the observations; used to turn Prometheus path counts into a 0..1 ratio. */
+  visibilityBaselineByFamily?: Partial<Record<AddressFamily, number>>;
+  /** Learned upstream baseline per prefix (the previous observation's upstreams). A disappearance
+   *  or appearance vs this set raises missing/new-upstream signals. Absent → no change detected. */
+  priorUpstreams?: Map<string, number[]>;
 }
 
 export const DEFAULT_THRESHOLDS: AssessmentThresholds = {
@@ -58,11 +64,34 @@ export function normalizePrefix(
 ): NormalizedRoutingSignal {
   const origins = [...(raw?.origins ?? [])].sort((a, b) => b.hits - a.hits);
   const observedAt = raw?.observedAt ?? new Date(opts.now);
-  const withdrawn = origins.length === 0;
+  const visiblePaths = raw?.visiblePaths ?? null;
   const distinctAsns = new Set(origins.map((o) => o.asn));
   const expectedPresent = distinctAsns.has(monitored.expectedOriginAsn);
   const observationCount = origins.reduce((s, o) => s + o.hits, 0);
-  const ratio = withdrawn ? null : Math.min(1, observationCount / Math.max(1, opts.fullVisibilityHits));
+
+  // Withdrawn: nothing sees the prefix — no origin AND no visible paths (Prometheus 0/absent).
+  const hasVisibility = (visiblePaths !== null && visiblePaths > 0) || origins.length > 0;
+  const withdrawn = !hasVisibility;
+
+  // Visibility ratio: prefer Prometheus paths ÷ the per-family baseline (authoritative); else fall
+  // back to table hits ÷ the hit baseline. Null when there's no basis to compute one.
+  let ratio: number | null = null;
+  if (!withdrawn) {
+    const famBaseline = opts.visibilityBaselineByFamily?.[monitored.addressFamily];
+    if (visiblePaths !== null && famBaseline && famBaseline > 0) {
+      ratio = Math.min(1, visiblePaths / famBaseline);
+    } else if (origins.length > 0) {
+      ratio = Math.min(1, observationCount / Math.max(1, opts.fullVisibilityHits));
+    }
+  }
+
+  // Upstream change vs the learned baseline (the previous observation's upstreams).
+  const observedUpstreams = [...(raw?.upstreams ?? [])].sort((a, b) => a - b);
+  const haveUpstreamData = raw?.upstreams !== undefined;
+  const prior = opts.priorUpstreams?.get(monitored.prefix);
+  const newUpstreams = haveUpstreamData && prior ? observedUpstreams.filter((u) => !prior.includes(u)) : [];
+  const missingUpstreams = haveUpstreamData && prior ? prior.filter((u) => !observedUpstreams.includes(u)) : [];
+
   const ageSeconds = Math.max(0, (opts.now - observedAt.getTime()) / 1000);
   const stale = ageSeconds > opts.thresholds.maxAgeSeconds;
   const firstMs = opts.firstSeen?.get(monitored.prefix) ?? observedAt.getTime();
@@ -79,7 +108,12 @@ export function normalizePrefix(
     unexpectedOrigin: origins.some((o) => o.asn !== monitored.expectedOriginAsn),
     moas: distinctAsns.size > 1,
     prefixVisibilityRatio: ratio,
+    visiblePaths,
     observationCount,
+    observedUpstreams,
+    upstreamCount: raw?.upstreamCount ?? (haveUpstreamData ? observedUpstreams.length : null),
+    newUpstreams,
+    missingUpstreams,
     firstObservedAt: new Date(Math.min(firstMs, observedAt.getTime())),
     lastObservedAt: observedAt,
     sourceConfidence: confidenceOf(ratio, stale),
@@ -125,6 +159,14 @@ export function assessPrefix(signal: NormalizedRoutingSignal, thresholds: Assess
     const foreign = signal.observedOrigins.filter((o) => o.asn !== signal.expectedOriginAsn).map((o) => `AS${o.asn}`).join(', ');
     reasons.push(`Expected AS${signal.expectedOriginAsn} is present, but ${foreign} also announces this prefix (MOAS) — possible partial hijack or leak.`);
   }
+  if (signal.missingUpstreams.length > 0) {
+    state = worse(state, 'degraded');
+    reasons.push(`Lost upstream(s) ${signal.missingUpstreams.map((u) => `AS${u}`).join(', ')} — a transit path disappeared since the last observation.`);
+  }
+  if (signal.newUpstreams.length > 0) {
+    state = worse(state, 'degraded');
+    reasons.push(`New upstream(s) ${signal.newUpstreams.map((u) => `AS${u}`).join(', ')} appeared since the last observation.`);
+  }
   if (state === 'healthy') reasons.push(`Originated solely by the expected AS${signal.expectedOriginAsn} at ${ratio !== null ? pct(ratio) : 'full'} visibility.`);
   return { ...base, state, reasons };
 }
@@ -156,6 +198,46 @@ function provenanceFor(source: BgpToolsSource, synthetic: boolean): BgpToolsProv
 
 /** Build the full routing-intelligence snapshot: normalise every monitored prefix against its raw
  *  observation, assess each, and roll up the overall state + counts. Pure and deterministic. */
+/** Per-family visibility baseline = the largest visible-path count seen for that family (the
+ *  healthiest prefix ≈ full visibility). Used to turn Prometheus path counts into a ratio. */
+export function visibilityBaselines(raws: RawRoutingObservation[]): Partial<Record<AddressFamily, number>> {
+  const out: Partial<Record<AddressFamily, number>> = {};
+  for (const r of raws) {
+    if (r.visiblePaths != null && r.visiblePaths > 0) out[r.addressFamily] = Math.max(out[r.addressFamily] ?? 0, r.visiblePaths);
+  }
+  return out;
+}
+
+/** Merge the Prometheus monitoring feed (authoritative visibility + upstreams) with the table.jsonl
+ *  origins (explicit MOAS/hijack) into one raw observation per monitored prefix. Either source may
+ *  be null. When the table has no origin for a prefix, one is synthesised from the metric's origin
+ *  ASN so origin checks still work; the table wins when it has data (it can show a foreign origin). */
+export function mergeObservations(
+  monitored: MonitoredPrefix[],
+  metrics: BgpToolsMetricsSnapshot | null,
+  tableObs: RawRoutingObservation[] | null,
+  observedAt: Date,
+): RawRoutingObservation[] {
+  const metricByPrefix = new Map((metrics?.prefixes ?? []).map((p) => [p.prefix, p]));
+  const tableByPrefix = new Map((tableObs ?? []).map((o) => [o.prefix, o]));
+  return monitored.map((m) => {
+    const met = metricByPrefix.get(m.prefix);
+    const tbl = tableByPrefix.get(m.prefix);
+    const origins = tbl && tbl.origins.length > 0
+      ? tbl.origins
+      : met ? [{ asn: met.originAsn, hits: met.visiblePaths ?? 0 }] : (tbl?.origins ?? []);
+    return {
+      prefix: m.prefix,
+      addressFamily: m.addressFamily,
+      origins,
+      observedAt,
+      visiblePaths: met?.visiblePaths ?? null,
+      upstreams: met?.upstreams,
+      upstreamCount: met?.upstreamCount ?? null,
+    };
+  });
+}
+
 export function buildSnapshot(
   monitored: MonitoredPrefix[],
   raws: RawRoutingObservation[],
@@ -163,10 +245,12 @@ export function buildSnapshot(
 ): RoutingIntelligenceSnapshot {
   const rawByPrefix = new Map(raws.map((r) => [r.prefix, r]));
   const warnings: string[] = [];
+  // Derive the per-family visibility baseline from this snapshot unless the caller supplied one.
+  const normOpts: BuildOptions = { ...opts, visibilityBaselineByFamily: opts.visibilityBaselineByFamily ?? visibilityBaselines(raws) };
   const assessments = monitored.map((m) => {
-    const signal = normalizePrefix(m, rawByPrefix.get(m.prefix), opts);
+    const signal = normalizePrefix(m, rawByPrefix.get(m.prefix), normOpts);
     if (signal.stale) warnings.push(`${m.prefix}: observation is stale.`);
-    return assessPrefix(signal, opts.thresholds, opts.now);
+    return assessPrefix(signal, normOpts.thresholds, normOpts.now);
   });
   const { overall, counts } = rollUp(assessments);
   if (monitored.length === 0) warnings.push('No prefixes are configured for monitoring.');

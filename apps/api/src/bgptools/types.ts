@@ -38,13 +38,22 @@ export interface ObservedOrigin {
 }
 
 /** RAW observation for one monitored prefix — the provider's report, unmodified. A prefix with
- *  no origins was not found in the table (withdrawn / not visible). Multiple origins = MOAS. */
+ *  no origins was not found in the table (withdrawn / not visible). Multiple origins = MOAS. The
+ *  optional fields come from the Prometheus monitoring feed (authoritative visibility + upstreams);
+ *  when the connector uses both sources the poller merges them into one observation per prefix. */
 export interface RawRoutingObservation {
   prefix: string;
   addressFamily: AddressFamily;
   origins: ObservedOrigin[];
   /** When the provider's data was captured (UTC). */
   observedAt: Date;
+  /** Paths bgp.tools sees for the prefix (Prometheus authoritative visibility); null/undefined
+   *  when only the table source is used. 0 = present-but-effectively-unseen. */
+  visiblePaths?: number | null;
+  /** Upstream ASNs currently observed for the prefix (Prometheus); undefined when not available. */
+  upstreams?: number[];
+  /** Number of upstreams (Prometheus bgptools_prefix_upstreams). */
+  upstreamCount?: number | null;
 }
 
 /** RADAR's NORMALISED signals for one prefix, derived from the raw observation + expected config.
@@ -65,10 +74,20 @@ export interface NormalizedRoutingSignal {
   unexpectedOrigin: boolean;
   /** More than one origin ASN seen for the prefix (Multi-Origin AS). */
   moas: boolean;
-  /** Total observed hits ÷ the full-visibility baseline (0..1); null when withdrawn/unknown. */
+  /** Visibility ratio 0..1 — from Prometheus paths ÷ the per-family baseline when available, else
+   *  table hits ÷ the hit baseline; null when withdrawn/unknown. */
   prefixVisibilityRatio: number | null;
-  /** Total visibility hits across all origins for the prefix. */
+  /** Raw Prometheus visible-path count (when that source is used). */
+  visiblePaths: number | null;
+  /** Total visibility hits across all origins for the prefix (table source). */
   observationCount: number;
+  /** Upstream ASNs observed now (Prometheus). */
+  observedUpstreams: number[];
+  upstreamCount: number | null;
+  /** Upstreams seen now but not in the learned baseline (previous observation). */
+  newUpstreams: number[];
+  /** Upstreams in the baseline but not seen now — a lost transit path. */
+  missingUpstreams: number[];
   firstObservedAt: Date;
   lastObservedAt: Date;
   sourceConfidence: SourceConfidence;
