@@ -435,6 +435,22 @@ table.shed-table td.util-crit { background: var(--danger-bg); color: var(--dange
 .btn.danger { border-color: var(--danger, #c0392b); color: var(--danger, #c0392b); }
 .btn.btn-sm { padding: 0.2rem 0.55rem; font-size: 0.8rem; }
 
+/* BGP Intelligence (RIPE) page */
+.bgi-detail { display: flex; flex-direction: column; gap: 0.7rem; padding: 0.3rem 0; }
+.bgi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.6rem 1.2rem; }
+.bgi-grid > div > b { display: block; font-size: 0.72rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.02em; }
+.bgi-subhead { font-weight: 600; font-size: 0.85rem; margin-top: 0.3rem; }
+.bgi-paths { display: flex; flex-direction: column; gap: 0.35rem; }
+.bgi-path { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; font-size: 0.82rem; }
+.bgi-asn { padding: 0.05rem 0.4rem; border: 1px solid var(--line); border-radius: 6px; font-variant-numeric: tabular-nums; }
+.bgi-asn.origin { border-color: var(--brand, #3b82f6); color: var(--brand-ink, inherit); font-weight: 700; }
+.bgi-arrow { color: var(--ink-soft); }
+.bgi-count { margin-left: 0.3rem; font-size: 0.75rem; }
+.bgi-cv { display: flex; flex-wrap: wrap; gap: 0.3rem 1.2rem; font-size: 0.82rem; align-items: baseline; }
+.bgi-cv-note { flex-basis: 100%; font-size: 0.76rem; }
+.bgi-links { display: flex; gap: 1rem; align-items: center; font-size: 0.82rem; }
+.bgi-links a { color: var(--brand-ink, var(--info)); }
+
 /* ---- Resolver reader ---- */
 .rv-bar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.9rem; }
 .rv-bar-l { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }

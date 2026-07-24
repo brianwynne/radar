@@ -1434,3 +1434,59 @@ export interface BgpToolsConnectionUpdate {
 export interface BgpToolsConnectionTest { ok: boolean; source: string; error?: string; summary?: string }
 export interface MonitoredPrefixItem { prefix: string; addressFamily: 'ipv4' | 'ipv6'; expectedOriginAsn: number; description?: string; createdBy?: string; createdAt: string; updatedAt: string }
 export interface RoutingMonitoredResponse { count: number; items: MonitoredPrefixItem[] }
+
+// --- RIPE BGP intelligence (read-only) --------------------------------------
+
+export type RouteHealth = 'healthy' | 'degraded' | 'withdrawn' | 'critical' | 'unknown';
+export type RipeRpkiState = 'valid' | 'invalid' | 'not-found' | 'not-checked';
+export type RipeFreshness = 'fresh' | 'stale' | 'unknown';
+
+export interface RipeRepresentativePath { collector: string; peerAsn: number | null; asPath: number[]; count: number }
+export interface RipeCollectorVisibility { collector: string; city: string | null; country: string | null; peersSeeing: number; peersTotal: number }
+export interface RipeCloudVisionCorrelation { localRoutePresent: 'unknown'; locallyOriginated: 'unknown'; advertisedToNeighbours: 'unknown'; note: string }
+
+export interface RouteVisibility {
+  prefix: string;
+  addressFamily: 'ipv4' | 'ipv6';
+  expectedOrigin: number;
+  observedOrigins: number[];
+  originAsExpected: boolean;
+  unexpectedOrigin: boolean;
+  collectorPeersSeen: number | null;
+  collectorPeersEligible: number | null;
+  collectorVisibilityPercent: number | null;
+  collectorCount: number | null;
+  collectors: RipeCollectorVisibility[];
+  rpkiState: RipeRpkiState;
+  rpkiMaxLength: number | null;
+  representativePaths: RipeRepresentativePath[];
+  upstreams: number[];
+  coveringPrefix: string | null;
+  moreSpecifics: string[];
+  firstSeen: string | null;
+  lastSeen: string | null;
+  sourceObservedAt: string | null;
+  sourceFetchedAt: string;
+  freshness: RipeFreshness;
+  health: RouteHealth;
+  reasons: string[];
+  cloudVision: RipeCloudVisionCorrelation;
+  partial: boolean;
+  warnings: string[];
+}
+
+export interface RouteVisibilityCounts { healthy: number; degraded: number; withdrawn: number; critical: number; unknown: number; rpkiInvalid: number; unexpectedOrigin: number; total: number }
+export interface RipeSourceHealth {
+  ripestatReachable: boolean;
+  ripestatLastSuccessAt: string | null;
+  ripestatLastError: string | null;
+  risLiveState: 'connected' | 'reconnecting' | 'disconnected' | 'disabled';
+  risLiveLastMessageAt: string | null;
+  status: 'live' | 'cached' | 'stale' | 'unavailable';
+}
+export interface RouteVisibilitySnapshot { capturedAt: string; overall: RouteHealth; counts: RouteVisibilityCounts; prefixes: RouteVisibility[]; source: RipeSourceHealth; warnings: string[] }
+
+export interface RisEvent { id: string; kind: 'announcement' | 'withdrawal'; prefix: string; peerAsn: number | null; path: number[]; origin: number | null; firstAt: string; lastAt: string; observationCount: number }
+
+export interface RipeSnapshotResponse { snapshot: RouteVisibilitySnapshot | null; source: RipeSourceHealth }
+export interface RipeEventsResponse { count: number; items: RisEvent[] }

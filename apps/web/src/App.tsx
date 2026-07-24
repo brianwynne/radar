@@ -10,6 +10,7 @@ import { Steering } from './pages/Steering';
 import { LiveSteering } from './pages/LiveSteering';
 import { Topology } from './pages/Topology';
 import { NetworkTelemetry } from './pages/NetworkTelemetry';
+import { BgpIntelligence } from './pages/BgpIntelligence';
 import { ConnectorSettings } from './pages/ConnectorSettings';
 import { Activity } from './pages/Activity';
 import { SnapshotDetail } from './pages/SnapshotDetail';
@@ -43,6 +44,7 @@ export function App() {
         <Route path="steering" element={<Steering />} />
         <Route path="topology" element={<Topology />} />
         <Route path="network" element={<NetworkTelemetry />} />
+        <Route path="bgp-intelligence" element={<BgpIntelligence />} />
         <Route path="load-balancing" element={<RealtaCacheLb />} />
         <Route path="realta-cache" element={<RealtaCacheLb />} />
         <Route path="cdn" element={<CommercialCdn />} />

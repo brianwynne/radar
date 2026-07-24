@@ -7,6 +7,8 @@ import type {
   RoutingIncidentsResponse,
   RoutingAsnNamesResponse,
   PrefixWhoisResponse,
+  RipeSnapshotResponse,
+  RipeEventsResponse,
   BgpToolsConnection,
   BgpToolsConnectionUpdate,
   BgpToolsConnectionTest,
@@ -280,6 +282,16 @@ export const api = {
   },
   routingAsnNames: (asns: number[]) => request<RoutingAsnNamesResponse>(`/api/v1/routing/asn-names?asns=${asns.join(',')}`),
   routingPrefixWhois: (prefix: string) => request<PrefixWhoisResponse>(`/api/v1/routing/prefix-whois?prefix=${encodeURIComponent(prefix)}`),
+  // RIPE BGP intelligence (read-only).
+  ripeSnapshot: () => request<RipeSnapshotResponse>('/api/v1/ripe/snapshot'),
+  ripeEvents: (q: { prefix?: string; kind?: string; limit?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.prefix) p.set('prefix', q.prefix);
+    if (q.kind) p.set('kind', q.kind);
+    if (q.limit) p.set('limit', String(q.limit));
+    const qs = p.toString();
+    return request<RipeEventsResponse>(`/api/v1/ripe/events${qs ? `?${qs}` : ''}`);
+  },
   // bgp.tools connection settings (Engineer). Prometheus URL is write-only.
   routingConnection: () => request<{ settings: BgpToolsConnection }>('/api/v1/routing/connection'),
   routingConnectionUpdate: (body: BgpToolsConnectionUpdate) => request<{ settings: BgpToolsConnection }>('/api/v1/routing/connection', { method: 'PUT', body: JSON.stringify(body) }),

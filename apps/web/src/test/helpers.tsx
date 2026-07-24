@@ -257,6 +257,32 @@ export const ROUTING_MONITORED_BODY = {
   items: [{ prefix: '89.207.56.0/21', addressFamily: 'ipv4', expectedOriginAsn: 41073, description: 'RTÉ delivery', createdBy: 'eng', createdAt: '2026-07-24T10:00:00Z', updatedAt: '2026-07-24T10:00:00Z' }],
 };
 
+const riPfx = (prefix: string, af: 'ipv4' | 'ipv6', over: Record<string, unknown>) => ({
+  prefix, addressFamily: af, expectedOrigin: 41073, observedOrigins: [41073], originAsExpected: true, unexpectedOrigin: false,
+  collectorPeersSeen: 320, collectorPeersEligible: 325, collectorVisibilityPercent: 98.5, collectorCount: 20, collectors: [],
+  rpkiState: 'valid', rpkiMaxLength: 24, representativePaths: [{ collector: 'RRC00', peerAsn: 8218, asPath: [8218, 174, 41073], count: 12 }], upstreams: [174],
+  coveringPrefix: null, moreSpecifics: [], firstSeen: '2006-09-09T00:00:00Z', lastSeen: '2026-07-24T08:00:00Z', sourceObservedAt: '2026-07-24T08:00:00Z',
+  sourceFetchedAt: '2026-07-24T09:00:00Z', freshness: 'fresh', health: 'healthy', reasons: ['Origin AS41073 is expected and RPKI-valid; seen at 98% RIPE RIS collector visibility.'],
+  cloudVision: { localRoutePresent: 'unknown', locallyOriginated: 'unknown', advertisedToNeighbours: 'unknown', note: 'CloudVision correlation not yet available.' }, partial: false, warnings: [], ...over,
+});
+export const RIPE_SNAPSHOT_BODY = {
+  snapshot: {
+    capturedAt: '2026-07-24T09:00:00Z', overall: 'critical',
+    counts: { healthy: 1, degraded: 0, withdrawn: 0, critical: 1, unknown: 0, rpkiInvalid: 1, unexpectedOrigin: 0, total: 2 },
+    prefixes: [
+      riPfx('89.207.56.0/21', 'ipv4', {}),
+      riPfx('89.207.57.0/24', 'ipv4', { rpkiState: 'invalid', health: 'critical', collectorVisibilityPercent: 0.6, collectorPeersSeen: 2, reasons: ['RPKI INVALID for AS41073 — a routing-integrity condition.'] }),
+    ],
+    source: { ripestatReachable: true, ripestatLastSuccessAt: '2026-07-24T09:00:00Z', ripestatLastError: null, risLiveState: 'connected', risLiveLastMessageAt: '2026-07-24T09:00:00Z', status: 'live' },
+    warnings: [],
+  },
+  source: { ripestatReachable: true, ripestatLastSuccessAt: '2026-07-24T09:00:00Z', ripestatLastError: null, risLiveState: 'connected', risLiveLastMessageAt: '2026-07-24T09:00:00Z', status: 'live' },
+};
+export const RIPE_EVENTS_BODY = {
+  count: 1,
+  items: [{ id: 'ris-1', kind: 'announcement', prefix: '89.207.56.0/21', peerAsn: 8218, path: [8218, 174, 41073], origin: 41073, firstAt: '2026-07-24T08:59:00Z', lastAt: '2026-07-24T08:59:30Z', observationCount: 14 }],
+};
+
 export const NETWORK_STATUS_BODY = {
   provenance: cvProv,
   status: { enabled: true, running: true, source: 'mock', intervalMs: 10000, lastPollAt: '2026-07-15T12:00:00Z', lastSuccessAt: '2026-07-15T12:00:00Z', lastDurationMs: 12, consecutiveFailures: 0, lastError: null, snapshotAgeSeconds: 4, historyLength: 3, deviceCount: 2, interfaceCount: 3, unknownInterfaceCount: 0 },
@@ -431,6 +457,8 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/telemetry/cache-pools')) body = CACHE_POOLS_BODY;
       else if (p.endsWith('/telemetry/cache-nodes')) body = CACHE_NODES_BODY;
       else if (p.endsWith('/telemetry/origin')) body = ORIGIN_BODY;
+      else if (p.endsWith('/ripe/snapshot')) body = RIPE_SNAPSHOT_BODY;
+      else if (p.includes('/ripe/events')) body = RIPE_EVENTS_BODY;
       else if (p.endsWith('/routing/snapshot')) body = ROUTING_SNAPSHOT_BODY;
       else if (p.includes('/routing/asn-names')) body = { source: 'ripestat', owners: { '41073': 'RTE', '174': 'Cogent Communications', '1299': 'Arelion', '6461': 'Zayo' } };
       else if (p.includes('/routing/prefix-whois')) body = { source: 'ripestat', whois: { prefix: '185.54.104.0/22', netname: 'RTE-NET', description: 'Raidio Teilifis Eireann', organisation: 'ORG-RTE1-RIPE', country: 'IE', registry: 'ripe' } };
