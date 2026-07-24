@@ -44,7 +44,8 @@ describe('Routing Intelligence tab', () => {
     openTab();
     const row = await screen.findByText('185.54.104.0/22');
     fireEvent.click(row);
-    // Drawer reveals the upstreams evidence.
-    expect(await screen.findByText(/AS174/)).toBeInTheDocument();
+    // Drawer reveals the upstreams evidence (with resolved owner) and the prefix WHOIS.
+    expect(await screen.findByText(/AS174 \(Cogent Communications\)/)).toBeInTheDocument();
+    expect(await screen.findByText(/RTE-NET/)).toBeInTheDocument(); // whois netname
   });
 });

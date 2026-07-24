@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { requirePermission } from '../auth/guards.js';
 import type { BgpToolsConnectorManager } from '../bgptools/manager.js';
 import type { AsnResolver } from '../ns1/asn-resolver.js';
+import { createRipestatWhoisResolver, type PrefixWhoisResolver } from '../bgptools/prefix-whois.js';
 import type { BgpToolsIncidentRepository, BgpToolsMonitoredPrefixRepository, IncidentState } from '@radar/data';
 
 export interface BgpToolsRouteOptions {
@@ -14,6 +15,8 @@ export interface BgpToolsRouteOptions {
   monitored?: BgpToolsMonitoredPrefixRepository;
   /** ASN → owner resolver (RIPEstat); ASN ownership is external, not in bgp.tools. */
   resolver?: AsnResolver;
+  /** Prefix WHOIS resolver (RIPEstat); defaults to a live RIPEstat resolver. Injectable for tests. */
+  whois?: PrefixWhoisResolver;
 }
 
 const prefixSchema = z.object({
@@ -26,6 +29,7 @@ const prefixSchema = z.object({
 export const bgpToolsRoutes: FastifyPluginAsync<BgpToolsRouteOptions> = async (app, opts) => {
   const schema = (summary: string) => ({ tags: ['routing-intelligence'], summary, security: [{ bearerAuth: [] }] });
   const unavailable = (id: string) => ({ code: 'CONNECTOR_UNAVAILABLE', message: 'bgp.tools connector is not configured.', correlationId: id });
+  const whoisResolver = opts.whois ?? createRipestatWhoisResolver();
 
   // Current routing-intelligence snapshot + connector status.
   app.get('/routing/snapshot', { preHandler: requirePermission('topology.summary.read'), schema: schema('Current routing-intelligence snapshot') }, async (req, reply) => {
@@ -61,6 +65,13 @@ export const bgpToolsRoutes: FastifyPluginAsync<BgpToolsRouteOptions> = async (a
     const owners: Record<string, string | null> = {};
     for (const [asn, holder] of map) owners[String(asn)] = holder;
     return { source: opts.resolver.source, owners };
+  });
+
+  // WHOIS (RIR registration) for a prefix — netname / organisation / country / registry.
+  app.get('/routing/prefix-whois', { preHandler: requirePermission('topology.summary.read'), schema: schema('WHOIS for a prefix') }, async (req, reply) => {
+    const q = z.object({ prefix: z.string().min(1).max(64) }).safeParse(req.query);
+    if (!q.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: 'prefix is required', correlationId: req.id });
+    return { source: whoisResolver.source, whois: await whoisResolver.lookup(q.data.prefix) };
   });
 
   // ---- Monitored watch list ----------------------------------------------------------------

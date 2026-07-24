@@ -1402,6 +1402,8 @@ export interface RoutingSnapshotResponse { status: RoutingStatus; snapshot: Rout
 export interface RoutingPrefixesResponse { count: number; items: RoutingAssessment[]; capturedAt: string | null; provenance: RoutingProvenance | null }
 export interface RoutingIncidentsResponse { count: number; items: RoutingIncident[] }
 export interface RoutingAsnNamesResponse { source: string; owners: Record<string, string | null> }
+export interface PrefixWhois { prefix: string; netname: string | null; description: string | null; organisation: string | null; country: string | null; registry: string | null }
+export interface PrefixWhoisResponse { source: string; whois: PrefixWhois }
 
 // bgp.tools connection settings (Engineer). The Prometheus URL is write-only.
 export interface BgpToolsConnection {

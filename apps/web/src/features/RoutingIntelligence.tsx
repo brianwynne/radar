@@ -6,7 +6,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRoutingIntelligence } from '../telemetry/use-routing-intelligence';
 import { formatFreshness } from '../telemetry/format';
 import { api } from '../api/client';
-import type { RoutingAssessment, RoutingIncident, RoutingIntegrityState } from '../api/types';
+import type { PrefixWhois, RoutingAssessment, RoutingIncident, RoutingIntegrityState } from '../api/types';
 
 const STATE_BADGE: Record<RoutingIntegrityState, string> = { healthy: 'ok', degraded: 'warn', critical: 'danger', unknown: 'neutral' };
 // Matrix sort order — worst integrity first.
@@ -44,8 +44,17 @@ function VisibilityBar({ ratio, state }: { ratio: number | null; state: RoutingI
 
 function PrefixDrawer({ a, ownerOf }: { a: RoutingAssessment; ownerOf: (asn: number | null | undefined) => string | null }) {
   const s = a.signals;
+  // WHOIS (RIR registration) for this prefix — lazily loaded when the drawer opens.
+  const [whois, setWhois] = useState<PrefixWhois | null>(null);
+  useEffect(() => {
+    if (!a.prefix) return;
+    let alive = true;
+    api.routingPrefixWhois(a.prefix).then((r) => { if (alive) setWhois(r.whois); }).catch(() => undefined);
+    return () => { alive = false; };
+  }, [a.prefix]);
   if (!s) return null;
   const asn = (n: number) => `AS${n}${ownerOf(n) ? ` (${ownerOf(n)})` : ''}`;
+  const whoisLine = whois ? [whois.netname, whois.organisation, whois.country, whois.registry ? whois.registry.toUpperCase() : null].filter(Boolean).join(' · ') : null;
   return (
     <tr className="ri-drawer">
       <td colSpan={8}>
@@ -59,6 +68,7 @@ function PrefixDrawer({ a, ownerOf }: { a: RoutingAssessment; ownerOf: (asn: num
             <span><b>Visible paths:</b> {s.visiblePaths ?? '—'}</span>
             <span><b>Confidence:</b> {s.sourceConfidence}</span>
             <span><b>First seen:</b> {ago(s.firstObservedAt)}</span>
+            {whoisLine && <span><b>Whois:</b> {whoisLine}</span>}
           </div>
         </div>
       </td>

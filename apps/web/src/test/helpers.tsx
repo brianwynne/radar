@@ -433,6 +433,7 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/telemetry/origin')) body = ORIGIN_BODY;
       else if (p.endsWith('/routing/snapshot')) body = ROUTING_SNAPSHOT_BODY;
       else if (p.includes('/routing/asn-names')) body = { source: 'ripestat', owners: { '41073': 'RTE', '174': 'Cogent Communications', '1299': 'Arelion', '6461': 'Zayo' } };
+      else if (p.includes('/routing/prefix-whois')) body = { source: 'ripestat', whois: { prefix: '185.54.104.0/22', netname: 'RTE-NET', description: 'Raidio Teilifis Eireann', organisation: 'ORG-RTE1-RIPE', country: 'IE', registry: 'ripe' } };
       else if (p.includes('/routing/incidents')) body = ROUTING_INCIDENTS_BODY;
       else if (p.endsWith('/routing/connection/test')) body = { result: { ok: true, source: 'bgptools', summary: 'monitoring 1 prefix(es) across 1 ASN(s)' } };
       else if (p.endsWith('/routing/connection')) body = ROUTING_CONNECTION_BODY;
