@@ -2,11 +2,12 @@
 // refresh interval. Informational only; a missing value is never invented.
 import { useCallback, useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
-import type { RoutingIncident, RoutingSnapshot, RoutingStatus } from '../api/types';
+import type { RoutingConnectionDiagnostic, RoutingIncident, RoutingSnapshot, RoutingStatus } from '../api/types';
 
 export interface RoutingIntelligenceState {
   status: RoutingStatus | null;
   snapshot: RoutingSnapshot | null;
+  connection: RoutingConnectionDiagnostic | null;
   incidents: RoutingIncident[];
   loading: boolean;
   error: string | null;
@@ -16,6 +17,7 @@ export interface RoutingIntelligenceState {
 export function useRoutingIntelligence(intervalMs = 15000): RoutingIntelligenceState {
   const [status, setStatus] = useState<RoutingStatus | null>(null);
   const [snapshot, setSnapshot] = useState<RoutingSnapshot | null>(null);
+  const [connection, setConnection] = useState<RoutingConnectionDiagnostic | null>(null);
   const [incidents, setIncidents] = useState<RoutingIncident[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export function useRoutingIntelligence(intervalMs = 15000): RoutingIntelligenceS
       const [snap, inc] = await Promise.all([api.routingSnapshot(), api.routingIncidents({ limit: 100 })]);
       setStatus(snap.status);
       setSnapshot(snap.snapshot);
+      setConnection(snap.connection ?? null);
       setIncidents(inc.items);
       setError(null);
     } catch (e) {
@@ -42,5 +45,5 @@ export function useRoutingIntelligence(intervalMs = 15000): RoutingIntelligenceS
     return () => clearInterval(id);
   }, [load, intervalMs]);
 
-  return { status, snapshot, incidents, loading, error, refresh: () => void load() };
+  return { status, snapshot, connection, incidents, loading, error, refresh: () => void load() };
 }

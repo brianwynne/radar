@@ -84,6 +84,7 @@ export function RoutingIntelligence() {
   const [openPrefix, setOpenPrefix] = useState<string | null>(null);
   const status = t.status;
   const snap = t.snapshot;
+  const conn = t.connection;
 
   const source = status?.source ?? 'disabled';
   const modeBadge = source === 'bgptools' ? { cls: 'ok', label: 'LIVE · bgp.tools' } : source === 'mock' ? { cls: 'warn', label: 'MOCK · SYNTHETIC' } : { cls: 'neutral', label: 'NOT CONNECTED' };
@@ -106,6 +107,12 @@ export function RoutingIntelligence() {
 
       {t.error && <div className="notice info">{/^.*(not configured|disabled|503).*/i.test(t.error) ? 'bgp.tools routing intelligence is not connected. An Engineer can enable it in Integrations.' : t.error}</div>}
       {!t.error && !status?.enabled && <div className="notice info">The bgp.tools connector is disabled. Enable it in Integrations to see external routing intelligence.</div>}
+      {conn && conn.enabled && conn.mode === 'live' && !conn.hasDataSource && (
+        <div className="notice danger">
+          Live mode is on but no data source is active — {conn.degraded ?? (!conn.prometheusUrlConfigured ? 'no Prometheus URL is configured' : !conn.userAgentValid ? 'the User-Agent (with a contact email) is not set' : 'the connector could not build a client')}.{' '}
+          Fix it in <b>Integrations → bgp.tools</b> (set the User-Agent and Prometheus URL, then Save) — the watch list is then auto-discovered from your feed.
+        </div>
+      )}
       {status?.lastError && <div className="notice warn">Last poll error: {status.lastError}</div>}
       {snap?.warnings.map((w, i) => <div key={i} className="notice warn">{w}</div>)}
 

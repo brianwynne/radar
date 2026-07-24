@@ -28,7 +28,7 @@ export const bgpToolsRoutes: FastifyPluginAsync<BgpToolsRouteOptions> = async (a
   app.get('/routing/snapshot', { preHandler: requirePermission('topology.summary.read'), schema: schema('Current routing-intelligence snapshot') }, async (req, reply) => {
     if (!opts.manager) return reply.code(503).send(unavailable(req.id));
     const poller = opts.manager.getPoller();
-    return { status: poller.status(), snapshot: poller.snapshot };
+    return { status: poller.status(), snapshot: poller.snapshot, connection: opts.manager.connectionDiagnostic() };
   });
 
   // Per-prefix assessments (the visibility matrix) drawn from the latest snapshot.

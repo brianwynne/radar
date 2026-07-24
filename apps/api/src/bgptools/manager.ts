@@ -236,6 +236,19 @@ export class BgpToolsConnectorManager {
     };
   }
 
+  /** Non-secret diagnostic for the (NOC-readable) routing snapshot — explains WHY there may be no
+   *  data (degraded reason, whether a live data source is actually built). Never a secret. */
+  connectionDiagnostic(): { enabled: boolean; mode: 'mock' | 'live'; hasDataSource: boolean; prometheusUrlConfigured: boolean; userAgentValid: boolean; degraded: string | null } {
+    return {
+      enabled: this.effEnabled(),
+      mode: this.effMode(),
+      hasDataSource: this.metricsClient !== null || this.tableClient !== null,
+      prometheusUrlConfigured: Boolean(this.persisted?.tokenCiphertext) || Boolean(this.base.prometheusUrl),
+      userAgentValid: /\S+@\S+/.test(this.effUserAgent()),
+      degraded: this.degraded,
+    };
+  }
+
   /** Engineer-only. Persists the settings (sealing the URL when replaced), reloads and rebuilds. */
   async updateSettings(input: BgpToolsConnectionInput, actor: { subject?: string; roles?: string[]; correlationId?: string }): Promise<BgpToolsConnectionView> {
     if (!this.repo) throw new BgpToolsManagerError('NO_REPOSITORY', 'Connector settings persistence is not configured.');
@@ -275,6 +288,9 @@ export class BgpToolsConnectorManager {
     this.persisted = await this.repo.get(CONNECTOR);
     this.rebuildClients();
     await this.audit?.record({ actorSubject: actor.subject, actorRoles: actor.roles, action: 'bgptools.connection.update', resourceType: 'connector', resourceKey: CONNECTOR, outcome: 'success', details: { enabled, mode, tokenAction }, correlationId: actor.correlationId });
+    // Poll immediately so a just-saved URL/UA populates the snapshot at once (the poll interval is
+    // ≥30 min). Fire-and-forget; the poller's no-overlap guard makes a concurrent call a no-op.
+    if (this.effEnabled()) void this.poller.poll().catch((err) => this.logger?.warn({ err: err instanceof Error ? err.message : 'error' }, 'bgptools: post-save poll failed'));
     return this.view();
   }
 

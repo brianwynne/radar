@@ -1379,7 +1379,15 @@ export interface RoutingIncident {
   updatedAt: string;
 }
 
-export interface RoutingSnapshotResponse { status: RoutingStatus; snapshot: RoutingSnapshot | null }
+export interface RoutingConnectionDiagnostic {
+  enabled: boolean;
+  mode: 'mock' | 'live';
+  hasDataSource: boolean;
+  prometheusUrlConfigured: boolean;
+  userAgentValid: boolean;
+  degraded: string | null;
+}
+export interface RoutingSnapshotResponse { status: RoutingStatus; snapshot: RoutingSnapshot | null; connection?: RoutingConnectionDiagnostic }
 export interface RoutingPrefixesResponse { count: number; items: RoutingAssessment[]; capturedAt: string | null; provenance: RoutingProvenance | null }
 export interface RoutingIncidentsResponse { count: number; items: RoutingIncident[] }
 

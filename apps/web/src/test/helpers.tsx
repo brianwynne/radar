@@ -238,6 +238,7 @@ export const ROUTING_SNAPSHOT_BODY = {
     provenance: { source: 'bgptools', synthetic: false, readOnly: true, note: 'Observed bgp.tools routing data (read-only).' },
     warnings: [],
   },
+  connection: { enabled: true, mode: 'live', hasDataSource: true, prometheusUrlConfigured: true, userAgentValid: true, degraded: null },
 };
 
 export const ROUTING_INCIDENTS_BODY = {
