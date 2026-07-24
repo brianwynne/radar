@@ -21,7 +21,7 @@ export interface RipeConfig {
 const boolFrom = (def: boolean) => z.preprocess((v) => (v === undefined ? def : /^(1|true|yes|on)$/i.test(String(v))), z.boolean());
 
 const schema = z.object({
-  RIPE_ENABLED: boolFrom(false),
+  RIPE_ENABLED: boolFrom(true), // read-only external RIPE observation; on by default (set RIPE_ENABLED=false to disable)
   RIPE_RIS_LIVE_ENABLED: boolFrom(true),
   RIPE_MONITORED_FILE: z.string().optional(),
   RIPE_MONITORED_PREFIXES: z.string().optional(), // JSON [{prefix,expectedOrigin}] override
