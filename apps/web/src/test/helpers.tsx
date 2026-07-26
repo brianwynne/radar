@@ -306,12 +306,17 @@ const cvItf = (device: string, name: string, desc: string, provider: string, lin
   status, freshness: cvFresh, observedAt: '2026-07-15T12:00:00Z', source: 'mock', classificationSource: 'description_regex', warnings: [],
 });
 export const NETWORK_INTERFACES_BODY = {
-  provenance: cvProv, count: 7,
+  provenance: cvProv, count: 11,
   items: [
     cvItf('JPE00000001', 'Port-Channel7', 'INEX LAG', 'INEX', 'IX_PEERING', 200e9, 128e9, 'up', 'healthy'),
     cvItf('JPE00000001', 'Ethernet1', 'Eir PNI Dublin', 'Eir', 'PRIVATE_PEERING', 100e9, 40e9, 'up', 'healthy', 'Port-Channel7'),
     cvItf('JPE00000001', 'Ethernet2', 'INEX IXP Dublin', 'INEX', 'IX_PEERING', 100e9, 88e9, 'up', 'warning'),
     cvItf('JPE00000001', 'Ethernet4', 'Transit Cogent', 'Transit', 'TRANSIT', 100e9, 0, 'down', 'down'),
+    // Eyeball PNIs — one per edge router, so the Peering capacity panel groups them as "2× 100 Gb/s".
+    cvItf('JPE00000001', 'Port-Channel10', 'Eir PNI CW', 'Eir', 'PRIVATE_PEERING', 100e9, 50e9, 'up', 'healthy'),
+    cvItf('JPE00000002', 'Port-Channel10', 'Eir PNI PW', 'Eir', 'PRIVATE_PEERING', 100e9, 45e9, 'up', 'healthy'),
+    cvItf('JPE00000001', 'Port-Channel11', 'Sky PNI CW', 'Sky', 'PRIVATE_PEERING', 100e9, 50e9, 'up', 'healthy'),
+    cvItf('JPE00000002', 'Port-Channel11', 'Sky PNI PW', 'Sky', 'PRIVATE_PEERING', 100e9, 45e9, 'up', 'healthy'),
     // A DIFFERENT router with its OWN Port-Channel7 — members must not merge across devices.
     cvItf('JPE00000002', 'Port-Channel7', 'Transit LAG', 'Transit', 'TRANSIT', 100e9, 30e9, 'up', 'healthy'),
     cvItf('JPE00000002', 'Ethernet9', 'Transit member', 'Transit', 'TRANSIT', 100e9, 30e9, 'up', 'healthy', 'Port-Channel7'),

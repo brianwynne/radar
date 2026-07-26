@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { screen, within, fireEvent, cleanup } from '@testing-library/react';
 import { NOC, renderAt, stubApi } from './helpers';
 
-const SEEDED_KEY = 'radar.cacheLb.defaultsSeeded.v1';
+const SEEDED_KEY = 'radar.cacheLb.defaultsSeeded.v2';
 // The default focused view auto-pins the primary delivery LBs/pools on first visit; mark it seeded
 // so the toggle tests start from an empty focused view (one test below opts back in).
 beforeEach(() => localStorage.setItem(SEEDED_KEY, '1'));

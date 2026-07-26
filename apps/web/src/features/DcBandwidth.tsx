@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { DATACENTRES, type DcId } from '@radar/shed';
 import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
+import { isPni, isIx, isEyeballPni } from '../network/peering';
 import { api } from '../api/client';
 import type { NetworkInterface } from '../api/types';
 
@@ -41,13 +42,6 @@ function Sparkline({ data, width = 220, height = 28 }: { data: number[]; width?:
   );
 }
 const dcNameOf = (deviceId: string): string => DATACENTRES.find((d) => d.deviceId === deviceId)?.name ?? deviceId;
-const isPni = (i: NetworkInterface) => i.linkType === 'PRIVATE_PEERING';
-const isIx = (i: NetworkInterface) => i.linkType === 'IX_PEERING';
-// Eyeball / audience ISPs whose PNIs carry OTT delivery. An allow-list, so ONLY genuine eyeball
-// networks appear — transit, cloud peers (Microsoft), router↔switch uplinks, inter-DC/core links
-// and anything a greedy description parse mislabelled as PRIVATE_PEERING are all excluded.
-const EYEBALL = /\b(eir|eircom|vodafone|three|sky|virgin|liberty|digiweb|magnet|imagine|pure ?telecom|bt)\b/i;
-const isEyeballPni = (i: NetworkInterface) => isPni(i) && EYEBALL.test(i.provider ?? i.name);
 
 export function DcBandwidth({ interfaces }: { interfaces: NetworkInterface[] }) {
   const [focus, setFocus] = useState<'' | DcId>(''); // '' = both DCs; else focus one

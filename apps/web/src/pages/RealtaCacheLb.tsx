@@ -43,7 +43,10 @@ const POOLS_PINNED_KEY = 'radar.cacheLb.pinnedPools';
 // One-time default focused view (matched by name, case-insensitive) — the primary live/VOD delivery
 // load balancers and their key origin pools, so the page is useful on first open. Seeded once (see
 // SEEDED_KEY); never overrides a later manual change.
-const SEEDED_KEY = 'radar.cacheLb.defaultsSeeded.v1';
+// Bumped to v2 so the current default focus is (re)applied for existing sessions whose focus was
+// cleared or seeded before these defaults were finalised. Non-destructive: the seed MERGES the
+// defaults in, keeping any pins the user added.
+const SEEDED_KEY = 'radar.cacheLb.defaultsSeeded.v2';
 const DEFAULT_PINNED_LBS = new Set(['live.rte.host', 'liveaudio-edge.rte.ie', 'liveedge.rte.ie', 'vod-edge.rte.ie', 'vod-origin.rte.host']);
 const DEFAULT_PINNED_POOLS = new Set(['live-dad', 'live-mam', 'live-realta-citywest', 'live-realta-parkwest', 'vod-cdn-origin', 'vod-edge-caches']);
 

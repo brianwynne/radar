@@ -12,6 +12,7 @@ import { DcBandwidth } from '../features/DcBandwidth';
 import { PniGraphs } from '../features/PniGraphs';
 import { RoutingIntelligence } from '../features/RoutingIntelligence';
 import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
+import { isEyeballPni } from '../network/peering';
 import type { LinkType, NetworkHealth, NetworkInterface } from '../api/types';
 
 const LINK_TYPES: LinkType[] = ['PRIVATE_PEERING', 'IX_PEERING', 'TRANSIT', 'INTERNAL', 'UNKNOWN'];
@@ -31,36 +32,44 @@ const num = (n: number | null | undefined): string => (n === null || n === undef
 // Colour a BGP connection type: PNI (dedicated) green, INEX (exchange) info, Transit amber.
 const connBadge = (t: string): string => (t === 'PNI' ? 'ok' : t === 'Transit' ? 'warn' : t === 'INEX' ? 'info' : 'neutral');
 
-// Link-type groups matching the summary's Peering / Transit totals.
-const PEERING_TYPES: LinkType[] = ['PRIVATE_PEERING', 'IX_PEERING'];
 const TRANSIT_TYPES: LinkType[] = ['TRANSIT'];
-// Short interface label for the cramped tile list: Port-Channel1 → Po1, Ethernet3/1 → Et3/1.
-const shortIf = (name: string): string => name.replace(/^Port-Channel/, 'Po').replace(/^Ethernet/, 'Et');
 
-// Configured-capacity breakdown for one link-type group: one row per link (LAG members excluded,
-// so it matches the corresponding throughput total, whose bundle already stands for its members),
-// biggest first, plus the summed capacity. Speeds are CONFIGURED, not live traffic.
 const linksOfTypes = (interfaces: NetworkInterface[], types: LinkType[]): NetworkInterface[] =>
-  interfaces
-    .filter((i) => types.includes(i.linkType) && i.memberOf === null)
-    .sort((a, b) => (b.speedBps ?? 0) - (a.speedBps ?? 0));
+  interfaces.filter((i) => types.includes(i.linkType) && i.memberOf === null);
 const sumCapacityBps = (links: NetworkInterface[]): number | null => {
   const speeds = links.map((i) => i.speedBps).filter((s): s is number => s !== null);
   return speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) : null;
 };
 
-// The per-link capacity list rendered inside the Peering/Transit capacity panels (below the KPI row).
+// Configured-capacity breakdown for one link-type group, grouped BY PROVIDER in a stable
+// alphabetical order (so rows never jump around as live traffic changes) and summarised as
+// "Eir 2× 100 Gb/s". Speeds are CONFIGURED capacity, not live traffic. LAG members are excluded
+// (the bundle already stands for them).
 function CapacityBreakdown({ links, totalBps }: { links: NetworkInterface[]; totalBps: number | null }) {
   if (links.length === 0) return null;
+  const byProvider = new Map<string, number[]>();
+  for (const i of links) {
+    const p = i.provider ?? i.name;
+    const arr = byProvider.get(p) ?? [];
+    if (i.speedBps !== null) arr.push(i.speedBps);
+    byProvider.set(p, arr);
+  }
+  const providers = [...byProvider.keys()].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   return (
     <div className="tile-list">
-      <div className="tile-list-head" title="Configured capacity of each link — not live traffic">Configured capacity by link</div>
-      {links.map((i) => (
-        <div className="tile-list-row" key={`${i.deviceId}::${i.name}`} title={`${i.deviceHostname} · ${i.name}${i.description ? ` · ${i.description}` : ''}`}>
-          <span className="tile-list-label">{i.provider ?? i.name}{i.provider && <span className="muted"> {shortIf(i.name)}</span>}</span>
-          <span className="tile-list-val">{formatBps(i.speedBps)}</span>
-        </div>
-      ))}
+      <div className="tile-list-head" title="Configured capacity per provider — not live traffic">Configured capacity by provider</div>
+      {providers.map((p) => {
+        // Count links per distinct speed → "2× 100 Gb/s" (+ " + 1× 40 Gb/s" when a provider mixes speeds).
+        const counts = new Map<number, number>();
+        for (const s of byProvider.get(p) ?? []) counts.set(s, (counts.get(s) ?? 0) + 1);
+        const label = [...counts.entries()].sort((a, b) => b[0] - a[0]).map(([sp, n]) => `${n}× ${formatBps(sp)}`).join(' + ');
+        return (
+          <div className="tile-list-row" key={p}>
+            <span className="tile-list-label">{p}</span>
+            <span className="tile-list-val">{label || '—'}</span>
+          </div>
+        );
+      })}
       <div className="tile-list-row total">
         <span className="tile-list-label">Total capacity</span>
         <span className="tile-list-val">{formatBps(totalBps)}</span>
@@ -158,7 +167,8 @@ export function NetworkTelemetry() {
   // in. Guarded: no routers identified → don't restrict (mirrors the backend summary).
   const routerIds = useMemo(() => new Set(t.devices.filter((d) => d.deviceType === 'router').map((d) => d.id)), [t.devices]);
   const edgeInterfaces = useMemo(() => (routerIds.size > 0 ? t.interfaces.filter((i) => routerIds.has(i.deviceId)) : t.interfaces), [t.interfaces, routerIds]);
-  const peeringLinks = useMemo(() => linksOfTypes(edgeInterfaces, PEERING_TYPES), [edgeInterfaces]);
+  // Peering capacity = EYEBALL private-peering only (not IX, not non-eyeball peers); top-level links.
+  const peeringLinks = useMemo(() => edgeInterfaces.filter((i) => i.memberOf === null && isEyeballPni(i)), [edgeInterfaces]);
   const transitLinks = useMemo(() => linksOfTypes(edgeInterfaces, TRANSIT_TYPES), [edgeInterfaces]);
   const peeringCapacityBps = useMemo(() => sumCapacityBps(peeringLinks), [peeringLinks]);
   const transitCapacityBps = useMemo(() => sumCapacityBps(transitLinks), [transitLinks]);
@@ -397,7 +407,6 @@ export function NetworkTelemetry() {
         <div className="card"><div className="muted">Transit</div><div className="stat">{formatBps(t.summary?.totalTransitThroughputBps)}</div></div>
         <div className="card"><div className="muted">Unhealthy links</div><div className="stat">{num(t.summary?.unhealthyLinks)}</div></div>
         <div className="card"><div className="muted">Unhealthy BGP peers</div><div className="stat">{num(t.summary?.unhealthyBgpPeers)}</div></div>
-        <div className="card"><div className="muted">Devices / interfaces</div><div className="stat">{num(t.summary?.deviceCount)} / {num(t.summary?.interfaceCount)}</div></div>
       </div>
 
       {/* Configured capacity by link — the detail, kept out of the KPI row so the tiles stay even.

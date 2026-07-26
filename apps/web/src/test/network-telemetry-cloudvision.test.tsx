@@ -254,39 +254,34 @@ describe('Network Telemetry page', () => {
     expect(within(bgpTable()).queryByText('Cogent')).not.toBeInTheDocument();
   });
 
-  it('lists configured peering capacity per link in the Peering capacity panel (LAG members excluded)', async () => {
+  it('lists EYEBALL peering capacity grouped by provider in a stable order (IX excluded)', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('JPE00000001');
-    // The capacity breakdown lives in its own panel below the KPI row, not inside the KPI tile.
     const panel = within(screen.getByRole('heading', { name: 'Peering capacity' }).closest('.card')! as HTMLElement);
-    expect(panel.getByText(/Configured capacity by link/i)).toBeInTheDocument();
-    // Two peering links, LAG members excluded: Port-Channel7 (200 Gb/s) + Ethernet2 (100 Gb/s).
-    expect(panel.getByText('Po7')).toBeInTheDocument();
-    expect(panel.getByText('Et2')).toBeInTheDocument();
-    expect(panel.getByText('200 Gb/s')).toBeInTheDocument();
-    // The Eir member (Ethernet1 in Port-Channel7) is excluded — no member row.
-    expect(panel.queryByText('Et1')).not.toBeInTheDocument();
-    // Total configured capacity = 200 + 100 = 300 Gb/s.
+    expect(panel.getByText(/Configured capacity by provider/i)).toBeInTheDocument();
+    // Eir and Sky each have a PNI on both edge routers → grouped as "2× 100 Gb/s" per provider.
+    expect(within(panel.getByText('Eir').closest('.tile-list-row')! as HTMLElement).getByText('2× 100 Gb/s')).toBeInTheDocument();
+    expect(within(panel.getByText('Sky').closest('.tile-list-row')! as HTMLElement).getByText('2× 100 Gb/s')).toBeInTheDocument();
+    // INEX is IX peering, not eyeball → excluded entirely from the peering capacity panel.
+    expect(panel.queryByText('INEX')).not.toBeInTheDocument();
+    // Total eyeball peering capacity = 4 × 100 Gb/s.
     expect(panel.getByText('Total capacity')).toBeInTheDocument();
-    expect(panel.getByText('300 Gb/s')).toBeInTheDocument();
+    expect(panel.getByText('400 Gb/s')).toBeInTheDocument();
     // The live peering throughput (110 Gb/s) is the KPI tile, separate from the capacity panel.
     const kpi = within(screen.getByText('Peering').closest('.card')! as HTMLElement);
     expect(kpi.getByText('110 Gb/s')).toBeInTheDocument();
   });
 
-  it('lists configured transit capacity per link in the Transit capacity panel (LAG members excluded)', async () => {
+  it('lists transit capacity grouped by provider (LAG members excluded)', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('JPE00000001');
     const panel = within(screen.getByRole('heading', { name: 'Transit capacity' }).closest('.card')! as HTMLElement);
-    expect(panel.getByText(/Configured capacity by link/i)).toBeInTheDocument();
-    // Two transit links, LAG members excluded: edge1 Ethernet4 (100 Gb/s) + edge2 Port-Channel7 (100 Gb/s).
-    expect(panel.getByText('Et4')).toBeInTheDocument();
-    expect(panel.getByText('Po7')).toBeInTheDocument();
-    // The transit member (Ethernet9 in edge2 Port-Channel7) is excluded — no member row.
-    expect(panel.queryByText('Et9')).not.toBeInTheDocument();
-    // Total configured capacity = 100 + 100 = 200 Gb/s.
+    expect(panel.getByText(/Configured capacity by provider/i)).toBeInTheDocument();
+    // Two transit links (edge1 Ethernet4 + edge2 Port-Channel7), both provider "Transit", each 100 Gb/s.
+    expect(within(panel.getByText('Transit').closest('.tile-list-row')! as HTMLElement).getByText('2× 100 Gb/s')).toBeInTheDocument();
+    // The transit member (Ethernet9 in edge2 Port-Channel7) is excluded — not double-counted.
     expect(panel.getByText('Total capacity')).toBeInTheDocument();
     expect(panel.getByText('200 Gb/s')).toBeInTheDocument();
     // The live transit throughput (20 Gb/s) is the KPI tile, separate from the capacity panel.
