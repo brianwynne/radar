@@ -1250,9 +1250,14 @@ export interface AkamaiProvenance {
 export interface AkamaiSample {
   second: number; at: string; requests: number; hits: number; miss: number; bandwidthBytes: number;
   status2xx: number; status3xx: number; status4xx: number; status5xx: number; statusCodes: Record<string, number>;
+  /** True once the second is old enough to be complete; unsettled (newest) buckets under-report. */
+  settled: boolean;
 }
 export interface AkamaiSeries {
   serviceId: string; serviceName: string; samples: AkamaiSample[];
+  /** Reported throughput: mean over the trailing SETTLED window (the headline stat; not under-reporting). */
+  bandwidthBps: number | null; requestsPerSecond: number | null; settledAt: string | null;
+  /** Raw newest bucket (unsettled edge) — diagnostics only. */
   latestRequestsPerSecond: number | null; latestBandwidthBps: number | null; lastSampleAt: string | null;
 }
 export interface AkamaiRealtimeResponse { provenance: AkamaiProvenance; source: AkamaiSource; windowSeconds: number; series: AkamaiSeries[]; warnings: string[] }

@@ -86,6 +86,56 @@ describe('AkamaiAggregator', () => {
     expect(a.snapshot().series[0].samples.map((x) => x.second)).toEqual([995]);
   });
 
+  it('reports the SETTLED-window average, ignoring the still-filling trailing edge', () => {
+    // DS2 arrives batched with ~1 min latency, so the newest second buckets keep growing. With
+    // settleLag=5 and avgWindow=6 at now=1015s, the settled window is [1005,1010]; 1011/1012 are the
+    // unsettled edge and must NOT count toward the headline (that was the under-report bug).
+    const a = new AkamaiAggregator(
+      { cpCodes: ['c'], names: {}, windowSeconds: 60, settleLagSeconds: 5, averageWindowSeconds: 6, source: 'akamai' },
+      { now: () => 1_015_000 }, // nowSec 1015 → settleCutoff 1010
+    );
+    for (let sec = 1005; sec <= 1010; sec++) a.ingest([{ second: sec, cp: 'c', bytes: 1000, hit: true, statusCode: 200 }]);
+    // A huge, still-filling trailing edge that must be excluded from the headline.
+    a.ingest([{ second: 1011, cp: 'c', bytes: 1_000_000, hit: true, statusCode: 200 }]);
+    a.ingest([{ second: 1012, cp: 'c', bytes: 1_000_000, hit: true, statusCode: 200 }]);
+
+    const s = a.snapshot().series[0];
+    // 6 settled seconds × 1000 bytes × 8 bits / 6 s = 8000 bps — the huge unsettled edge is ignored.
+    expect(s.bandwidthBps).toBe(8000);
+    expect(s.requestsPerSecond).toBe(1);
+    expect(s.settledAt).toBe(new Date(1010 * 1000).toISOString());
+    // The raw latest is the misleading spike we deliberately no longer headline.
+    expect(s.latestBandwidthBps).toBe(1_000_000 * 8);
+    // Per-sample settled flags: 1010 complete, 1011/1012 still filling.
+    const bySec = new Map(s.samples.map((x) => [x.second, x.settled]));
+    expect(bySec.get(1010)).toBe(true);
+    expect(bySec.get(1011)).toBe(false);
+    expect(bySec.get(1012)).toBe(false);
+  });
+
+  it('averages over wall-clock seconds, so idle seconds legitimately lower throughput', () => {
+    const a = new AkamaiAggregator(
+      { cpCodes: ['c'], names: {}, windowSeconds: 60, settleLagSeconds: 5, averageWindowSeconds: 6, source: 'akamai' },
+      { now: () => 1_015_000 },
+    );
+    // Only two of the six settled seconds carry traffic; the average still divides by the full window.
+    a.ingest([{ second: 1005, cp: 'c', bytes: 3000, hit: true, statusCode: 200 }]);
+    a.ingest([{ second: 1010, cp: 'c', bytes: 3000, hit: true, statusCode: 200 }]);
+    expect(a.snapshot().series[0].bandwidthBps).toBe((6000 * 8) / 6); // 8000 bps
+  });
+
+  it('reports null (not 0) when no settled data exists yet', () => {
+    const a = new AkamaiAggregator(
+      { cpCodes: ['c'], names: {}, windowSeconds: 60, settleLagSeconds: 5, averageWindowSeconds: 6, source: 'akamai' },
+      { now: () => 1_015_000 },
+    );
+    a.ingest([{ second: 1012, cp: 'c', bytes: 5000, hit: true, statusCode: 200 }]); // still within the settle lag
+    const s = a.snapshot().series[0];
+    expect(s.bandwidthBps).toBeNull();
+    expect(s.requestsPerSecond).toBeNull();
+    expect(s.settledAt).toBeNull();
+  });
+
   it('reports status: records ingested, freshness, and configured services', () => {
     const a = agg(['1629049', '1629053']);
     a.ingest(parseRecords(ndjson));

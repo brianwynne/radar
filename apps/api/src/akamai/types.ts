@@ -44,6 +44,10 @@ export interface AkamaiSample {
   status5xx: number;
   /** Per specific status code with traffic this second, e.g. { "200": 680, "206": 40 }. */
   statusCodes: Record<string, number>;
+  /** True once this second is old enough to be complete (second ≤ now − settleLagSeconds). The newest
+   *  buckets of a batched, ~1 min-latency DS2 stream are still filling, so an unsettled sample under-
+   *  reports; the UI plots settled samples and the reported rate is averaged over settled seconds. */
+  settled: boolean;
 }
 
 /** Rolling per-second series for one CP code (oldest first, newest last). */
@@ -51,6 +55,15 @@ export interface AkamaiSeries {
   serviceId: string; // CP code
   serviceName: string; // CP code name (e.g. LIVE.RTE.IE), else the code
   samples: AkamaiSample[];
+  /** Reported "current" throughput: mean bytes×8 over the trailing SETTLED window (excludes the still-
+   *  filling edge). This is the stat the UI shows — it does NOT under-report like a single latest second.
+   *  null when no settled data exists yet (cold start / all data still within the settle lag). */
+  bandwidthBps: number | null;
+  /** Reported "current" request rate: mean requests/s over the same settled window. */
+  requestsPerSecond: number | null;
+  /** ISO time of the newest SETTLED second the reported rates cover (the effective "as of"). */
+  settledAt: string | null;
+  /** Raw newest bucket (unsettled edge). Kept for diagnostics; NOT the headline — it under-reports. */
   latestRequestsPerSecond: number | null;
   latestBandwidthBps: number | null;
   lastSampleAt: string | null;

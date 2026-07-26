@@ -66,7 +66,11 @@ export class AkamaiConnector {
     this.enabled = config.enabled;
     this.ingestSecret = config.ingestSecret;
     this.aggregator = new AkamaiAggregator(
-      { cpCodes: config.cpCodes, names: config.cpNames, windowSeconds: config.windowSeconds, source: config.enabled ? 'akamai' : 'disabled' },
+      {
+        cpCodes: config.cpCodes, names: config.cpNames, windowSeconds: config.windowSeconds,
+        settleLagSeconds: config.settleLagSeconds, averageWindowSeconds: config.averageWindowSeconds,
+        source: config.enabled ? 'akamai' : 'disabled',
+      },
       { now: this.deps.now },
     );
     const s3 = config.enabled && config.s3.bucket && config.s3.accessKeyId && config.s3.secretAccessKey

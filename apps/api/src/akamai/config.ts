@@ -9,6 +9,14 @@ export interface AkamaiConfig {
   enabled: boolean;
   /** Rolling per-second retention window (seconds). DS2 delivers with ~min latency, so keep a few min. */
   windowSeconds: number;
+  /** How far back the trailing edge is considered "still filling" and excluded from the reported
+   *  throughput. DS2 delivers batched with ~1 min latency, so the newest second buckets keep growing
+   *  as later S3 objects arrive; anything newer than (now − settleLagSeconds) is NOT trusted as a
+   *  complete second. */
+  settleLagSeconds: number;
+  /** Width of the trailing SETTLED window (seconds) the reported "current" bandwidth/req-rate is
+   *  averaged over — a stable rate rather than one spiky, possibly-incomplete instantaneous second. */
+  averageWindowSeconds: number;
   /** CP codes to observe; empty → every CP code seen in the stream. */
   cpCodes: string[];
   /** CP code → friendly name, e.g. { "1629049": "LIVE.RTE.IE" }. */
@@ -34,6 +42,10 @@ const boolFrom = (def: boolean) =>
 const schema = z.object({
   AKAMAI_ENABLED: boolFrom(false),
   AKAMAI_WINDOW_SECONDS: z.coerce.number().int().positive().min(30).max(3600).default(300),
+  // Settling: exclude the trailing ~1 DS2-latency of still-filling buckets, then average over a short
+  // settled window. Defaults suit DS2's ~1 min batched latency; tune to your stream's observed lag.
+  AKAMAI_SETTLE_LAG_SECONDS: z.coerce.number().int().nonnegative().max(600).default(90),
+  AKAMAI_AVERAGE_WINDOW_SECONDS: z.coerce.number().int().positive().min(1).max(600).default(30),
   AKAMAI_CP_CODES: z.string().optional(),
   AKAMAI_CP_NAMES: z.string().optional(), // "code=Name,code=Name"
   AKAMAI_INGEST_SECRET: z.string().optional(),
@@ -66,6 +78,8 @@ export function loadAkamaiConfig(env: NodeJS.ProcessEnv = process.env): AkamaiCo
   return {
     enabled: p.AKAMAI_ENABLED,
     windowSeconds: p.AKAMAI_WINDOW_SECONDS,
+    settleLagSeconds: p.AKAMAI_SETTLE_LAG_SECONDS,
+    averageWindowSeconds: p.AKAMAI_AVERAGE_WINDOW_SECONDS,
     cpCodes: csv(p.AKAMAI_CP_CODES),
     cpNames: parseNames(p.AKAMAI_CP_NAMES),
     ingestSecret: p.AKAMAI_INGEST_SECRET ?? '',

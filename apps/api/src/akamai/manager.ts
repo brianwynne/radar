@@ -123,6 +123,9 @@ export class AkamaiConnectorManager {
     const config: AkamaiConfig = {
       enabled,
       windowSeconds: blob.windowSeconds ?? this.base.windowSeconds,
+      // Settling is operational tuning, kept env-only (not per-connector UI state).
+      settleLagSeconds: this.base.settleLagSeconds,
+      averageWindowSeconds: this.base.averageWindowSeconds,
       cpCodes: s ? csvToList(s.edgeDeviceIds) : this.base.cpCodes,
       cpNames: blob.names ?? this.base.cpNames,
       ingestSecret: this.base.ingestSecret, // env-only (not UI-managed)

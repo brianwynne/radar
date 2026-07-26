@@ -11,8 +11,16 @@ export interface AkamaiAggregatorConfig {
   names: Record<string, string>;
   /** Rolling retention window (seconds). */
   windowSeconds: number;
+  /** Trailing edge (seconds) treated as still-filling and excluded from the reported rate. Optional;
+   *  defaults to a DS2-latency-safe 90s. */
+  settleLagSeconds?: number;
+  /** Trailing settled window (seconds) the reported rate is averaged over. Optional; defaults to 30s. */
+  averageWindowSeconds?: number;
   source: AkamaiSource;
 }
+
+const DEFAULT_SETTLE_LAG_SECONDS = 90;
+const DEFAULT_AVERAGE_WINDOW_SECONDS = 30;
 
 export interface AkamaiAggregatorDeps {
   now?: () => number;
@@ -29,6 +37,8 @@ export interface AkamaiStatus {
   enabled: boolean;
   source: AkamaiSource;
   windowSeconds: number;
+  settleLagSeconds: number;
+  averageWindowSeconds: number;
   recordsIngested: number;
   lastIngestAt: string | null;
   ingestAgeSeconds: number | null;
@@ -52,6 +62,8 @@ export class AkamaiAggregator {
   private cpCodes: string[];
   private names: Record<string, string>;
   private windowSeconds: number;
+  private settleLagSeconds: number;
+  private averageWindowSeconds: number;
   private source: AkamaiSource;
   private readonly now: () => number;
 
@@ -63,6 +75,8 @@ export class AkamaiAggregator {
     this.cpCodes = config.cpCodes;
     this.names = config.names;
     this.windowSeconds = config.windowSeconds;
+    this.settleLagSeconds = config.settleLagSeconds ?? DEFAULT_SETTLE_LAG_SECONDS;
+    this.averageWindowSeconds = config.averageWindowSeconds ?? DEFAULT_AVERAGE_WINDOW_SECONDS;
     this.source = config.source;
     this.now = deps.now ?? (() => Date.now());
     for (const cp of this.cpCodes) this.states.set(cp, { cp, buckets: new Map(), lastSecond: null });
@@ -72,6 +86,8 @@ export class AkamaiAggregator {
     this.cpCodes = config.cpCodes;
     this.names = config.names;
     this.windowSeconds = config.windowSeconds;
+    this.settleLagSeconds = config.settleLagSeconds ?? DEFAULT_SETTLE_LAG_SECONDS;
+    this.averageWindowSeconds = config.averageWindowSeconds ?? DEFAULT_AVERAGE_WINDOW_SECONDS;
     this.source = config.source;
     this.states = new Map(this.cpCodes.map((cp) => [cp, { cp, buckets: new Map(), lastSecond: null }]));
     this.recordsIngested = 0;
@@ -115,27 +131,56 @@ export class AkamaiAggregator {
     }
   }
 
-  private sampleOf(second: number, b: Bucket): AkamaiSample {
+  private sampleOf(second: number, b: Bucket, settleCutoff: number): AkamaiSample {
     return {
       second,
       at: new Date(second * 1000).toISOString(),
       requests: b.requests, hits: b.hits, miss: b.miss, bandwidthBytes: b.bytes,
       status2xx: b.s2, status3xx: b.s3, status4xx: b.s4, status5xx: b.s5,
       statusCodes: Object.fromEntries(b.codes),
+      settled: second <= settleCutoff,
+    };
+  }
+
+  /** Reported "current" rates: mean over the trailing SETTLED window [settleCutoff − avgWindow + 1,
+   *  settleCutoff]. Bytes are divided by the wall-clock window width (idle seconds legitimately lower
+   *  the average), so this is true average throughput, not a spiky single second. Returns nulls when
+   *  no settled bucket exists in the window yet (cold start / everything still within the settle lag) -
+   *  never a misleading 0. */
+  private settledRates(st: CpState, settleCutoff: number): { bandwidthBps: number | null; requestsPerSecond: number | null; settledAt: string | null } {
+    const winStart = settleCutoff - this.averageWindowSeconds + 1;
+    let bytes = 0, requests = 0, newestSettled: number | null = null, hasSettled = false;
+    for (const [sec, b] of st.buckets) {
+      if (sec < winStart || sec > settleCutoff) continue;
+      hasSettled = true;
+      bytes += b.bytes;
+      requests += b.requests;
+      if (newestSettled === null || sec > newestSettled) newestSettled = sec;
+    }
+    if (!hasSettled) return { bandwidthBps: null, requestsPerSecond: null, settledAt: null };
+    return {
+      bandwidthBps: (bytes * 8) / this.averageWindowSeconds,
+      requestsPerSecond: requests / this.averageWindowSeconds,
+      settledAt: newestSettled !== null ? new Date(newestSettled * 1000).toISOString() : null,
     };
   }
 
   snapshot(): AkamaiSnapshot {
     this.pruneAll();
     const capturedAt = new Date(this.now()).toISOString();
+    const settleCutoff = Math.floor(this.now() / 1000) - this.settleLagSeconds;
     const series = [...this.states.values()].map((st) => {
       const seconds = [...st.buckets.keys()].sort((a, b) => a - b);
-      const samples = seconds.map((s) => this.sampleOf(s, st.buckets.get(s)!));
+      const samples = seconds.map((s) => this.sampleOf(s, st.buckets.get(s)!, settleCutoff));
       const last = samples[samples.length - 1];
+      const rates = this.settledRates(st, settleCutoff);
       return {
         serviceId: st.cp,
         serviceName: this.names[st.cp] ?? st.cp,
         samples,
+        bandwidthBps: rates.bandwidthBps,
+        requestsPerSecond: rates.requestsPerSecond,
+        settledAt: rates.settledAt,
         latestRequestsPerSecond: last ? last.requests : null,
         latestBandwidthBps: last ? last.bandwidthBytes * 8 : null,
         lastSampleAt: last ? last.at : null,
@@ -157,6 +202,8 @@ export class AkamaiAggregator {
       enabled: this.source !== 'disabled',
       source: this.source,
       windowSeconds: this.windowSeconds,
+      settleLagSeconds: this.settleLagSeconds,
+      averageWindowSeconds: this.averageWindowSeconds,
       recordsIngested: this.recordsIngested,
       lastIngestAt: this.lastIngestAt !== null ? new Date(this.lastIngestAt).toISOString() : null,
       ingestAgeSeconds: ingestAge,
