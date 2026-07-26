@@ -20,7 +20,7 @@ describe('Network Telemetry page', () => {
     renderAt('/network');
 
     // Wait for data-dependent content (the interface row) before synchronous assertions.
-    expect(await screen.findByText('Eir PNI Dublin')).toBeInTheDocument();
+    expect(await screen.findByText('JPE00000001')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Network Telemetry', level: 1 })).toBeInTheDocument();
     expect(screen.getByText('MOCK · SYNTHETIC')).toBeInTheDocument();
 
@@ -35,21 +35,21 @@ describe('Network Telemetry page', () => {
   it('filters interfaces by link type', async () => {
     stubApi(VE);
     renderAt('/network');
-    expect(await screen.findByText('Eir PNI Dublin')).toBeInTheDocument();
+    expect(await screen.findByText('JPE00000001')).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText(/Hide idle ports/)); // show idle/down interfaces (Transit Cogent is down)
 
-    // Filter to TRANSIT only → Eir peering row disappears, transit remains.
+    // Filter to TRANSIT only → the IX peering row disappears, transit remains.
     fireEvent.change(screen.getByLabelText('Link type'), { target: { value: 'TRANSIT' } });
-    expect(within(mainTable()).queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
+    expect(within(mainTable()).queryByText('INEX IXP Dublin')).not.toBeInTheDocument();
     expect(within(mainTable()).getByText('Transit Cogent')).toBeInTheDocument();
   });
 
   it('filters interfaces by router via the Router dropdown', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin'); // an edge1 interface
+    await screen.findByText('JPE00000001'); // an edge1 device
     fireEvent.change(screen.getAllByLabelText('Device')[0], { target: { value: 'JPE00000002' } }); // interface Router filter
-    expect(within(mainTable()).queryByText('Eir PNI Dublin')).not.toBeInTheDocument(); // edge1 filtered out
+    expect(within(mainTable()).queryByText('INEX IXP Dublin')).not.toBeInTheDocument(); // edge1 interface filtered out
     expect(within(mainTable()).getByText('Transit LAG')).toBeInTheDocument(); // edge2 interface remains
   });
 
@@ -59,18 +59,18 @@ describe('Network Telemetry page', () => {
     // Select edge2 by its device id (unique to the Devices table).
     const edge2 = await screen.findByText('JPE00000002');
     expect(screen.getByRole('heading', { name: /Devices/ })).toBeInTheDocument();
-    // Before selecting, an edge1 interface (Eir) is visible.
-    expect(screen.getByText('Eir PNI Dublin')).toBeInTheDocument();
+    // Before selecting, an edge1 interface (INEX IXP) is visible in the interfaces table.
+    expect(within(mainTable()).getByText('INEX IXP Dublin')).toBeInTheDocument();
     // Select edge2 → edge1 interfaces filtered out.
     fireEvent.click(edge2);
     expect(await screen.findByText(/Showing/)).toBeInTheDocument();
-    expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
+    expect(within(mainTable()).queryByText('INEX IXP Dublin')).not.toBeInTheDocument();
   });
 
   it('shows both traffic directions in the Current cell (busier big, quieter small)', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // Each interface renders its busier direction with an "in"/"out" tag plus the quieter one beneath.
     const cells = document.querySelectorAll('.bw-cell');
     expect(cells.length).toBeGreaterThan(0);
@@ -95,7 +95,7 @@ describe('Network Telemetry page', () => {
     fireEvent.click(screen.getByRole('button', { name: /Switches/ }));
     expect(screen.queryByText('JPE00000001')).not.toBeInTheDocument();
     expect(screen.queryByText('JPE00000002')).not.toBeInTheDocument();
-    expect(screen.queryByText('Eir PNI Dublin')).not.toBeInTheDocument();
+    expect(screen.queryByText('INEX IXP Dublin')).not.toBeInTheDocument();
     // Back to All, then filter by datacentre = Citywest → only edge1 (Parkwest edge2 drops out).
     fireEvent.click(screen.getByRole('button', { name: /^All/ }));
     fireEvent.change(screen.getByLabelText('Datacentre'), { target: { value: 'Citywest' } });
@@ -103,21 +103,25 @@ describe('Network Telemetry page', () => {
     expect(screen.queryByText('JPE00000002')).not.toBeInTheDocument();
   });
 
-  it('groups Port-Channel members per device (no cross-device merge)', async () => {
+  it('groups Port-Channel members per device (no cross-device merge), collapsed by default', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // Both routers have a Port-Channel7 with 1 member each — must read "1 member", never "2".
     expect(screen.getAllByText(/1 member/).length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/2 members/)).not.toBeInTheDocument();
-    // The member renders (indented) under its Port-Channel.
+    // Port-Channels are collapsed by default: the member is hidden until the row is expanded.
+    expect(screen.queryByText('Transit member')).not.toBeInTheDocument();
+    const lagRow = within(mainTable()).getByText('Transit LAG').closest('tr')! as HTMLElement;
+    fireEvent.click(within(lagRow).getByRole('button', { name: 'expand' }));
+    // Now the member renders (indented) under its Port-Channel.
     expect(screen.getByText('Transit member')).toBeInTheDocument();
   });
 
   it('hides idle ports (0 b/s in and out) by default; toggling off reveals them', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin'); // active port loads
+    await screen.findByText('JPE00000001'); // active port loads
     // The idle port (no traffic) is hidden by default.
     expect(screen.queryByText('Ethernet50')).not.toBeInTheDocument();
     // Toggle the filter off → idle port appears.
@@ -128,7 +132,7 @@ describe('Network Telemetry page', () => {
   it('shows a live-read countdown pill', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // Countdown to the next live read is present (auto-refresh is running).
     expect(screen.getByText(/next read in \d+s|reading…/)).toBeInTheDocument();
   });
@@ -136,7 +140,7 @@ describe('Network Telemetry page', () => {
   it('lists the top interfaces by utilisation, hottest first', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin'); // wait for interface data to load
+    await screen.findByText('JPE00000001'); // wait for interface data to load
     const dataRows = within(topTable()).getAllByRole('row').slice(1); // drop the header row
     // Most-utilised first: edge1 Ethernet2 (INEX IXP Dublin) at 88% beats the INEX LAG's 128 Gb/s
     // (which is only 64% of its 200G) — ranking by % utilisation, not absolute bandwidth.
@@ -152,7 +156,7 @@ describe('Network Telemetry page', () => {
     Object.defineProperty(navigator, 'clipboard', { value: { write }, configurable: true });
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     fireEvent.click(screen.getByRole('button', { name: /Copy/ }));
     expect(write).toHaveBeenCalledTimes(1);
     const item = captured[0];
@@ -167,7 +171,7 @@ describe('Network Telemetry page', () => {
   it('scopes the top-interfaces list to the Router filter', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // Globally, edge1's Ethernet2 is the most utilised (88%).
     expect(within(topTable()).getByText('Ethernet2')).toBeInTheDocument();
     // Select edge2 → the list follows, and edge1's Ethernet2 drops out.
@@ -178,17 +182,17 @@ describe('Network Telemetry page', () => {
   it('colour-codes utilisation: amber ≥60% of capacity, red ≥80%, clear below', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // Scope to each interface's ROW in the MAIN table (percentages also appear in the top table).
     const row = (desc: string) => within(within(mainTable()).getByText(desc).closest('tr')!);
     // INEX Ethernet2 is at 88% → red (crit).
     expect(row('INEX IXP Dublin').getByText('88.0%')).toHaveClass('util-crit');
     // edge1 Port-Channel7 is at 64% → amber (warn).
     expect(row('INEX LAG').getByText('64.0%')).toHaveClass('util-warn');
-    // Eir Ethernet1 is at 40% → no colour.
-    const eir = row('Eir PNI Dublin').getByText('40.0%');
-    expect(eir).not.toHaveClass('util-warn');
-    expect(eir).not.toHaveClass('util-crit');
+    // Transit LAG (edge2 Port-Channel7) is at 30% → no colour.
+    const low = row('Transit LAG').getByText('30.0%');
+    expect(low).not.toHaveClass('util-warn');
+    expect(low).not.toHaveClass('util-crit');
   });
 
   const bgpTable = () => screen.getByRole('columnheader', { name: 'Connection' }).closest('table')! as HTMLElement;
@@ -196,7 +200,7 @@ describe('Network Telemetry page', () => {
   it('groups BGP by provider and expands to show sessions with connection type + link load', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // Eir is one provider group showing its dedicated PNI (connection type).
     expect(within(bgpTable()).getByText('Eir')).toBeInTheDocument();
     expect(within(bgpTable()).getByText('PNI')).toBeInTheDocument();
@@ -213,7 +217,7 @@ describe('Network Telemetry page', () => {
     const legacy = { ...NETWORK_BGP_BODY, items: NETWORK_BGP_BODY.items.map((it) => { const copy: Record<string, unknown> = { ...it }; delete copy.role; return copy; }) };
     stubApi(NOC, { bgpBody: legacy });
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // An unknown role must be treated as delivery — the provider groups must NOT vanish.
     expect(within(bgpTable()).getByText('Eir')).toBeInTheDocument();
     expect(within(bgpTable()).getByText('Cogent')).toBeInTheDocument();
@@ -223,7 +227,7 @@ describe('Network Telemetry page', () => {
   it('excludes route-collector sessions from the delivery view and notes the hidden count', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // The [RC] INEX route-collector session is a delivery non-participant: it must not appear as
     // a provider group, and it must not be exposed as a Provider filter option.
     expect(within(bgpTable()).queryByText('185.6.36.8')).not.toBeInTheDocument();
@@ -235,7 +239,7 @@ describe('Network Telemetry page', () => {
   it('filters BGP groups by provider and ASN', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // Both provider groups initially (Eir, Cogent).
     expect(within(bgpTable()).getByText('Eir')).toBeInTheDocument();
     expect(within(bgpTable()).getByText('Cogent')).toBeInTheDocument();
@@ -253,7 +257,7 @@ describe('Network Telemetry page', () => {
   it('lists configured peering capacity per link in the Peering capacity panel (LAG members excluded)', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     // The capacity breakdown lives in its own panel below the KPI row, not inside the KPI tile.
     const panel = within(screen.getByRole('heading', { name: 'Peering capacity' }).closest('.card')! as HTMLElement);
     expect(panel.getByText(/Configured capacity by link/i)).toBeInTheDocument();
@@ -274,7 +278,7 @@ describe('Network Telemetry page', () => {
   it('lists configured transit capacity per link in the Transit capacity panel (LAG members excluded)', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     const panel = within(screen.getByRole('heading', { name: 'Transit capacity' }).closest('.card')! as HTMLElement);
     expect(panel.getByText(/Configured capacity by link/i)).toBeInTheDocument();
     // Two transit links, LAG members excluded: edge1 Ethernet4 (100 Gb/s) + edge2 Port-Channel7 (100 Gb/s).
@@ -294,7 +298,7 @@ describe('Network Telemetry page', () => {
     stubApi(NOC);
     renderAt('/network');
     // Await data before reading the (data-dependent) tile value.
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     const tile = screen.getByText('Unhealthy links').closest('.card')! as HTMLElement;
     expect(within(tile).getByText('1')).toBeInTheDocument();
   });
@@ -302,7 +306,7 @@ describe('Network Telemetry page', () => {
   it('opens the PNI Graphs tab: plots per-PNI series, a range selector (default 1h) and a filter', async () => {
     stubApi(NOC);
     renderAt('/network');
-    await screen.findByText('Eir PNI Dublin');
+    await screen.findByText('JPE00000001');
     fireEvent.click(screen.getByRole('button', { name: 'PNI Graphs' }));
 
     // Legend chips populate from /network/pni-history (one per PNI link).

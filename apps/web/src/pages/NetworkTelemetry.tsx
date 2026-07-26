@@ -102,7 +102,7 @@ export function NetworkTelemetry() {
   const [bgpAsn, setBgpAsn] = useState('');
   const [bgpOpen, setBgpOpen] = useState<Set<string>>(new Set()); // expanded provider groups
   const toggleBgp = (k: string) => setBgpOpen((s) => { const n = new Set(s); if (n.has(k)) n.delete(k); else n.add(k); return n; });
-  const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'name', dir: 'asc' });
+  const [sort, setSort] = useState<{ col: 'name' | 'current' | 'util'; dir: 'asc' | 'desc' }>({ col: 'current', dir: 'desc' }); // default: busiest links first
   const sortBy = (col: 'name' | 'current' | 'util') => setSort((s) => (s.col === col ? { col, dir: s.dir === 'desc' ? 'asc' : 'desc' } : { col, dir: col === 'name' ? 'asc' : 'desc' }));
   const arrow = (col: 'name' | 'current' | 'util') => (sort.col === col ? (sort.dir === 'desc' ? ' ↓' : ' ↑') : '');
   const ifKey = (deviceId: string, name: string) => `${deviceId}::${name}`;
@@ -199,8 +199,14 @@ export function NetworkTelemetry() {
     [t.interfaces, device, provider, linkType, status, search, hideIdle, visibleDeviceIds],
   );
 
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
-  const toggleCollapse = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }));
+  // Port-Channels are COLLAPSED by default (members hidden); a row is expanded only when the user
+  // clicks it. `expandedPos` holds the keys the user has opened.
+  const [expandedPos, setExpandedPos] = useState<Set<string>>(new Set());
+  const toggleExpand = (key: string) => setExpandedPos((s) => {
+    const n = new Set(s);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
 
   // Copy the top-interfaces table to the clipboard as a real HTML table (so it pastes as a table
   // into Word/Docs/email), with a tab-separated plain-text fallback for plain targets.
@@ -268,14 +274,14 @@ export function NetworkTelemetry() {
       const key = ifKey(t.deviceId, t.name);
       const members = t.name.startsWith('Port-Channel') ? (byPo.get(key) ?? []).slice().sort(cmp) : [];
       if (members.length) claimed.add(key);
-      const expanded = !collapsed[key];
+      const expanded = expandedPos.has(key); // default collapsed; only shown when explicitly expanded
       out.push({ i: t, depth: 0, children: members.length, expanded });
       if (expanded) for (const m of members) out.push({ i: m, depth: 1, children: 0, expanded: false });
     }
     // Members whose Port-Channel isn't in the current view → show at top level (never hidden).
     for (const [k, members] of byPo) if (!claimed.has(k)) for (const m of members.slice().sort(cmp)) out.push({ i: m, depth: 0, children: 0, expanded: false });
     return out;
-  }, [interfaces, sort, collapsed]);
+  }, [interfaces, sort, expandedPos]);
 
   // The delivery view hides only sessions EXPLICITLY classified as non-delivery (route-collector
   // or internal iBGP). Fail open: an absent/unknown role is treated as delivery, so peers never
@@ -541,7 +547,7 @@ export function NetworkTelemetry() {
         </label>
       </div>
       <div className="matrix-wrap">
-        <table className="matrix">
+        <table className="matrix itf-matrix">
           <thead>
             <tr>
               <th>Device</th>
@@ -565,14 +571,14 @@ export function NetworkTelemetry() {
                   <td>{depth ? '' : i.deviceHostname}</td>
                   <td className={depth ? 'itf-member' : undefined}>
                     {children > 0 && (
-                      <button className="tree-toggle" onClick={() => toggleCollapse(key)} aria-label={expanded ? 'collapse' : 'expand'}>{expanded ? '▾' : '▸'}</button>
+                      <button className="tree-toggle" onClick={() => toggleExpand(key)} aria-label={expanded ? 'collapse' : 'expand'}>{expanded ? '▾' : '▸'}</button>
                     )}
                     {depth > 0 && <span className="tree-branch">└─ </span>}
                     {i.name} <span className={`badge ${oper.badge} badge-sm`}>{oper.label}</span>
                     {children > 0 && <span className="muted"> · {children} member{children > 1 ? 's' : ''}</span>}
                   </td>
-                  <td className="muted">{i.description ?? '—'}</td>
-                  <td>{i.provider ?? '—'}</td>
+                  <td className="muted" title={i.description ?? undefined}>{i.description ?? '—'}</td>
+                  <td title={i.provider ?? undefined}>{i.provider ?? '—'}</td>
                   <td>{i.linkType}</td>
                   <td>{formatBps(i.speedBps)}</td>
                   <td><CurrentBps i={i} /></td>

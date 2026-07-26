@@ -259,6 +259,11 @@ table.matrix th, table.matrix td { text-align: left; padding: 0.4rem 0.55rem; bo
 table.matrix thead th { position: sticky; top: 0; background: var(--panel); z-index: 1; border-bottom: 2px solid var(--line); }
 table.matrix tbody tr { cursor: pointer; }
 table.matrix tbody tr:hover { background: var(--panel-muted); }
+/* Interfaces table is column-dense (13 cols): compact font + padding and truncate the wordy
+   Description/Provider columns so Capacity and Utilisation stay on-screen without scrolling right. */
+table.matrix.itf-matrix { font-size: 0.72rem; }
+table.matrix.itf-matrix th, table.matrix.itf-matrix td { padding: 0.25rem 0.4rem; }
+table.matrix.itf-matrix td:nth-child(3), table.matrix.itf-matrix td:nth-child(4) { max-width: 15ch; overflow: hidden; text-overflow: ellipsis; }
 .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem; align-items: end; }
 
 /* ---- Live steering ---- */
