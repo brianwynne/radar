@@ -1107,7 +1107,7 @@ export interface OttHistoryResponse { provenance: NetworkProvenance; count: numb
 
 // PNI bandwidth history — one downsampled in/out time-series per private-peering link, for the PNI Graphs page.
 export interface PniHistoryPoint { at: string; inBps: number | null; outBps: number | null }
-export interface PniHistorySeries { deviceId: string; interfaceName: string; provider: string | null; points: PniHistoryPoint[] }
+export interface PniHistorySeries { deviceId: string; interfaceName: string; provider: string | null; linkType: string | null; datacentre: string | null; points: PniHistoryPoint[] }
 export interface PniHistoryResponse { provenance: NetworkProvenance; rangeMinutes: number; bucketSeconds: number; windowStartMs: number; windowEndMs: number; series: PniHistorySeries[] }
 
 // --- CloudVision connection settings (Engineer-managed; token write-only) ---

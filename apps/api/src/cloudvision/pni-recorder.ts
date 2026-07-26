@@ -35,12 +35,22 @@ export class PniBandwidthRecorder {
     this.logger = deps.logger;
   }
 
-  /** Capture the PNIs from a fresh snapshot. Only real private-peering links (not LAG members) are
-   *  recorded; a snapshot with no PNIs writes nothing. Fire-and-forget. */
+  /** Capture EVERY top-level link (not just eyeball PNIs) from a fresh snapshot, tagged with its
+   *  link type and datacentre — logging all links helps find faults, and the UI defaults to showing
+   *  only the eyeball links. LAG members and links with no bandwidth data are skipped. Fire-and-forget. */
   record(snapshot: NetworkStateSnapshot): void {
+    const dcById = new Map(snapshot.devices.map((d) => [d.id, d.datacentre ?? null]));
     const samples = snapshot.interfaces
-      .filter((i) => i.linkType === 'PRIVATE_PEERING' && i.memberOf === null)
-      .map((i) => ({ deviceId: i.deviceId, interfaceName: i.name, provider: i.provider, inBps: i.inBps, outBps: i.outBps }));
+      .filter((i) => i.memberOf === null && (i.inBps !== null || i.outBps !== null))
+      .map((i) => ({
+        deviceId: i.deviceId,
+        interfaceName: i.name,
+        provider: i.provider,
+        linkType: i.linkType,
+        datacentre: dcById.get(i.deviceId) ?? null,
+        inBps: i.inBps,
+        outBps: i.outBps,
+      }));
     if (samples.length === 0) return;
     const at = new Date(snapshot.capturedAt);
     void this.repo

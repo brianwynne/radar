@@ -63,6 +63,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0005_connector_settings', filename: '0005_connector_settings.sql', applied: true, checksumMatches: true },
       { version: '0006_bgptools', filename: '0006_bgptools.sql', applied: true, checksumMatches: true },
       { version: '0007_pni_bandwidth', filename: '0007_pni_bandwidth.sql', applied: true, checksumMatches: true },
+      { version: '0008_pni_bandwidth_classification', filename: '0008_pni_bandwidth_classification.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -383,10 +384,10 @@ describe('PostgresPniBandwidthRepository (pg-mem)', () => {
     const t0 = new Date('2026-07-26T12:00:00.000Z');
     const old = new Date('2026-07-25T00:00:00.000Z');
     expect(await repo.insertBatch(t0, [
-      { deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 1_000_000, outBps: 2_000_000 },
-      { deviceId: 'JPN1', interfaceName: 'Ethernet2', provider: 'Sky', inBps: 500_000, outBps: 4_000_000 },
+      { deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 1_000_000, outBps: 2_000_000 },
+      { deviceId: 'JPN1', interfaceName: 'Ethernet2', provider: 'Sky', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 500_000, outBps: 4_000_000 },
     ])).toBe(2);
-    await repo.insertBatch(old, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 9, outBps: 9 }]);
+    await repo.insertBatch(old, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 9, outBps: 9 }]);
     expect(await count()).toBe(3);
 
     // Prune everything before 2026-07-26 → only the old (2026-07-25) row goes.

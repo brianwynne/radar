@@ -243,20 +243,26 @@ export interface DnsObservationRepository {
 
 // --- PNI bandwidth history (time-series for the PNI Graphs page) -------------
 
-/** One PNI (private-peering) interface's in/out bandwidth at a poll. Numeric rates only. */
+/** One top-level link's in/out bandwidth at a poll. Numeric rates + labels only. Every link is
+ *  logged (not just eyeball PNIs) for fault-finding; `linkType` + `datacentre` let the UI classify
+ *  eyeball networks and tag each with its Citywest/Parkwest identity. */
 export interface NewPniBandwidthSample {
   deviceId: string;
   interfaceName: string;
   provider: string | null;
+  linkType: string | null;
+  datacentre: string | null;
   inBps: number | null;
   outBps: number | null;
 }
 
-/** A bandwidth point for one PNI interface (from `range`, possibly time-bucketed/averaged). */
+/** A bandwidth point for one link (from `range`, possibly time-bucketed/averaged). */
 export interface PniBandwidthPoint {
   deviceId: string;
   interfaceName: string;
   provider: string | null;
+  linkType: string | null;
+  datacentre: string | null;
   at: Date;
   inBps: number | null;
   outBps: number | null;

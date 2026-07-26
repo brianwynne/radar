@@ -304,16 +304,16 @@ describe('Network Telemetry page', () => {
     await screen.findByText('JPE00000001');
     fireEvent.click(screen.getByRole('button', { name: 'PNI Graphs' }));
 
-    // Legend chips populate from /network/pni-history (one per PNI link).
-    expect(await screen.findByText('Eir Et1')).toBeInTheDocument();
-    expect(screen.getByText('Sky Et2')).toBeInTheDocument();
+    // Legend chips populate from /network/pni-history — labelled with provider + datacentre (CTW/PKW).
+    expect(await screen.findByText('Eir CTW Et1')).toBeInTheDocument();
+    expect(screen.getByText('Sky CTW Et2')).toBeInTheDocument();
     // The chart is a real time-series (SVG) labelled by direction + range.
     expect(screen.getByRole('img', { name: /PNI .*bandwidth over the last 60 minutes/ })).toBeInTheDocument();
     // Range selector present with the 1-hour default active.
     expect(screen.getByRole('button', { name: '1h' }).className).toContain('active');
 
     // The legend doubles as a PNI filter — clicking a chip toggles that series off.
-    fireEvent.click(screen.getByText('Eir Et1'));
-    expect(screen.getByText('Eir Et1').closest('button')!.className).toContain('off');
+    fireEvent.click(screen.getByText('Eir CTW Et1'));
+    expect(screen.getByText('Eir CTW Et1').closest('button')!.className).toContain('off');
   });
 });

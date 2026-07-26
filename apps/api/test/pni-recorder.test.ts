@@ -21,30 +21,34 @@ const itf = (over: Partial<NetworkInterface>): NetworkInterface =>
   ({ deviceId: 'D1', name: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', memberOf: null, inBps: 1e6, outBps: 2e6, ...over } as NetworkInterface);
 
 const snap = (interfaces: NetworkInterface[]): NetworkStateSnapshot =>
-  ({ capturedAt: '2026-07-15T12:00:00.000Z', interfaces } as unknown as NetworkStateSnapshot);
+  ({ capturedAt: '2026-07-15T12:00:00.000Z', interfaces, devices: [{ id: 'D1', datacentre: 'Citywest' }] } as unknown as NetworkStateSnapshot);
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe('PniBandwidthRecorder', () => {
-  it('records only PNI links (excludes IX, transit and LAG members)', async () => {
+  it('records EVERY top-level link with its type + datacentre (excludes LAG members and dataless ports)', async () => {
     const { repo, inserts } = fakeRepo();
     const rec = new PniBandwidthRecorder(repo, { now: () => 1_000_000 });
     rec.record(snap([
       itf({ name: 'Ethernet1', linkType: 'PRIVATE_PEERING', memberOf: null }),
-      itf({ name: 'Ethernet2', linkType: 'PRIVATE_PEERING', memberOf: 'Port-Channel7' }), // member — excluded
-      itf({ name: 'Ethernet3', linkType: 'IX_PEERING', memberOf: null }),                  // IX — excluded
-      itf({ name: 'Ethernet4', linkType: 'TRANSIT', memberOf: null }),                     // transit — excluded
+      itf({ name: 'Ethernet2', linkType: 'PRIVATE_PEERING', memberOf: 'Port-Channel7' }),   // member — excluded
+      itf({ name: 'Ethernet3', linkType: 'IX_PEERING', memberOf: null }),                    // IX — logged
+      itf({ name: 'Ethernet4', linkType: 'TRANSIT', memberOf: null }),                       // transit — logged
+      itf({ name: 'Ethernet9', linkType: 'UNKNOWN', memberOf: null, inBps: null, outBps: null }), // no data — excluded
     ]));
     await flush();
     expect(inserts).toHaveLength(1);
-    expect(inserts[0].samples.map((s) => s.interfaceName)).toEqual(['Ethernet1']);
+    expect(inserts[0].samples.map((s) => s.interfaceName)).toEqual(['Ethernet1', 'Ethernet3', 'Ethernet4']);
+    // Classification is captured for fault-finding + eyeball identification.
+    expect(inserts[0].samples[0]).toMatchObject({ linkType: 'PRIVATE_PEERING', datacentre: 'Citywest' });
+    expect(inserts[0].samples[2].linkType).toBe('TRANSIT');
     expect(inserts[0].at.toISOString()).toBe('2026-07-15T12:00:00.000Z');
   });
 
-  it('writes nothing when a snapshot has no PNIs', async () => {
+  it('writes nothing when a snapshot has no top-level links with data', async () => {
     const { repo, inserts } = fakeRepo();
     const rec = new PniBandwidthRecorder(repo, { now: () => 1_000_000 });
-    rec.record(snap([itf({ linkType: 'TRANSIT' })]));
+    rec.record(snap([itf({ memberOf: 'Port-Channel7' }), itf({ name: 'Ethernet50', inBps: null, outBps: null })]));
     await flush();
     expect(inserts).toHaveLength(0);
   });

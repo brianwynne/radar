@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
 import type { PniHistoryPoint, PniHistorySeries } from '../api/types';
+import { EYEBALL } from '../network/peering';
 import { formatBps } from '../telemetry/format';
 
 const RANGES = [
@@ -23,7 +24,14 @@ const DAY_MS = 24 * 60 * 60_000;
 
 const shortIf = (n: string) => n.replace(/^Port-Channel/, 'Po').replace(/^Ethernet/, 'Et');
 const keyOf = (s: { deviceId: string; interfaceName: string }) => `${s.deviceId}::${s.interfaceName}`;
-const labelOf = (s: PniHistorySeries) => `${s.provider ?? s.interfaceName} ${shortIf(s.interfaceName)}`;
+// Datacentre short code so a link's Citywest/Parkwest identity is visible in the key.
+const dcCode = (dc: string | null): string => (dc === 'Citywest' ? 'CTW' : dc === 'Parkwest' ? 'PKW' : (dc ?? ''));
+const labelOf = (s: PniHistorySeries) => {
+  const dc = dcCode(s.datacentre);
+  return `${s.provider ?? s.interfaceName}${dc ? ` ${dc}` : ''} ${shortIf(s.interfaceName)}`;
+};
+// Eyeball = an eyeball-ISP private-peering link (what the graph shows by default).
+const isEyeball = (s: PniHistorySeries): boolean => s.linkType === 'PRIVATE_PEERING' && EYEBALL.test(s.provider ?? s.interfaceName);
 
 function niceMax(v: number): number {
   if (v <= 0) return 1e6;
@@ -94,7 +102,20 @@ export function PniGraphs() {
     return () => { active = false; clearInterval(id); };
   }, [minutes, viewEndMs]);
 
-  const ordered = useMemo(() => [...series].sort((a, b) => labelOf(a).localeCompare(labelOf(b))), [series]);
+  // Eyeball networks first in the key, then everything else; alphabetical within each group.
+  const ordered = useMemo(() => {
+    const byLabel = (a: PniHistorySeries, b: PniHistorySeries) => labelOf(a).localeCompare(labelOf(b), undefined, { numeric: true });
+    return [...series.filter(isEyeball).sort(byLabel), ...series.filter((s) => !isEyeball(s)).sort(byLabel)];
+  }, [series]);
+
+  // Default to showing ONLY eyeball links (all links are logged, but non-eyeball start hidden). Seed
+  // once so the user can then toggle any link on/off without it being re-hidden on the next poll.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current || series.length === 0) return;
+    seededRef.current = true;
+    setHidden(new Set(series.filter((s) => !isEyeball(s)).map(keyOf)));
+  }, [series]);
   const colorByKey = useMemo(() => {
     const m = new Map<string, string>();
     ordered.forEach((s, i) => m.set(keyOf(s), PALETTE[i % PALETTE.length]));

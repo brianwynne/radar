@@ -134,10 +134,11 @@ describe('CloudVision network-telemetry routes', () => {
 
   describe('pni-history', () => {
     const at = new Date('2026-07-15T12:00:00Z');
+    const base = { linkType: 'PRIVATE_PEERING', datacentre: 'Citywest' };
     const points: PniBandwidthPoint[] = [
-      { deviceId: 'D1', interfaceName: 'Ethernet1', provider: 'Eir', at, inBps: 1e6, outBps: 2e6 },
-      { deviceId: 'D1', interfaceName: 'Ethernet1', provider: 'Eir', at: new Date(at.getTime() + 60_000), inBps: 1.5e6, outBps: 2.5e6 },
-      { deviceId: 'D1', interfaceName: 'Ethernet2', provider: 'Sky', at, inBps: 3e6, outBps: 4e6 },
+      { deviceId: 'D1', interfaceName: 'Ethernet1', provider: 'Eir', ...base, at, inBps: 1e6, outBps: 2e6 },
+      { deviceId: 'D1', interfaceName: 'Ethernet1', provider: 'Eir', ...base, at: new Date(at.getTime() + 60_000), inBps: 1.5e6, outBps: 2.5e6 },
+      { deviceId: 'D1', interfaceName: 'Ethernet2', provider: 'Sky', ...base, at, inBps: 3e6, outBps: 4e6 },
     ];
 
     it('groups points into one series per PNI and scales the bucket to the range', async () => {
@@ -148,6 +149,8 @@ describe('CloudVision network-telemetry routes', () => {
       expect(res.series).toHaveLength(2);
       const eth1 = res.series.find((s: { interfaceName: string }) => s.interfaceName === 'Ethernet1');
       expect(eth1.provider).toBe('Eir');
+      expect(eth1.linkType).toBe('PRIVATE_PEERING'); // classification carried for eyeball identification
+      expect(eth1.datacentre).toBe('Citywest');
       expect(eth1.points).toHaveLength(2);
       expect(eth1.points[0]).toEqual({ at: at.toISOString(), inBps: 1e6, outBps: 2e6 });
       await a.close();

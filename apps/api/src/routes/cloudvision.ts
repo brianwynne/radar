@@ -200,12 +200,13 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
       const since = new Date(endMs - minutes * 60_000);
       const bucketSeconds = Math.max(10, Math.ceil((minutes * 60) / TARGET_POINTS));
       const points = await opts.pniHistory.range({ since, until, bucketSeconds });
-      // Group the flat, interface-then-time-ordered points into one series per PNI link.
-      const byKey = new Map<string, { deviceId: string; interfaceName: string; provider: string | null; points: { at: string; inBps: number | null; outBps: number | null }[] }>();
+      // Group the flat, interface-then-time-ordered points into one series per link (with its
+      // classification, so the UI can list eyeball networks first and tag each with its DC).
+      const byKey = new Map<string, { deviceId: string; interfaceName: string; provider: string | null; linkType: string | null; datacentre: string | null; points: { at: string; inBps: number | null; outBps: number | null }[] }>();
       for (const p of points) {
         const key = `${p.deviceId}::${p.interfaceName}`;
         let s = byKey.get(key);
-        if (!s) { s = { deviceId: p.deviceId, interfaceName: p.interfaceName, provider: p.provider, points: [] }; byKey.set(key, s); }
+        if (!s) { s = { deviceId: p.deviceId, interfaceName: p.interfaceName, provider: p.provider, linkType: p.linkType, datacentre: p.datacentre, points: [] }; byKey.set(key, s); }
         s.points.push({ at: p.at.toISOString(), inBps: p.inBps, outBps: p.outBps });
       }
       return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds, windowStartMs: endMs - minutes * 60_000, windowEndMs: endMs, series: [...byKey.values()] };

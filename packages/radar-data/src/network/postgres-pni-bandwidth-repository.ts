@@ -11,6 +11,8 @@ interface Row {
   device_id: string;
   interface_name: string;
   provider: string | null;
+  link_type: string | null;
+  datacentre: string | null;
   at: unknown;
   in_bps: number | string | null;
   out_bps: number | string | null;
@@ -28,13 +30,14 @@ export class PostgresPniBandwidthRepository implements PniBandwidthRepository {
   async insertBatch(at: Date, samples: NewPniBandwidthSample[]): Promise<number> {
     if (samples.length === 0) return 0;
     const params: unknown[] = [at];
+    const cols = 7; // per-row params (observed_at is the shared $1)
     const tuples = samples.map((s, i) => {
-      const b = i * 5;
-      params.push(s.deviceId, s.interfaceName, s.provider ?? null, s.inBps ?? null, s.outBps ?? null);
-      return `($1, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6})`;
+      const b = i * cols;
+      params.push(s.deviceId, s.interfaceName, s.provider ?? null, s.linkType ?? null, s.datacentre ?? null, s.inBps ?? null, s.outBps ?? null);
+      return `($1, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8})`;
     });
     const res = await this.db.query(
-      `INSERT INTO pni_bandwidth_samples (observed_at, device_id, interface_name, provider, in_bps, out_bps)
+      `INSERT INTO pni_bandwidth_samples (observed_at, device_id, interface_name, provider, link_type, datacentre, in_bps, out_bps)
        VALUES ${tuples.join(', ')}
        ON CONFLICT (device_id, interface_name, observed_at) DO NOTHING`,
       params,
@@ -47,6 +50,7 @@ export class PostgresPniBandwidthRepository implements PniBandwidthRepository {
     const until = query.until ?? new Date();
     const { rows } = await this.db.query<Row>(
       `SELECT device_id, interface_name, max(provider) AS provider,
+              max(link_type) AS link_type, max(datacentre) AS datacentre,
               to_timestamp(floor(extract(epoch from observed_at) / $1) * $1) AS at,
               avg(in_bps) AS in_bps, avg(out_bps) AS out_bps
          FROM pni_bandwidth_samples
@@ -60,6 +64,8 @@ export class PostgresPniBandwidthRepository implements PniBandwidthRepository {
       deviceId: r.device_id,
       interfaceName: r.interface_name,
       provider: r.provider,
+      linkType: r.link_type,
+      datacentre: r.datacentre,
       at: toDate(r.at),
       inBps: numOrNull(r.in_bps),
       outBps: numOrNull(r.out_bps),

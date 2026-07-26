@@ -83,7 +83,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
 
     it('bootstraps schema_migrations, applies migrations in lexical order with timing', async () => {
       const applied = await migrate();
-      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations', '0005_connector_settings', '0006_bgptools', '0007_pni_bandwidth']);
+      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations', '0005_connector_settings', '0006_bgptools', '0007_pni_bandwidth', '0008_pni_bandwidth_classification']);
       const cols = await pool.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'schema_migrations'`,
       );
@@ -167,9 +167,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
         }
       };
       const [a, b] = await Promise.all([runOnce(), runOnce()]);
-      expect([a.length, b.length].sort()).toEqual([0, 7]); // one applied all, the other found them applied
+      expect([a.length, b.length].sort()).toEqual([0, 8]); // one applied all, the other found them applied
       const count = await pool.query<{ n: number }>('SELECT count(*)::int n FROM schema_migrations');
-      expect(count.rows[0].n).toBe(7); // no duplicate
+      expect(count.rows[0].n).toBe(8); // no duplicate
     });
 
     it('releases the advisory lock after success and after failure', async () => {
@@ -363,18 +363,20 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
       const t10 = new Date('2026-07-26T12:00:10.000Z');
       const old = new Date('2026-07-25T00:00:00.000Z');
       expect(await repo.insertBatch(t0, [
-        { deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 1_000_000, outBps: 2_000_000 },
-        { deviceId: 'JPN1', interfaceName: 'Ethernet2', provider: 'Sky', inBps: 500_000, outBps: 4_000_000 },
+        { deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 1_000_000, outBps: 2_000_000 },
+        { deviceId: 'JPN1', interfaceName: 'Ethernet2', provider: 'Sky', linkType: 'PRIVATE_PEERING', datacentre: 'Parkwest', inBps: 500_000, outBps: 4_000_000 },
       ])).toBe(2);
-      await repo.insertBatch(t10, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 3_000_000, outBps: 6_000_000 }]);
+      await repo.insertBatch(t10, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 3_000_000, outBps: 6_000_000 }]);
       // Same (device, interface, time) → ON CONFLICT DO NOTHING writes nothing.
-      expect(await repo.insertBatch(t0, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 9, outBps: 9 }])).toBe(0);
-      await repo.insertBatch(old, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 9, outBps: 9 }]);
+      expect(await repo.insertBatch(t0, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 9, outBps: 9 }])).toBe(0);
+      await repo.insertBatch(old, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 9, outBps: 9 }]);
 
       // A 60s bucket collapses t0 and t10 into one bucket for Ethernet1; in/out are AVERAGED.
       const rows = await repo.range({ since: new Date('2026-07-26T11:59:00Z'), until: new Date('2026-07-26T12:01:00Z'), bucketSeconds: 60 });
       const eth1 = rows.find((r) => r.interfaceName === 'Ethernet1')!;
       expect(eth1.provider).toBe('Eir');
+      expect(eth1.linkType).toBe('PRIVATE_PEERING');
+      expect(eth1.datacentre).toBe('Citywest');
       expect(eth1.outBps).toBe((2_000_000 + 6_000_000) / 2);
       expect(eth1.inBps).toBe((1_000_000 + 3_000_000) / 2);
       const eth2 = rows.find((r) => r.interfaceName === 'Ethernet2')!;
