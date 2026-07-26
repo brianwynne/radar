@@ -9,8 +9,15 @@ import { MockCloudVisionClient } from '../src/cloudvision/mock-client.js';
 import { CloudVisionPoller } from '../src/cloudvision/poller.js';
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_PROVIDER_FOR_ASN } from '../src/cloudvision/classification-rules.js';
 import { MOCK_EDGE_DEVICE_IDS, type ScenarioName } from '../src/cloudvision/fixtures.js';
+import type { PniBandwidthPoint, PniBandwidthRepository } from '@radar/data';
 
 const NOW = Date.parse('2026-07-15T12:00:00Z');
+
+// A stub PNI history store: `range` returns fixed points so we can assert the endpoint's grouping
+// and bucket-scaling without a database.
+function fakePniRepo(points: PniBandwidthPoint[]): PniBandwidthRepository {
+  return { insertBatch: async () => 0, prune: async () => 0, range: async () => points };
+}
 
 async function poller(scenario: ScenarioName = 'normal'): Promise<CloudVisionPoller> {
   const client = new MockCloudVisionClient({
@@ -22,10 +29,11 @@ async function poller(scenario: ScenarioName = 'normal'): Promise<CloudVisionPol
   return p;
 }
 
-async function app(role: string, opts: { poller?: CloudVisionPoller; auth?: boolean } = {}): Promise<FastifyInstance> {
+async function app(role: string, opts: { poller?: CloudVisionPoller; auth?: boolean; pniHistory?: PniBandwidthRepository } = {}): Promise<FastifyInstance> {
   const a = await buildApp(loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', RADAR_DEV_AUTH: String(opts.auth ?? true), RADAR_DEV_ROLE: role }), {
     cloudVisionPoller: opts.poller ?? (await poller()),
     cloudVisionMode: 'mock',
+    pniBandwidthRepository: opts.pniHistory,
   });
   await a.ready();
   return a;
@@ -122,5 +130,48 @@ describe('CloudVision network-telemetry routes', () => {
     expect((await a.inject({ url: '/api/v1/network/status' })).json().status.enabled).toBe(false);
     expect((await a.inject({ url: '/api/v1/network/devices' })).json().count).toBe(0);
     await a.close();
+  });
+
+  describe('pni-history', () => {
+    const at = new Date('2026-07-15T12:00:00Z');
+    const points: PniBandwidthPoint[] = [
+      { deviceId: 'D1', interfaceName: 'Ethernet1', provider: 'Eir', at, inBps: 1e6, outBps: 2e6 },
+      { deviceId: 'D1', interfaceName: 'Ethernet1', provider: 'Eir', at: new Date(at.getTime() + 60_000), inBps: 1.5e6, outBps: 2.5e6 },
+      { deviceId: 'D1', interfaceName: 'Ethernet2', provider: 'Sky', at, inBps: 3e6, outBps: 4e6 },
+    ];
+
+    it('groups points into one series per PNI and scales the bucket to the range', async () => {
+      const a = await app('NOC_VIEWER', { pniHistory: fakePniRepo(points) });
+      const res = (await a.inject({ url: '/api/v1/network/pni-history?minutes=60' })).json();
+      expect(res.rangeMinutes).toBe(60);
+      expect(res.bucketSeconds).toBe(10); // 3600s / 360 target points
+      expect(res.series).toHaveLength(2);
+      const eth1 = res.series.find((s: { interfaceName: string }) => s.interfaceName === 'Ethernet1');
+      expect(eth1.provider).toBe('Eir');
+      expect(eth1.points).toHaveLength(2);
+      expect(eth1.points[0]).toEqual({ at: at.toISOString(), inBps: 1e6, outBps: 2e6 });
+      await a.close();
+    });
+
+    it('defaults to 60 minutes and scales the bucket up for a 24h range', async () => {
+      const a = await app('NOC_VIEWER', { pniHistory: fakePniRepo([]) });
+      expect((await a.inject({ url: '/api/v1/network/pni-history' })).json().rangeMinutes).toBe(60);
+      expect((await a.inject({ url: '/api/v1/network/pni-history?minutes=1440' })).json().bucketSeconds).toBe(240); // 86400 / 360
+      await a.close();
+    });
+
+    it('returns an empty series when no history store is configured', async () => {
+      const a = await app('NOC_VIEWER'); // no pniHistory
+      const res = (await a.inject({ url: '/api/v1/network/pni-history?minutes=60' })).json();
+      expect(res.series).toEqual([]);
+      expect(res.bucketSeconds).toBe(0);
+      await a.close();
+    });
+
+    it('rejects an out-of-range minutes value', async () => {
+      const a = await app('NOC_VIEWER', { pniHistory: fakePniRepo([]) });
+      expect((await a.inject({ url: '/api/v1/network/pni-history?minutes=99999' })).statusCode).toBe(400);
+      await a.close();
+    });
   });
 });

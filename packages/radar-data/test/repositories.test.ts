@@ -16,6 +16,7 @@ import {
   PostgresSteeringStateRepository,
   PostgresSteeringEventRepository,
   PostgresDnsObservationRepository,
+  PostgresPniBandwidthRepository,
   PostgresValidationResultRepository,
   PostgresConnectorSettingsRepository,
   type NewSteeringState,
@@ -61,6 +62,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0004_ns1_validations', filename: '0004_ns1_validations.sql', applied: true, checksumMatches: true },
       { version: '0005_connector_settings', filename: '0005_connector_settings.sql', applied: true, checksumMatches: true },
       { version: '0006_bgptools', filename: '0006_bgptools.sql', applied: true, checksumMatches: true },
+      { version: '0007_pni_bandwidth', filename: '0007_pni_bandwidth.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -361,5 +363,39 @@ describe('PostgresConnectorSettingsRepository (pg-mem)', () => {
     const got = await repo.get('cloudvision');
     expect(got?.mode).toBe('mock');
     expect(got?.tokenCiphertext).toBeNull();
+  });
+});
+
+describe('PostgresPniBandwidthRepository (pg-mem)', () => {
+  // NOTE: range() uses to_timestamp/extract(epoch)/avg bucketing which pg-mem cannot parse, so the
+  // authoritative range/averaging proof lives in the real-PostgreSQL integration suite. Here we cover
+  // the simple insert + idempotency + prune paths pg-mem does support.
+  let db: Queryable;
+  beforeEach(async () => { ({ db } = await freshDb()); });
+
+  const count = async (): Promise<number> =>
+    Number((await db.query<{ c: number }>('SELECT count(*)::int AS c FROM pni_bandwidth_samples')).rows[0].c);
+
+  // ON CONFLICT DO NOTHING rowCount is a real-PG behaviour pg-mem does not model faithfully, so the
+  // idempotency assertion lives in the integration suite; here we cover insert + prune counts.
+  it('inserts a batch and prunes rows older than the cutoff', async () => {
+    const repo = new PostgresPniBandwidthRepository(db);
+    const t0 = new Date('2026-07-26T12:00:00.000Z');
+    const old = new Date('2026-07-25T00:00:00.000Z');
+    expect(await repo.insertBatch(t0, [
+      { deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 1_000_000, outBps: 2_000_000 },
+      { deviceId: 'JPN1', interfaceName: 'Ethernet2', provider: 'Sky', inBps: 500_000, outBps: 4_000_000 },
+    ])).toBe(2);
+    await repo.insertBatch(old, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 9, outBps: 9 }]);
+    expect(await count()).toBe(3);
+
+    // Prune everything before 2026-07-26 → only the old (2026-07-25) row goes.
+    expect(await repo.prune(new Date('2026-07-26T00:00:00Z'))).toBe(1);
+    expect(await count()).toBe(2);
+  });
+
+  it('an empty batch writes nothing', async () => {
+    expect(await new PostgresPniBandwidthRepository(db).insertBatch(new Date(), [])).toBe(0);
+    expect(await count()).toBe(0);
   });
 });

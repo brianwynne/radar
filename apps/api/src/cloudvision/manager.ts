@@ -10,7 +10,7 @@
 import { createCloudVisionClient } from './index.js';
 import { CloudVisionPoller } from './poller.js';
 import type { CloudVisionConfig, CloudVisionMode } from './config.js';
-import type { CloudVisionClient, CloudVisionSource } from './types.js';
+import type { CloudVisionClient, CloudVisionSource, NetworkStateSnapshot } from './types.js';
 import type { SecretBox } from '../security/secret-box.js';
 import { assertPublicHttpEndpoint, UnsafeEndpointError } from '../security/endpoint.js';
 import type { ConnectorSettingsRecord, ConnectorSettingsRepository } from '@radar/data';
@@ -75,6 +75,8 @@ export interface ConnectorManagerDeps {
   logger?: ManagerLogger;
   /** Injected into the live client (tests supply a stub; production uses global fetch). */
   fetchImpl?: typeof fetch;
+  /** Forwarded to the poller: run after every successful poll to persist PNI bandwidth samples. */
+  onSnapshot?: (snapshot: NetworkStateSnapshot) => void;
 }
 
 interface ManagerLogger {
@@ -99,6 +101,7 @@ export class CloudVisionConnectorManager {
   private readonly now: () => number;
   private readonly logger?: ManagerLogger;
   private readonly fetchImpl?: typeof fetch;
+  private readonly onSnapshot?: (snapshot: NetworkStateSnapshot) => void;
 
   private persisted: ConnectorSettingsRecord | null = null;
   private poller: CloudVisionPoller;
@@ -112,10 +115,11 @@ export class CloudVisionConnectorManager {
     this.now = deps.now ?? (() => Date.now());
     this.logger = deps.logger;
     this.fetchImpl = deps.fetchImpl;
+    this.onSnapshot = deps.onSnapshot;
     // Build the initial poller from the environment base config (persisted settings, if any,
     // are loaded in init()).
     const built = this.buildClient();
-    this.poller = new CloudVisionPoller({ client: built.client, source: built.source, intervalMs: this.base.pollIntervalSeconds * 1000, enabled: built.source !== 'disabled', edgeDeviceIdCount: this.base.edgeDeviceIds.length, now: this.now, logger: this.logger });
+    this.poller = new CloudVisionPoller({ client: built.client, source: built.source, intervalMs: this.base.pollIntervalSeconds * 1000, enabled: built.source !== 'disabled', edgeDeviceIdCount: this.base.edgeDeviceIds.length, onSnapshot: this.onSnapshot, now: this.now, logger: this.logger });
   }
 
   /** Load persisted settings (if a repository is configured) and reconfigure the poller. */

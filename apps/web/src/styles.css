@@ -316,6 +316,27 @@ ul.notes li { margin: 0.15rem 0; }
 .tile-list-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile-list-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .tile-list-row.total { border-top: 1px solid var(--line); margin-top: 0.3rem; padding-top: 0.35rem; font-weight: 600; }
+/* Capacity-by-link detail panels: keep a long list neat by scrolling inside the card, not the page. */
+.capacity-card h3 { margin: 0 0 0.2rem; }
+.capacity-card .tile-list { max-height: 15rem; overflow-y: auto; }
+
+/* PNI Graphs */
+.pni-graphs { display: flex; flex-direction: column; gap: 0.6rem; }
+.pni-controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.pni-ranges, .pni-dir { display: inline-flex; gap: 0.25rem; }
+.pni-meta { margin-left: auto; font-size: 0.75rem; }
+.pni-chart { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; display: block; }
+.pni-grid { stroke: var(--line); stroke-width: 1; opacity: 0.5; }
+.pni-axis { fill: var(--ink-soft); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pni-legend { display: flex; flex-direction: column; gap: 0.4rem; }
+.pni-legend-actions { display: flex; align-items: center; gap: 0.5rem; }
+.pni-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.pni-chip { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--line); border-radius: 999px; padding: 0.15rem 0.6rem; background: var(--panel); cursor: pointer; font-size: 0.76rem; }
+.pni-chip.off { opacity: 0.5; }
+.pni-swatch { width: 0.7rem; height: 0.7rem; border-radius: 2px; flex: none; }
+.pni-chip-label { font-weight: 600; }
+.pni-chip-val { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.btn.btn-sm { font-size: 0.72rem; padding: 0.15rem 0.55rem; }
 .badge.badge-sm { font-size: 0.62rem; padding: 0.02rem 0.4rem; }
 .sparkline { display: block; width: 100%; height: auto; color: var(--info); }
 .sparkline .sparkline-empty { fill: var(--ink-soft); font-size: 11px; }

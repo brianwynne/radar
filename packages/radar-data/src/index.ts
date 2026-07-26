@@ -23,6 +23,10 @@ export type {
   NewDnsObservation,
   DnsObservationQuery,
   DnsObservationRepository,
+  NewPniBandwidthSample,
+  PniBandwidthPoint,
+  PniBandwidthRangeQuery,
+  PniBandwidthRepository,
   ValidationResultRecord,
   NewValidationResult,
   ValidationResultQuery,
@@ -59,6 +63,7 @@ export { PostgresCheckpointRepository } from './steering/postgres-checkpoint-rep
 export { PostgresSteeringStateRepository } from './steering/postgres-steering-state-repository.js';
 export { PostgresSteeringEventRepository } from './steering/postgres-steering-event-repository.js';
 export { PostgresDnsObservationRepository } from './dns/postgres-dns-observation-repository.js';
+export { PostgresPniBandwidthRepository } from './network/postgres-pni-bandwidth-repository.js';
 export { PostgresValidationResultRepository } from './validation/postgres-validation-repository.js';
 export { PostgresConnectorSettingsRepository } from './connector/postgres-connector-settings-repository.js';
 export {

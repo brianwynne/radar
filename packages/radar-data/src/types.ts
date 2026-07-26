@@ -241,6 +241,48 @@ export interface DnsObservationRepository {
   latestPerIsp(): Promise<DnsObservationRecord[]>;
 }
 
+// --- PNI bandwidth history (time-series for the PNI Graphs page) -------------
+
+/** One PNI (private-peering) interface's in/out bandwidth at a poll. Numeric rates only. */
+export interface NewPniBandwidthSample {
+  deviceId: string;
+  interfaceName: string;
+  provider: string | null;
+  inBps: number | null;
+  outBps: number | null;
+}
+
+/** A bandwidth point for one PNI interface (from `range`, possibly time-bucketed/averaged). */
+export interface PniBandwidthPoint {
+  deviceId: string;
+  interfaceName: string;
+  provider: string | null;
+  at: Date;
+  inBps: number | null;
+  outBps: number | null;
+}
+
+export interface PniBandwidthRangeQuery {
+  /** Inclusive lower bound. */
+  since: Date;
+  /** Inclusive upper bound (default: now). */
+  until?: Date;
+  /** Downsample width (seconds); in/out are averaged per interface per bucket so the chart
+   *  renders a bounded number of points regardless of range. */
+  bucketSeconds: number;
+}
+
+/** Append-only, bounded per-PNI bandwidth history. Writes come from the CloudVision poll;
+ *  reads drive the PNI Graphs time-series. Old rows are pruned past the retention horizon. */
+export interface PniBandwidthRepository {
+  /** Insert a batch of samples all stamped with the same capture time. Returns rows written. */
+  insertBatch(at: Date, samples: NewPniBandwidthSample[]): Promise<number>;
+  /** Bucketed range, ordered by interface then time ascending. */
+  range(query: PniBandwidthRangeQuery): Promise<PniBandwidthPoint[]>;
+  /** Delete samples older than the cutoff. Returns rows removed. */
+  prune(olderThan: Date): Promise<number>;
+}
+
 // --- NS1 live-validation results (bounded history) --------------------------
 
 /** A bounded-history record of one read-only NS1 production-readiness validation. Stores no

@@ -41,6 +41,7 @@ import type {
   NetworkBgpPeersResponse,
   NetworkHistoryResponse,
   OttHistoryResponse,
+  PniHistoryResponse,
   ConnectorSettingsResponse,
   ConnectorSettingsUpdateRequest,
   ConnectorTestResponse,
@@ -268,6 +269,7 @@ export const api = {
   },
   networkHistory: (limit?: number) => request<NetworkHistoryResponse>(`/api/v1/network/history${limit ? `?limit=${limit}` : ''}`),
   ottHistory: (limit?: number) => request<OttHistoryResponse>(`/api/v1/network/ott-history${limit ? `?limit=${limit}` : ''}`),
+  pniHistory: (minutes?: number) => request<PniHistoryResponse>(`/api/v1/network/pni-history${minutes ? `?minutes=${minutes}` : ''}`),
 
   // bgp.tools routing intelligence (read-only). Snapshot + status, per-prefix assessments, incidents.
   routingSnapshot: () => request<RoutingSnapshotResponse>('/api/v1/routing/snapshot'),

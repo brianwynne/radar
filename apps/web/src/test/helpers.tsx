@@ -355,6 +355,20 @@ export const NETWORK_HISTORY_BODY = {
   ],
 };
 
+export const PNI_HISTORY_BODY = {
+  provenance: cvProv, rangeMinutes: 60, bucketSeconds: 10,
+  series: [
+    { deviceId: 'JPE00000001', interfaceName: 'Ethernet1', provider: 'Eir', points: [
+      { at: '2026-07-15T11:59:50Z', inBps: 8e9, outBps: 40e9 },
+      { at: '2026-07-15T12:00:00Z', inBps: 9e9, outBps: 44e9 },
+    ] },
+    { deviceId: 'JPE00000001', interfaceName: 'Ethernet2', provider: 'Sky', points: [
+      { at: '2026-07-15T11:59:50Z', inBps: 3e9, outBps: 60e9 },
+      { at: '2026-07-15T12:00:00Z', inBps: 3.2e9, outBps: 66e9 },
+    ] },
+  ],
+};
+
 const cfProv = { source: 'mock', synthetic: true, readOnly: true, informationalOnly: true, notice: 'MOCK / SYNTHETIC Cloudflare Load Balancing.', retrievedAt: '2026-07-16T12:00:00Z' };
 const cfCheck = { type: 'https', method: 'GET', path: '/player/monitoring/alive', expectedCodes: '200', expectedBody: 'OK', intervalSeconds: 60, timeoutSeconds: 5, retries: 2, port: 443, consecutiveUp: 2, consecutiveDown: 3, followRedirects: false, allowInsecure: false };
 const cfRegion = (region: string, healthy: boolean, rttMs: number | null) => ({ region, healthy, rttMs, failureReason: healthy ? null : 'connection refused' });
@@ -476,6 +490,7 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/network/resolvers')) body = RESOLVERS_BODY;
       else if (p.endsWith('/network/bgp-peers')) body = overrides.bgpBody ?? NETWORK_BGP_BODY;
       else if (p.endsWith('/network/history')) body = NETWORK_HISTORY_BODY;
+      else if (p.includes('/network/pni-history')) body = PNI_HISTORY_BODY;
       else if (p.endsWith('/network/cloudflare/status')) body = CLOUDFLARE_STATUS_BODY;
       else if (p.endsWith('/network/cloudflare/load-balancers')) body = CLOUDFLARE_LBS_BODY;
       else if (p.endsWith('/network/cloudflare/pools/refresh')) {

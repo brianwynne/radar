@@ -9,6 +9,7 @@ import { formatBps, formatPercent, formatFreshness } from '../telemetry/format';
 import { healthMeta, bgpMeta, operMeta, bandwidthSourceMeta } from '../telemetry/cv-format';
 import { ResolverView } from '../features/ResolverView';
 import { DcBandwidth } from '../features/DcBandwidth';
+import { PniGraphs } from '../features/PniGraphs';
 import { RoutingIntelligence } from '../features/RoutingIntelligence';
 import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
 import type { LinkType, NetworkHealth, NetworkInterface } from '../api/types';
@@ -48,7 +49,7 @@ const sumCapacityBps = (links: NetworkInterface[]): number | null => {
   return speeds.length > 0 ? speeds.reduce((a, b) => a + b, 0) : null;
 };
 
-// The list rendered inside a summary tile (Peering, Transit) under its live throughput number.
+// The per-link capacity list rendered inside the Peering/Transit capacity panels (below the KPI row).
 function CapacityBreakdown({ links, totalBps }: { links: NetworkInterface[]; totalBps: number | null }) {
   if (links.length === 0) return null;
   return (
@@ -90,7 +91,7 @@ export function NetworkTelemetry() {
   // Poll on CloudVision's ~10-second publish grid — the interface `rates` node republishes
   // every ~10s, so this is the freshest the analytics API meaningfully offers.
   const t = useCloudVision(10_000);
-  const [tab, setTab] = useState<'telemetry' | 'bandwidth' | 'resolvers' | 'routing'>('telemetry');
+  const [tab, setTab] = useState<'telemetry' | 'bandwidth' | 'pni' | 'resolvers' | 'routing'>('telemetry');
   const [provider, setProvider] = useState('');
   const [linkType, setLinkType] = useState('');
   const [status, setStatus] = useState('');
@@ -363,15 +364,16 @@ export function NetworkTelemetry() {
       <nav className="subtabs">
         <button className={`subtab ${tab === 'telemetry' ? 'active' : ''}`} onClick={() => setTab('telemetry')}>Telemetry</button>
         <button className={`subtab ${tab === 'bandwidth' ? 'active' : ''}`} onClick={() => setTab('bandwidth')}>OTT Delivery</button>
+        <button className={`subtab ${tab === 'pni' ? 'active' : ''}`} onClick={() => setTab('pni')}>PNI Graphs</button>
         <button className={`subtab ${tab === 'resolvers' ? 'active' : ''}`} onClick={() => setTab('resolvers')}>Resolvers</button>
         <button className={`subtab ${tab === 'routing' ? 'active' : ''}`} onClick={() => setTab('routing')}>Routing Intelligence</button>
       </nav>
 
       {tab === 'bandwidth' && <DcBandwidth interfaces={t.interfaces} />}
+      {tab === 'pni' && <PniGraphs />}
       {tab === 'resolvers' && <ResolverView />}
       {tab === 'routing' && <RoutingIntelligence />}
       {tab === 'telemetry' && (<>
-      {t.notice && t.mode !== 'disabled' && <div className="notice info">{t.notice}</div>}
       {t.mode === 'disabled' && <div className="notice info">Telemetry not connected — the CloudVision connector is disabled. Enable it to see live edge-router state.</div>}
       {t.mode !== 'disabled' && t.status && t.status.edgeDeviceIdCount === 0 && t.status.deviceCount > 0 && (
         <div className="notice info">
@@ -381,31 +383,35 @@ export function NetworkTelemetry() {
       )}
       {stale && <div className="notice warn">Telemetry is stale or degraded — values may not reflect the current network state.</div>}
       {t.error && <div className="notice danger">{t.error}</div>}
-      {t.warnings.length > 0 && (
-        <div className="notice warn">
-          {t.warnings.map((w, i) => (
-            <div key={i}>{w}</div>
-          ))}
-        </div>
-      )}
 
-      {/* Summary */}
+      {/* Summary KPIs — a uniform row of stat tiles (no per-link lists, so heights stay even) */}
       <div className="grid cols-4">
         <div className="card"><div className="muted">Total edge</div><div className="stat">{formatBps(t.summary?.totalEdgeThroughputBps)}</div></div>
-        <div className="card">
-          <div className="muted">Peering</div>
-          <div className="stat">{formatBps(t.summary?.totalPeeringThroughputBps)}</div>
-          <CapacityBreakdown links={peeringLinks} totalBps={peeringCapacityBps} />
-        </div>
-        <div className="card">
-          <div className="muted">Transit</div>
-          <div className="stat">{formatBps(t.summary?.totalTransitThroughputBps)}</div>
-          <CapacityBreakdown links={transitLinks} totalBps={transitCapacityBps} />
-        </div>
+        <div className="card"><div className="muted">Peering</div><div className="stat">{formatBps(t.summary?.totalPeeringThroughputBps)}</div></div>
+        <div className="card"><div className="muted">Transit</div><div className="stat">{formatBps(t.summary?.totalTransitThroughputBps)}</div></div>
         <div className="card"><div className="muted">Unhealthy links</div><div className="stat">{num(t.summary?.unhealthyLinks)}</div></div>
         <div className="card"><div className="muted">Unhealthy BGP peers</div><div className="stat">{num(t.summary?.unhealthyBgpPeers)}</div></div>
         <div className="card"><div className="muted">Devices / interfaces</div><div className="stat">{num(t.summary?.deviceCount)} / {num(t.summary?.interfaceCount)}</div></div>
       </div>
+
+      {/* Configured capacity by link — the detail, kept out of the KPI row so the tiles stay even.
+          Two equal side-by-side panels; long lists scroll inside the panel rather than the page. */}
+      {(peeringLinks.length > 0 || transitLinks.length > 0) && (
+        <div className="grid cols-2">
+          {peeringLinks.length > 0 && (
+            <div className="card capacity-card">
+              <h3>Peering capacity</h3>
+              <CapacityBreakdown links={peeringLinks} totalBps={peeringCapacityBps} />
+            </div>
+          )}
+          {transitLinks.length > 0 && (
+            <div className="card capacity-card">
+              <h3>Transit capacity</h3>
+              <CapacityBreakdown links={transitLinks} totalBps={transitCapacityBps} />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Devices — routers/switches split into tabs, with a datacentre filter. Click a device to
           drill into its interfaces + BGP peers. */}

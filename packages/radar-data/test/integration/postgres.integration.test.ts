@@ -19,6 +19,7 @@ import {
   PostgresSteeringStateRepository,
   PostgresSteeringEventRepository,
   PostgresDnsObservationRepository,
+  PostgresPniBandwidthRepository,
   PostgresValidationResultRepository,
   type NewSteeringState,
   type NewDnsObservation,
@@ -346,6 +347,43 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
       const ns1 = await repo.list({ sourceSystem: 'ns1' });
       expect(ns1[0].retrievedAt.toISOString()).toBe('2026-07-03T00:00:00.000Z');
       expect(await repo.list({ limit: 1 })).toHaveLength(1);
+    });
+  });
+
+  describe('pni bandwidth repository', () => {
+    beforeAll(async () => {
+      await reset();
+      await migrate();
+    });
+    afterEach(() => pool.query('TRUNCATE pni_bandwidth_samples'));
+
+    it('inserts, is idempotent per (device, interface, time), buckets+averages a range, and prunes', async () => {
+      const repo = new PostgresPniBandwidthRepository(q());
+      const t0 = new Date('2026-07-26T12:00:00.000Z');
+      const t10 = new Date('2026-07-26T12:00:10.000Z');
+      const old = new Date('2026-07-25T00:00:00.000Z');
+      expect(await repo.insertBatch(t0, [
+        { deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 1_000_000, outBps: 2_000_000 },
+        { deviceId: 'JPN1', interfaceName: 'Ethernet2', provider: 'Sky', inBps: 500_000, outBps: 4_000_000 },
+      ])).toBe(2);
+      await repo.insertBatch(t10, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 3_000_000, outBps: 6_000_000 }]);
+      // Same (device, interface, time) → ON CONFLICT DO NOTHING writes nothing.
+      expect(await repo.insertBatch(t0, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 9, outBps: 9 }])).toBe(0);
+      await repo.insertBatch(old, [{ deviceId: 'JPN1', interfaceName: 'Ethernet1', provider: 'Eir', inBps: 9, outBps: 9 }]);
+
+      // A 60s bucket collapses t0 and t10 into one bucket for Ethernet1; in/out are AVERAGED.
+      const rows = await repo.range({ since: new Date('2026-07-26T11:59:00Z'), until: new Date('2026-07-26T12:01:00Z'), bucketSeconds: 60 });
+      const eth1 = rows.find((r) => r.interfaceName === 'Ethernet1')!;
+      expect(eth1.provider).toBe('Eir');
+      expect(eth1.outBps).toBe((2_000_000 + 6_000_000) / 2);
+      expect(eth1.inBps).toBe((1_000_000 + 3_000_000) / 2);
+      const eth2 = rows.find((r) => r.interfaceName === 'Ethernet2')!;
+      expect(eth2.outBps).toBe(4_000_000);
+      // The old row (2026-07-25) is outside the queried window.
+      expect(rows.some((r) => r.at < new Date('2026-07-26T00:00:00Z'))).toBe(false);
+
+      // Prune everything before 2026-07-26 → only the old row goes.
+      expect(await repo.prune(new Date('2026-07-26T00:00:00Z'))).toBe(1);
     });
   });
 

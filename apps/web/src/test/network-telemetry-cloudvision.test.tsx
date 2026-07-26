@@ -23,7 +23,6 @@ describe('Network Telemetry page', () => {
     expect(await screen.findByText('Eir PNI Dublin')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Network Telemetry', level: 1 })).toBeInTheDocument();
     expect(screen.getByText('MOCK · SYNTHETIC')).toBeInTheDocument();
-    expect(screen.getByText(/read-only and informational/i)).toBeInTheDocument();
 
     // Top-interfaces-by-utilisation section renders (replaced the provider cards).
     expect(screen.getByRole('heading', { name: 'Top interfaces by utilisation' })).toBeInTheDocument();
@@ -251,41 +250,44 @@ describe('Network Telemetry page', () => {
     expect(within(bgpTable()).queryByText('Cogent')).not.toBeInTheDocument();
   });
 
-  it('lists configured peering capacity per link inside the Peering tile (LAG members excluded)', async () => {
+  it('lists configured peering capacity per link in the Peering capacity panel (LAG members excluded)', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin');
-    const tile = within(screen.getByText('Peering').closest('.card')! as HTMLElement);
-    // Marked as configured capacity — not the live throughput shown above it.
-    expect(tile.getByText(/Configured capacity by link/i)).toBeInTheDocument();
+    // The capacity breakdown lives in its own panel below the KPI row, not inside the KPI tile.
+    const panel = within(screen.getByRole('heading', { name: 'Peering capacity' }).closest('.card')! as HTMLElement);
+    expect(panel.getByText(/Configured capacity by link/i)).toBeInTheDocument();
     // Two peering links, LAG members excluded: Port-Channel7 (200 Gb/s) + Ethernet2 (100 Gb/s).
-    expect(tile.getByText('Po7')).toBeInTheDocument();
-    expect(tile.getByText('Et2')).toBeInTheDocument();
-    expect(tile.getByText('200 Gb/s')).toBeInTheDocument();
+    expect(panel.getByText('Po7')).toBeInTheDocument();
+    expect(panel.getByText('Et2')).toBeInTheDocument();
+    expect(panel.getByText('200 Gb/s')).toBeInTheDocument();
     // The Eir member (Ethernet1 in Port-Channel7) is excluded — no member row.
-    expect(tile.queryByText('Et1')).not.toBeInTheDocument();
-    // Total configured capacity = 200 + 100 = 300 Gb/s, distinct from the 110 Gb/s live stat above.
-    expect(tile.getByText('Total capacity')).toBeInTheDocument();
-    expect(tile.getByText('300 Gb/s')).toBeInTheDocument();
-    expect(tile.getByText('110 Gb/s')).toBeInTheDocument(); // the live peering throughput
+    expect(panel.queryByText('Et1')).not.toBeInTheDocument();
+    // Total configured capacity = 200 + 100 = 300 Gb/s.
+    expect(panel.getByText('Total capacity')).toBeInTheDocument();
+    expect(panel.getByText('300 Gb/s')).toBeInTheDocument();
+    // The live peering throughput (110 Gb/s) is the KPI tile, separate from the capacity panel.
+    const kpi = within(screen.getByText('Peering').closest('.card')! as HTMLElement);
+    expect(kpi.getByText('110 Gb/s')).toBeInTheDocument();
   });
 
-  it('lists configured transit capacity per link inside the Transit tile (LAG members excluded)', async () => {
+  it('lists configured transit capacity per link in the Transit capacity panel (LAG members excluded)', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin');
-    // "Transit" also appears as a provider/description, so anchor on the tile label (.muted div).
-    const tile = within(screen.getByText('Transit', { selector: '.muted' }).closest('.card')! as HTMLElement);
-    expect(tile.getByText(/Configured capacity by link/i)).toBeInTheDocument();
+    const panel = within(screen.getByRole('heading', { name: 'Transit capacity' }).closest('.card')! as HTMLElement);
+    expect(panel.getByText(/Configured capacity by link/i)).toBeInTheDocument();
     // Two transit links, LAG members excluded: edge1 Ethernet4 (100 Gb/s) + edge2 Port-Channel7 (100 Gb/s).
-    expect(tile.getByText('Et4')).toBeInTheDocument();
-    expect(tile.getByText('Po7')).toBeInTheDocument();
+    expect(panel.getByText('Et4')).toBeInTheDocument();
+    expect(panel.getByText('Po7')).toBeInTheDocument();
     // The transit member (Ethernet9 in edge2 Port-Channel7) is excluded — no member row.
-    expect(tile.queryByText('Et9')).not.toBeInTheDocument();
-    // Total configured capacity = 100 + 100 = 200 Gb/s, distinct from the 20 Gb/s live stat above.
-    expect(tile.getByText('Total capacity')).toBeInTheDocument();
-    expect(tile.getByText('200 Gb/s')).toBeInTheDocument();
-    expect(tile.getByText('20 Gb/s')).toBeInTheDocument(); // the live transit throughput
+    expect(panel.queryByText('Et9')).not.toBeInTheDocument();
+    // Total configured capacity = 100 + 100 = 200 Gb/s.
+    expect(panel.getByText('Total capacity')).toBeInTheDocument();
+    expect(panel.getByText('200 Gb/s')).toBeInTheDocument();
+    // The live transit throughput (20 Gb/s) is the KPI tile, separate from the capacity panel.
+    const kpi = within(screen.getByText('Transit', { selector: '.muted' }).closest('.card')! as HTMLElement);
+    expect(kpi.getByText('20 Gb/s')).toBeInTheDocument();
   });
 
   it('summary tiles reflect the connector snapshot', async () => {
@@ -295,5 +297,24 @@ describe('Network Telemetry page', () => {
     await screen.findByText('Eir PNI Dublin');
     const tile = screen.getByText('Unhealthy links').closest('.card')! as HTMLElement;
     expect(within(tile).getByText('1')).toBeInTheDocument();
+  });
+
+  it('opens the PNI Graphs tab: plots per-PNI series, a range selector (default 1h) and a filter', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByText('Eir PNI Dublin');
+    fireEvent.click(screen.getByRole('button', { name: 'PNI Graphs' }));
+
+    // Legend chips populate from /network/pni-history (one per PNI link).
+    expect(await screen.findByText('Eir Et1')).toBeInTheDocument();
+    expect(screen.getByText('Sky Et2')).toBeInTheDocument();
+    // The chart is a real time-series (SVG) labelled by direction + range.
+    expect(screen.getByRole('img', { name: /PNI .*bandwidth over the last 60 minutes/ })).toBeInTheDocument();
+    // Range selector present with the 1-hour default active.
+    expect(screen.getByRole('button', { name: '1h' }).className).toContain('active');
+
+    // The legend doubles as a PNI filter — clicking a chip toggles that series off.
+    fireEvent.click(screen.getByText('Eir Et1'));
+    expect(screen.getByText('Eir Et1').closest('button')!.className).toContain('off');
   });
 });

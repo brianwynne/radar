@@ -23,7 +23,8 @@ import { FastlyConnectorManager } from './fastly/manager.js';
 import { AkamaiConnectorManager } from './akamai/manager.js';
 import { BgpToolsConnectorManager } from './bgptools/manager.js';
 import { RipeService } from './ripe/service.js';
-import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository } from '@radar/data';
+import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository, PostgresPniBandwidthRepository } from '@radar/data';
+import { PniBandwidthRecorder } from './cloudvision/pni-recorder.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -75,12 +76,16 @@ async function main(): Promise<void> {
   // Non-secret settings come from Postgres (Engineer-managed) when present, else the env base
   // config; the service-account token is stored encrypted, its master key sourced only from
   // /run/secrets/radar_master_key. The manager owns the poller and reconfigures it at runtime.
+  // Per-PNI bandwidth history: written by the poller (via onSnapshot), read by /network/pni-history.
+  const pniBandwidthRepository = new PostgresPniBandwidthRepository(pool);
+  const pniBandwidthRecorder = new PniBandwidthRecorder(pniBandwidthRepository, { logger: undefined });
   const cloudVisionManager = new CloudVisionConnectorManager({
     baseConfig: config.cloudVision,
     repository: createConnectorSettingsStore(pool),
     secretBox: SecretBox.fromMasterKey(),
     audit: database.audit,
     isDevelopment: config.NODE_ENV === 'development',
+    onSnapshot: (snapshot) => pniBandwidthRecorder.record(snapshot),
   });
   await cloudVisionManager.init();
   const cloudVisionPoller = cloudVisionManager.getPoller();
@@ -166,6 +171,7 @@ async function main(): Promise<void> {
     validationRepository,
     cloudVisionPoller,
     cloudVisionMode: cloudVisionPoller.status().source,
+    pniBandwidthRepository,
     cloudVisionManager,
     cloudflarePoller,
     cloudflareManager,

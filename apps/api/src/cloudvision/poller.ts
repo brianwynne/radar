@@ -68,6 +68,10 @@ export interface CloudVisionPollerDeps {
   enabled?: boolean;
   /** Number of edge-device IDs the connector is filtered to (0 = show all discovered devices). */
   edgeDeviceIdCount?: number;
+  /** Optional side-effect run after every SUCCESSFUL poll with the fresh snapshot — used to persist
+   *  the per-PNI bandwidth samples for the history charts. Never allowed to affect the poll: it is
+   *  invoked in a try/catch and any error is logged, not propagated. */
+  onSnapshot?: (snapshot: NetworkStateSnapshot) => void;
   now?: () => number;
   logger?: Logger;
 }
@@ -82,6 +86,7 @@ export class CloudVisionPoller {
   private readonly maxBackoffMs: number;
   private readonly historyLimit: number;
   private edgeDeviceIdCount: number;
+  private readonly onSnapshot?: (snapshot: NetworkStateSnapshot) => void;
   private readonly now: () => number;
   private readonly logger: Logger;
 
@@ -105,6 +110,7 @@ export class CloudVisionPoller {
     this.historyLimit = deps.historyLimit ?? 720;
     this.enabled = deps.enabled ?? true;
     this.edgeDeviceIdCount = deps.edgeDeviceIdCount ?? 0;
+    this.onSnapshot = deps.onSnapshot;
     this.now = deps.now ?? (() => Date.now());
     this.logger = deps.logger ?? noopLogger;
   }
@@ -151,6 +157,12 @@ export class CloudVisionPoller {
       this.latest = snapshot;
       this.pushHistory(snapshot);
       this.pushDeliveryHistory(snapshot);
+      // Persist per-PNI bandwidth for the history charts. Isolated from the poll: never throws out.
+      try {
+        this.onSnapshot?.(snapshot);
+      } catch (err) {
+        this.logger.warn({ source: this.source, err: err instanceof Error ? err.message : String(err) }, 'cloudvision onSnapshot hook failed');
+      }
       this.lastDurationMs = this.now() - start;
       this.lastSuccessAt = new Date(this.now()).toISOString();
       this.consecutiveFailures = 0;
