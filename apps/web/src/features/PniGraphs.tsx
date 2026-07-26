@@ -33,6 +33,19 @@ const labelOf = (s: PniHistorySeries) => {
 // Eyeball = an eyeball-ISP private-peering link (what the graph shows by default).
 const isEyeball = (s: PniHistorySeries): boolean => s.linkType === 'PRIVATE_PEERING' && EYEBALL.test(s.provider ?? s.interfaceName);
 
+// Group links by role for a neat, sectioned key. Eyeball PNIs first (the default view).
+const GROUP_ORDER = ['Eyeball PNI', 'PNI', 'IX', 'Transit', 'Inter-DC', 'Other'] as const;
+const groupOf = (s: PniHistorySeries): string => {
+  if (isEyeball(s)) return 'Eyeball PNI';
+  switch (s.linkType) {
+    case 'PRIVATE_PEERING': return 'PNI';
+    case 'IX_PEERING': return 'IX';
+    case 'TRANSIT': return 'Transit';
+    case 'INTERNAL': return 'Inter-DC';
+    default: return 'Other';
+  }
+};
+
 function niceMax(v: number): number {
   if (v <= 0) return 1e6;
   const mag = 10 ** Math.floor(Math.log10(v));
@@ -104,11 +117,15 @@ export function PniGraphs() {
     return () => { active = false; clearInterval(id); };
   }, [minutes, viewEndMs]);
 
-  // Eyeball networks first in the key, then everything else; alphabetical within each group.
-  const ordered = useMemo(() => {
+  // Grouped by role (Eyeball PNI first), alphabetical within each group — drives both the sectioned
+  // key and the chart's colour order.
+  const grouped = useMemo(() => {
     const byLabel = (a: PniHistorySeries, b: PniHistorySeries) => labelOf(a).localeCompare(labelOf(b), undefined, { numeric: true });
-    return [...series.filter(isEyeball).sort(byLabel), ...series.filter((s) => !isEyeball(s)).sort(byLabel)];
+    return GROUP_ORDER
+      .map((group) => ({ group, items: series.filter((s) => groupOf(s) === group).sort(byLabel) }))
+      .filter((g) => g.items.length > 0);
   }, [series]);
+  const ordered = useMemo(() => grouped.flatMap((g) => g.items), [grouped]);
 
   // The default view shows ONLY eyeball links (all links are logged, but non-eyeball are hidden until
   // the user opts in). Derived synchronously → no flash, and stays correct as new links appear.
@@ -145,6 +162,14 @@ export function PniGraphs() {
     return null;
   };
   const toggle = (k: string) => setHidden((h) => { const n = new Set(h ?? defaultHidden); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  // Toggle a whole group: if every link in it is shown, hide them all; otherwise show them all.
+  const toggleGroup = (items: PniHistorySeries[]) => setHidden((h) => {
+    const n = new Set(h ?? defaultHidden);
+    const keys = items.map(keyOf);
+    const allShown = keys.every((k) => !n.has(k));
+    for (const k of keys) { if (allShown) n.add(k); else n.delete(k); }
+    return n;
+  });
 
   // Pointer → viewBox X (independent of the SVG's rendered/scaled width).
   const toVx = (clientX: number): number => {
@@ -278,20 +303,30 @@ export function PniGraphs() {
               <button className="btn btn-sm" onClick={() => setHidden(new Set(ordered.map(keyOf)))}>None</button>
               <span className="muted" style={{ fontSize: '0.72rem' }}>{visible.length}/{ordered.length} shown</span>
             </div>
-            <div className="pni-chips">
-              {ordered.map((s) => {
-                const k = keyOf(s);
-                const off = effectiveHidden.has(k);
-                const v = latest(s);
-                return (
-                  <button key={k} className={`pni-chip ${off ? 'off' : ''}`} onClick={() => toggle(k)} title={`${s.provider ?? ''} ${s.interfaceName}`}>
-                    <span className="pni-swatch" style={{ background: off ? 'var(--line)' : colorByKey.get(k) }} />
-                    <span className="pni-chip-label">{labelOf(s)}</span>
-                    <span className="pni-chip-val">{v === null ? '—' : formatBps(v)}</span>
+            {grouped.map(({ group, items }) => {
+              const shownInGroup = items.filter((s) => !effectiveHidden.has(keyOf(s))).length;
+              return (
+                <div key={group} className="pni-group">
+                  <button className="pni-group-head" onClick={() => toggleGroup(items)} title="Show/hide this whole group">
+                    {group} <span className="muted">({shownInGroup}/{items.length})</span>
                   </button>
-                );
-              })}
-            </div>
+                  <div className="pni-chips">
+                    {items.map((s) => {
+                      const k = keyOf(s);
+                      const off = effectiveHidden.has(k);
+                      const v = latest(s);
+                      return (
+                        <button key={k} className={`pni-chip ${off ? 'off' : ''}`} onClick={() => toggle(k)} title={`${s.provider ?? ''} ${s.interfaceName}`}>
+                          <span className="pni-swatch" style={{ background: off ? 'var(--line)' : colorByKey.get(k) }} />
+                          <span className="pni-chip-label">{labelOf(s)}</span>
+                          <span className="pni-chip-val">{v === null ? '—' : formatBps(v)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </>
       )}
