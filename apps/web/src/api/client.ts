@@ -269,7 +269,13 @@ export const api = {
   },
   networkHistory: (limit?: number) => request<NetworkHistoryResponse>(`/api/v1/network/history${limit ? `?limit=${limit}` : ''}`),
   ottHistory: (limit?: number) => request<OttHistoryResponse>(`/api/v1/network/ott-history${limit ? `?limit=${limit}` : ''}`),
-  pniHistory: (minutes?: number) => request<PniHistoryResponse>(`/api/v1/network/pni-history${minutes ? `?minutes=${minutes}` : ''}`),
+  pniHistory: (minutes?: number, endMs?: number) => {
+    const p = new URLSearchParams();
+    if (minutes) p.set('minutes', String(minutes));
+    if (endMs) p.set('endMs', String(Math.round(endMs)));
+    const qs = p.toString();
+    return request<PniHistoryResponse>(`/api/v1/network/pni-history${qs ? `?${qs}` : ''}`);
+  },
 
   // bgp.tools routing intelligence (read-only). Snapshot + status, per-prefix assessments, incidents.
   routingSnapshot: () => request<RoutingSnapshotResponse>('/api/v1/routing/snapshot'),

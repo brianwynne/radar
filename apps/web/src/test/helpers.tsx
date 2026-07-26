@@ -362,6 +362,7 @@ export const NETWORK_HISTORY_BODY = {
 
 export const PNI_HISTORY_BODY = {
   provenance: cvProv, rangeMinutes: 60, bucketSeconds: 10,
+  windowStartMs: Date.parse('2026-07-15T11:00:00Z'), windowEndMs: Date.parse('2026-07-15T12:00:00Z'),
   series: [
     { deviceId: 'JPE00000001', interfaceName: 'Ethernet1', provider: 'Eir', points: [
       { at: '2026-07-15T11:59:50Z', inBps: 8e9, outBps: 40e9 },

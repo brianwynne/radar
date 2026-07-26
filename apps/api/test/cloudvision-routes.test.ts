@@ -173,5 +173,20 @@ describe('CloudVision network-telemetry routes', () => {
       expect((await a.inject({ url: '/api/v1/network/pni-history?minutes=99999' })).statusCode).toBe(400);
       await a.close();
     });
+
+    it('windows on endMs (paused pan) and clamps it to the last 24h', async () => {
+      const a = await app('NOC_VIEWER', { pniHistory: fakePniRepo([]) });
+      // A window ending 2h ago is within the retained horizon → used verbatim.
+      const twoHoursAgo = Date.now() - 2 * 3600_000;
+      const r1 = (await a.inject({ url: `/api/v1/network/pni-history?minutes=60&endMs=${twoHoursAgo}` })).json();
+      expect(r1.windowEndMs).toBe(twoHoursAgo);
+      expect(r1.windowStartMs).toBe(twoHoursAgo - 60 * 60_000);
+      // A window older than 24h is clamped up to ~now−24h.
+      const wayBack = Date.now() - 48 * 3600_000;
+      const r2 = (await a.inject({ url: `/api/v1/network/pni-history?minutes=60&endMs=${wayBack}` })).json();
+      expect(r2.windowEndMs).toBeGreaterThan(wayBack);
+      expect(Math.abs(Date.now() - 24 * 3600_000 - r2.windowEndMs)).toBeLessThan(5000);
+      await a.close();
+    });
   });
 });

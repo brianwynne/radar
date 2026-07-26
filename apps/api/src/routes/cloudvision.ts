@@ -39,7 +39,12 @@ const bgpQuery = z.object({
 const historyQuery = z.object({ limit: z.coerce.number().int().min(1).max(1000).optional() });
 // PNI history: a trailing window in minutes (default 60, max 1440 = 24h). The server picks the
 // downsample bucket so any range returns a bounded number of points per series.
-const pniHistoryQuery = z.object({ minutes: z.coerce.number().int().min(1).max(1440).optional() });
+// `endMs` (optional) is the window's end time in epoch-ms — set when the user has dragged the graph
+// to a past time; it is clamped to [now − 24h, now]. Omitted ⇒ the window ends now (live).
+const pniHistoryQuery = z.object({
+  minutes: z.coerce.number().int().min(1).max(1440).optional(),
+  endMs: z.coerce.number().int().positive().optional(),
+});
 const TARGET_POINTS = 360; // ~one point every 10s at 1h; ~every 4min at 24h
 
 const badRequest = (issues: z.ZodError['issues']) => issues.map((i) => `${i.path.join('.') || '(query)'}: ${i.message}`).join('; ');
@@ -187,10 +192,12 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
       const parsed = pniHistoryQuery.safeParse(req.query);
       if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: badRequest(parsed.error.issues), correlationId: req.id });
       const minutes = parsed.data.minutes ?? 60;
-      if (!opts.pniHistory) return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds: 0, series: [] };
       const nowMs = Date.parse(now());
-      const until = new Date(nowMs);
-      const since = new Date(nowMs - minutes * 60_000);
+      // Clamp the window end to [now − 24h, now] (the retained horizon), then derive the start.
+      const endMs = Math.min(nowMs, Math.max(nowMs - 24 * 60 * 60_000, parsed.data.endMs ?? nowMs));
+      if (!opts.pniHistory) return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds: 0, windowStartMs: endMs - minutes * 60_000, windowEndMs: endMs, series: [] };
+      const until = new Date(endMs);
+      const since = new Date(endMs - minutes * 60_000);
       const bucketSeconds = Math.max(10, Math.ceil((minutes * 60) / TARGET_POINTS));
       const points = await opts.pniHistory.range({ since, until, bucketSeconds });
       // Group the flat, interface-then-time-ordered points into one series per PNI link.
@@ -201,7 +208,7 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
         if (!s) { s = { deviceId: p.deviceId, interfaceName: p.interfaceName, provider: p.provider, points: [] }; byKey.set(key, s); }
         s.points.push({ at: p.at.toISOString(), inBps: p.inBps, outBps: p.outBps });
       }
-      return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds, series: [...byKey.values()] };
+      return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds, windowStartMs: endMs - minutes * 60_000, windowEndMs: endMs, series: [...byKey.values()] };
     },
   );
 };
