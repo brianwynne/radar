@@ -315,6 +315,8 @@ describe('Network Telemetry page', () => {
     // ALL links are logged, but non-eyeball ones (transit Cogent) start HIDDEN by default.
     const cogent = () => screen.getByText('Cogent PKW Et4').closest('button')!;
     expect(cogent().className).toContain('off');
+    // An eyeball link whose link_type is still null is classified by provider → shown by default.
+    expect(screen.getByText('Vodafone PKW Po9').closest('button')!.className).not.toContain('off');
     // Eyeball networks are listed FIRST in the key.
     const chips = screen.getAllByText(/(CTW|PKW) (Et|Po)/).map((el) => el.textContent);
     expect(chips.indexOf('Eir CTW Et1')).toBeLessThan(chips.indexOf('Cogent PKW Et4'));

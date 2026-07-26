@@ -377,6 +377,11 @@ export const PNI_HISTORY_BODY = {
       { at: '2026-07-15T11:59:50Z', inBps: 20e9, outBps: 5e9 },
       { at: '2026-07-15T12:00:00Z', inBps: 22e9, outBps: 5.5e9 },
     ] },
+    // An eyeball link whose link_type is not yet classified (null) — must still count as eyeball.
+    { deviceId: 'JPE00000002', interfaceName: 'Port-Channel9', provider: 'Vodafone', linkType: null, datacentre: 'Parkwest', points: [
+      { at: '2026-07-15T11:59:50Z', inBps: 4e9, outBps: 30e9 },
+      { at: '2026-07-15T12:00:00Z', inBps: 4.2e9, outBps: 32e9 },
+    ] },
   ],
 };
 

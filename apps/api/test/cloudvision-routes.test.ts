@@ -177,6 +177,20 @@ describe('CloudVision network-telemetry routes', () => {
       await a.close();
     });
 
+    it('carries link classification from whichever bucket has it (null-safe grouping)', async () => {
+      const at = new Date('2026-07-15T12:00:00Z');
+      const pts: PniBandwidthPoint[] = [
+        // Earliest bucket predates classification (nulls); a later bucket has it.
+        { deviceId: 'D1', interfaceName: 'Ethernet1', provider: 'Eir', linkType: null, datacentre: null, at, inBps: 1e6, outBps: 2e6 },
+        { deviceId: 'D1', interfaceName: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', at: new Date(at.getTime() + 60_000), inBps: 1e6, outBps: 2e6 },
+      ];
+      const a = await app('NOC_VIEWER', { pniHistory: fakePniRepo(pts) });
+      const s = (await a.inject({ url: '/api/v1/network/pni-history?minutes=60' })).json().series[0];
+      expect(s.linkType).toBe('PRIVATE_PEERING');
+      expect(s.datacentre).toBe('Citywest');
+      await a.close();
+    });
+
     it('windows on endMs (paused pan) and clamps it to the last 24h', async () => {
       const a = await app('NOC_VIEWER', { pniHistory: fakePniRepo([]) });
       // A window ending 2h ago is within the retained horizon → used verbatim.

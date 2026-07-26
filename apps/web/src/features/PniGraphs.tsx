@@ -30,8 +30,13 @@ const labelOf = (s: PniHistorySeries) => {
   const dc = dcCode(s.datacentre);
   return `${s.provider ?? s.interfaceName}${dc ? ` ${dc}` : ''} ${shortIf(s.interfaceName)}`;
 };
-// Eyeball = an eyeball-ISP private-peering link (what the graph shows by default).
-const isEyeball = (s: PniHistorySeries): boolean => s.linkType === 'PRIVATE_PEERING' && EYEBALL.test(s.provider ?? s.interfaceName);
+// Eyeball = an eyeball-ISP peering link (what the graph shows by default). Match on the PROVIDER
+// name (which is reliably populated), and only EXCLUDE when the link type is explicitly non-eyeball
+// (transit / IX / inter-DC). This is robust to samples whose link_type is null (older rows, or a
+// bucket that predates classification) — an "Eir"/"Sky"/… link is still treated as eyeball.
+const NON_EYEBALL_TYPES = new Set(['TRANSIT', 'IX_PEERING', 'INTERNAL']);
+const isEyeball = (s: PniHistorySeries): boolean =>
+  EYEBALL.test(s.provider ?? s.interfaceName ?? '') && !NON_EYEBALL_TYPES.has(s.linkType ?? '');
 
 // Group links by role for a neat, sectioned key. Eyeball PNIs first (the default view).
 const GROUP_ORDER = ['Eyeball PNI', 'PNI', 'IX', 'Transit', 'Inter-DC', 'Other'] as const;

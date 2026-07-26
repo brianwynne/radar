@@ -207,6 +207,11 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
         const key = `${p.deviceId}::${p.interfaceName}`;
         let s = byKey.get(key);
         if (!s) { s = { deviceId: p.deviceId, interfaceName: p.interfaceName, provider: p.provider, linkType: p.linkType, datacentre: p.datacentre, points: [] }; byKey.set(key, s); }
+        // Carry the classification from whichever bucket has it — a window may span rows written
+        // before link_type/datacentre existed, whose earliest bucket would otherwise null them out.
+        if (s.provider === null && p.provider !== null) s.provider = p.provider;
+        if (s.linkType === null && p.linkType !== null) s.linkType = p.linkType;
+        if (s.datacentre === null && p.datacentre !== null) s.datacentre = p.datacentre;
         s.points.push({ at: p.at.toISOString(), inBps: p.inBps, outBps: p.outBps });
       }
       return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds, windowStartMs: endMs - minutes * 60_000, windowEndMs: endMs, series: [...byKey.values()] };
