@@ -12,7 +12,7 @@ afterEach(() => vi.unstubAllGlobals());
 const mainTable = (): HTMLElement => screen.getByRole('columnheader', { name: 'Link type' }).closest('table')! as HTMLElement;
 // The top-interfaces table: the matrix-wrap that follows its section heading.
 const topTable = (): HTMLElement =>
-  screen.getByRole('heading', { name: /Top interfaces by bandwidth/ }).closest('.section-head')!.nextElementSibling!.querySelector('table')! as HTMLElement;
+  screen.getByRole('heading', { name: /Top interfaces by utilisation/ }).closest('.section-head')!.nextElementSibling!.querySelector('table')! as HTMLElement;
 
 describe('Network Telemetry page', () => {
   it('shows summary, top interfaces, interfaces and BGP peers to a NOC viewer', async () => {
@@ -25,8 +25,8 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('MOCK · SYNTHETIC')).toBeInTheDocument();
     expect(screen.getByText(/read-only and informational/i)).toBeInTheDocument();
 
-    // Top-interfaces-by-bandwidth section renders (replaced the provider cards).
-    expect(screen.getByRole('heading', { name: 'Top interfaces by bandwidth' })).toBeInTheDocument();
+    // Top-interfaces-by-utilisation section renders (replaced the provider cards).
+    expect(screen.getByRole('heading', { name: 'Top interfaces by utilisation' })).toBeInTheDocument();
 
     // Interface content + BGP grouped by provider (Eir, Cogent as distinct groups).
     expect(screen.getAllByText('down').length).toBeGreaterThan(0); // transit oper/status
@@ -134,13 +134,15 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText(/next read in \d+s|reading…/)).toBeInTheDocument();
   });
 
-  it('lists the top interfaces by bandwidth, busiest first', async () => {
+  it('lists the top interfaces by utilisation, hottest first', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin'); // wait for interface data to load
     const dataRows = within(topTable()).getAllByRole('row').slice(1); // drop the header row
-    // Busiest by bandwidth first: edge1 Port-Channel7 (INEX LAG) at 128 Gb/s (members excluded).
-    expect(within(dataRows[0]).getByText('INEX LAG')).toBeInTheDocument();
+    // Most-utilised first: edge1 Ethernet2 (INEX IXP Dublin) at 88% beats the INEX LAG's 128 Gb/s
+    // (which is only 64% of its 200G) — ranking by % utilisation, not absolute bandwidth.
+    expect(within(dataRows[0]).getByText('INEX IXP Dublin')).toBeInTheDocument();
+    expect(within(dataRows[1]).getByText('INEX LAG')).toBeInTheDocument();
   });
 
   it('copies the top-interfaces table as an HTML table (with a plain-text fallback)', async () => {
@@ -158,7 +160,7 @@ describe('Network Telemetry page', () => {
     const html = await item['text/html'].text();
     expect(html).toContain('<table'); // a real table, not plain text
     expect(html).toContain('<th>Provider</th>');
-    expect(html).toContain('INEX LAG'); // busiest link's description
+    expect(html).toContain('INEX LAG'); // a top-utilised link's description (still in the top list)
     const tsv = await item['text/plain'].text();
     expect(tsv.split('\n')[0]).toBe('Router\tInterface\tDescription\tProvider\tCapacity\tCurrent\tUtil');
   });
@@ -167,7 +169,7 @@ describe('Network Telemetry page', () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('Eir PNI Dublin');
-    // Globally, edge1's Ethernet2 is among the busiest.
+    // Globally, edge1's Ethernet2 is the most utilised (88%).
     expect(within(topTable()).getByText('Ethernet2')).toBeInTheDocument();
     // Select edge2 → the list follows, and edge1's Ethernet2 drops out.
     fireEvent.change(screen.getAllByLabelText('Device')[0], { target: { value: 'JPE00000002' } }); // interface Router filter

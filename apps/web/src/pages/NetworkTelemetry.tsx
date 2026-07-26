@@ -136,14 +136,16 @@ export function NetworkTelemetry() {
 
   const providers = useMemo(() => [...new Set(t.interfaces.map((i) => i.provider).filter((p): p is string => !!p))].sort(), [t.interfaces]);
 
-  // Busiest links: the top 10 interfaces by current bandwidth, scoped to the selected router
-  // (follows the Router filter). Excludes LAG members (their Port-Channel already represents
-  // their load) so the slots are distinct links.
+  // Hottest links: the top 10 interfaces by % utilisation (current load ÷ capacity), scoped to the
+  // selected router (follows the Router filter). Ranking by utilisation — not absolute Gb/s — surfaces
+  // the links closest to saturation: a 10G link at 90% matters more than a 400G link at 5%. Excludes
+  // LAG members (their Port-Channel already represents their load) and links whose utilisation is
+  // unknown (no speed/capacity), which cannot be ranked.
   const topInterfaces = useMemo(
     () =>
       t.interfaces
-        .filter((i) => visibleDeviceIds.has(i.deviceId) && (!device || i.deviceId === device) && i.memberOf === null && i.primaryBps !== null)
-        .sort((a, b) => (b.primaryBps ?? 0) - (a.primaryBps ?? 0))
+        .filter((i) => visibleDeviceIds.has(i.deviceId) && (!device || i.deviceId === device) && i.memberOf === null && i.utilisationPercent !== null)
+        .sort((a, b) => (b.utilisationPercent ?? 0) - (a.utilisationPercent ?? 0))
         .slice(0, 10),
     [t.interfaces, device, visibleDeviceIds],
   );
@@ -457,9 +459,9 @@ export function NetworkTelemetry() {
         </table>
       </div>
 
-      {/* Busiest links — top 10 interfaces by current bandwidth (live), scoped to the Router filter */}
+      {/* Hottest links — top 10 interfaces by % utilisation (live), scoped to the Router filter */}
       <div className="section-head">
-        <h2>Top interfaces by bandwidth {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
+        <h2>Top interfaces by utilisation {selectedDevice && <span className="muted">· {selectedDevice.hostname}</span>}</h2>
         <button className="btn copy-btn" onClick={copyTopInterfaces} title="Copy this table (tab-separated — paste into a spreadsheet)">
           {copiedTop ? 'Copied ✓' : 'Copy'}
         </button>
