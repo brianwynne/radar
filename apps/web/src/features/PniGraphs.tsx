@@ -64,7 +64,9 @@ export function PniGraphs() {
   const [minutes, setMinutes] = useState<number>(60);
   const [dir, setDir] = useState<'out' | 'in'>('out');
   const [series, setSeries] = useState<PniHistorySeries[]>([]);
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
+  // null = the default "eyeball-only" view (computed synchronously each render, so there is no
+  // first-render flash of all links); a Set = the explicit shown/hidden state after the user filters.
+  const [hidden, setHidden] = useState<Set<string> | null>(null);
   const [win, setWin] = useState<{ start: number; end: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,20 +110,17 @@ export function PniGraphs() {
     return [...series.filter(isEyeball).sort(byLabel), ...series.filter((s) => !isEyeball(s)).sort(byLabel)];
   }, [series]);
 
-  // Default to showing ONLY eyeball links (all links are logged, but non-eyeball start hidden). Seed
-  // once so the user can then toggle any link on/off without it being re-hidden on the next poll.
-  const seededRef = useRef(false);
-  useEffect(() => {
-    if (seededRef.current || series.length === 0) return;
-    seededRef.current = true;
-    setHidden(new Set(series.filter((s) => !isEyeball(s)).map(keyOf)));
-  }, [series]);
+  // The default view shows ONLY eyeball links (all links are logged, but non-eyeball are hidden until
+  // the user opts in). Derived synchronously → no flash, and stays correct as new links appear.
+  const defaultHidden = useMemo(() => new Set(series.filter((s) => !isEyeball(s)).map(keyOf)), [series]);
+  const effectiveHidden = hidden ?? defaultHidden;
+  const onlyEyeball = () => setHidden(new Set(series.filter((s) => !isEyeball(s)).map(keyOf)));
   const colorByKey = useMemo(() => {
     const m = new Map<string, string>();
     ordered.forEach((s, i) => m.set(keyOf(s), PALETTE[i % PALETTE.length]));
     return m;
   }, [ordered]);
-  const visible = ordered.filter((s) => !hidden.has(keyOf(s)));
+  const visible = ordered.filter((s) => !effectiveHidden.has(keyOf(s)));
 
   const widthMs = minutes * 60_000;
   const tMax = win ? win.end : (viewEndMs ?? Date.now());
@@ -145,7 +144,7 @@ export function PniGraphs() {
     for (let i = s.points.length - 1; i >= 0; i--) { const v = val(s.points[i]); if (v !== null) return v; }
     return null;
   };
-  const toggle = (k: string) => setHidden((h) => { const n = new Set(h); if (n.has(k)) n.delete(k); else n.add(k); return n; });
+  const toggle = (k: string) => setHidden((h) => { const n = new Set(h ?? defaultHidden); if (n.has(k)) n.delete(k); else n.add(k); return n; });
 
   // Pointer → viewBox X (independent of the SVG's rendered/scaled width).
   const toVx = (clientX: number): number => {
@@ -274,7 +273,7 @@ export function PniGraphs() {
 
           <div className="pni-legend">
             <div className="pni-legend-actions">
-              <button className="btn btn-sm" onClick={() => setHidden(new Set(ordered.filter((s) => !isEyeball(s)).map(keyOf)))} title="Show only the eyeball-ISP PNIs">Eyeball</button>
+              <button className="btn btn-sm" onClick={onlyEyeball} title="Show only the eyeball-ISP PNIs">Eyeball</button>
               <button className="btn btn-sm" onClick={() => setHidden(new Set())}>All</button>
               <button className="btn btn-sm" onClick={() => setHidden(new Set(ordered.map(keyOf)))}>None</button>
               <span className="muted" style={{ fontSize: '0.72rem' }}>{visible.length}/{ordered.length} shown</span>
@@ -282,7 +281,7 @@ export function PniGraphs() {
             <div className="pni-chips">
               {ordered.map((s) => {
                 const k = keyOf(s);
-                const off = hidden.has(k);
+                const off = effectiveHidden.has(k);
                 const v = latest(s);
                 return (
                   <button key={k} className={`pni-chip ${off ? 'off' : ''}`} onClick={() => toggle(k)} title={`${s.provider ?? ''} ${s.interfaceName}`}>
