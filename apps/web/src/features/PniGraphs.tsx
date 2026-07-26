@@ -274,9 +274,10 @@ export function PniGraphs() {
 
           <div className="pni-legend">
             <div className="pni-legend-actions">
+              <button className="btn btn-sm" onClick={() => setHidden(new Set(ordered.filter((s) => !isEyeball(s)).map(keyOf)))} title="Show only the eyeball-ISP PNIs">Eyeball</button>
               <button className="btn btn-sm" onClick={() => setHidden(new Set())}>All</button>
               <button className="btn btn-sm" onClick={() => setHidden(new Set(ordered.map(keyOf)))}>None</button>
-              <span className="muted" style={{ fontSize: '0.72rem' }}>{visible.length}/{ordered.length} PNIs</span>
+              <span className="muted" style={{ fontSize: '0.72rem' }}>{visible.length}/{ordered.length} shown</span>
             </div>
             <div className="pni-chips">
               {ordered.map((s) => {

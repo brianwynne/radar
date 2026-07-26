@@ -372,6 +372,11 @@ export const PNI_HISTORY_BODY = {
       { at: '2026-07-15T11:59:50Z', inBps: 3e9, outBps: 60e9 },
       { at: '2026-07-15T12:00:00Z', inBps: 3.2e9, outBps: 66e9 },
     ] },
+    // A non-eyeball (transit) link — logged, but hidden by default.
+    { deviceId: 'JPE00000002', interfaceName: 'Ethernet4', provider: 'Cogent', linkType: 'TRANSIT', datacentre: 'Parkwest', points: [
+      { at: '2026-07-15T11:59:50Z', inBps: 20e9, outBps: 5e9 },
+      { at: '2026-07-15T12:00:00Z', inBps: 22e9, outBps: 5.5e9 },
+    ] },
   ],
 };
 

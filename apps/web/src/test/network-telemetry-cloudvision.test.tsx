@@ -312,6 +312,19 @@ describe('Network Telemetry page', () => {
     // Range selector present with the 1-hour default active.
     expect(screen.getByRole('button', { name: '1h' }).className).toContain('active');
 
+    // ALL links are logged, but non-eyeball ones (transit Cogent) start HIDDEN by default.
+    const cogent = () => screen.getByText('Cogent PKW Et4').closest('button')!;
+    expect(cogent().className).toContain('off');
+    // Eyeball networks are listed FIRST in the key.
+    const chips = screen.getAllByText(/(CTW|PKW) (Et|Po)/).map((el) => el.textContent);
+    expect(chips.indexOf('Eir CTW Et1')).toBeLessThan(chips.indexOf('Cogent PKW Et4'));
+
+    // "All" reveals the transit link; the "Eyeball" button hides the non-eyeball links again.
+    fireEvent.click(screen.getByRole('button', { name: 'All' }));
+    expect(cogent().className).not.toContain('off');
+    fireEvent.click(screen.getByRole('button', { name: 'Eyeball' }));
+    expect(cogent().className).toContain('off');
+
     // The legend doubles as a PNI filter — clicking a chip toggles that series off.
     fireEvent.click(screen.getByText('Eir CTW Et1'));
     expect(screen.getByText('Eir CTW Et1').closest('button')!.className).toContain('off');
