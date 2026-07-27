@@ -26,9 +26,12 @@ describe('computeDeliverySplit', () => {
     );
     const byLabel = Object.fromEntries(split.slices.map((s) => [s.label, s]));
     expect(byLabel['Eir'].bps).toBe(5e9);
+    expect(byLabel['Eir'].links).toBe(2); // two Eir PNIs summed (transparent multi-link)
     expect(byLabel['Eir'].kind).toBe('eyeball');
     expect(byLabel['Eir'].platform).toBe('Réalta');
     expect(byLabel['Sky'].bps).toBe(4e9);
+    expect(byLabel['Sky'].links).toBe(1);
+    expect(byLabel['Fastly'].links).toBe(2); // two Fastly services summed
     expect(byLabel['INEX'].bps).toBe(6e9);
     expect(byLabel['INEX'].kind).toBe('ix');       // public peering, kept distinct from PNI
     expect(byLabel['INEX'].platform).toBe('Réalta');

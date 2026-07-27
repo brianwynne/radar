@@ -73,7 +73,7 @@ export function DeliveryPie() {
             ) : (
               segments.map((seg) => (
                 <path key={seg.s.label} d={donutSeg(seg.a0, seg.a1, R, r, cx, cy)} fill={seg.colour}>
-                  <title>{seg.s.label}: {formatBps(seg.s.bps)} ({Math.round(seg.frac * 100)}%)</title>
+                  <title>{seg.s.label}: {formatBps(seg.s.bps)} ({Math.round(seg.frac * 100)}%){seg.s.links > 1 ? ` · summed over ${seg.s.links} ${seg.s.kind === 'commercial' ? 'services' : 'links'}` : ''}</title>
                 </path>
               ))
             )}
@@ -101,6 +101,7 @@ export function DeliveryPie() {
                   {seg.s.label}
                   {seg.s.kind === 'eyeball' && <span className="muted"> · Réalta PNI</span>}
                   {seg.s.kind === 'ix' && <span className="muted"> · Réalta · public peering</span>}
+                  {seg.s.links > 1 && <span className="muted"> · {seg.s.links} {seg.s.kind === 'commercial' ? 'services' : 'links'}</span>}
                 </span>
                 <span className="delivery-legend-val">{formatBps(seg.s.bps)} <span className="muted">{Math.round(seg.frac * 100)}%</span></span>
               </li>
