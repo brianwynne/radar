@@ -36,6 +36,23 @@ const NAV = [
 // principal chip, rather than among the main navigation.
 const INTEGRATIONS_NAV = { to: '/network/connection', label: 'Integrations', perm: 'connector.manage', end: false };
 
+// The live data source named in the top banner, per route. Most-specific prefixes first (so
+// /network/connection — configuration, no live-data banner — wins over /network). Pages not listed
+// default to NS1 Connect (Dashboard, Live Steering, NS1 Explorer, …). A page may still override the
+// banner entirely via usePageBanner (e.g. Commercial CDN's live-serving status).
+const LIVE_SOURCE: { prefix: string; source: string | null }[] = [
+  { prefix: '/network/connection', source: null }, // Integrations: config, not a live feed
+  { prefix: '/network', source: 'CloudVision' },
+  { prefix: '/load-balancing', source: 'Cloudflare Load Balancing' },
+  { prefix: '/realta-cache', source: 'Cloudflare Load Balancing' },
+  { prefix: '/bgp-intelligence', source: 'RIPE RIS' },
+  { prefix: '/cdn', source: 'Commercial CDN delivery' },
+];
+function liveSourceFor(pathname: string): string | null {
+  const hit = LIVE_SOURCE.find((e) => pathname === e.prefix || pathname.startsWith(`${e.prefix}/`));
+  return hit ? hit.source : 'NS1 Connect';
+}
+
 export function AppShell() {
   const { principal, hasPermission } = useAuth();
   const [mode, setMode] = useState<Ns1Status | null>(null);
@@ -191,9 +208,9 @@ export function AppShell() {
         )}
         </div>
       </header>
-      {(pageBanner || (mode && mode.mode !== 'mock')) && (
+      {(pageBanner || (mode && mode.mode !== 'mock' && liveSourceFor(location.pathname))) && (
         <div className={`mode-banner ${pageBanner ? 'page' : 'live'}`} role="status">
-          {pageBanner ?? 'LIVE — read-only NS1 Connect data.'}
+          {pageBanner ?? `LIVE — read-only ${liveSourceFor(location.pathname)} data.`}
         </div>
       )}
       <SetPageBanner.Provider value={setPageBanner}>
