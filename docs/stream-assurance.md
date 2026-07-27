@@ -36,18 +36,29 @@ origin host), **not** `CDN_EDGE_STALE`. Remediation calls out aligning the forwa
 the origin hostname. This exact scenario is covered by an automated test
 (`test/stream-assurance/classify.test.ts`).
 
+### Stage 2 — SSRF‑guarded connect‑to probe (DONE, `apps/api/src/stream-assurance/`, on branch `feature/stream-assurance`)
+
+The connector‑execution layer that turns the engine into something that observes real endpoints:
+
+| Module | Responsibility |
+|--------|----------------|
+| `ssrf.ts` | Target validation before any connection: rejects loopback / link‑local / cloud‑metadata / private ranges unless the endpoint is an explicitly‑approved **managed internal** endpoint AND policy permits it; optional host allowlist. Pure — no DNS, no sockets. |
+| `probe.ts` | The **`curl --connect-to` equivalent**: fetches a public URL while dialling a chosen target host/IP. TLS verification stays ON and the cert is validated against the public hostname via **SNI**; only the TCP destination and the forwarded **Host** header are overridden. Strict timeout + max‑size bounds; never disables verification or mutates global DNS. |
+| `observe.ts` | Validate (SSRF) → probe → parse with `@radar/engine` → build `EndpointObservation` → `classifyCrossCdn`. All standards/DRM/classification stays in the engine. |
+
+Proven by an **end‑to‑end integration test** (`test/stream-assurance/observe.integration.test.ts`):
+two mock "CDNs" backed by one origin that returns a different object per forwarded Host; the probe
+fetches each, the engine extracts the real KIDs and the set is classified `ORIGIN_VARIANT_MISMATCH`
+— reproducing the incident through real HTTP, plus an SSRF‑block test.
+
 ### Later stages (scoped, not yet built)
 
-Defined interfaces exist or are trivial to add on top of the engine:
+Defined interfaces exist or are trivial to add on top of the engine + probe:
 
 - **Persistence** — `radar-data` migration + repositories for stream profiles, endpoint
   definitions, probe runs, per‑endpoint observations, manifest/representation/init/media/DRM
   observations, rule results, cross‑CDN/cross‑protocol comparisons, findings, expected‑KID
   windows, acknowledgements, audit; retention + cleanup jobs. Bounded evidence only (no media).
-- **Probe worker** — per‑endpoint HTTP transport that preserves the public URL/SNI while dialling
-  a chosen target (the `curl --connect-to` equivalent) with TLS verification kept on; **SSRF
-  controls**: admin‑only targets, host/IP allowlist, reject loopback/link‑local/metadata/private
-  unless explicitly managed, strict timeouts/redirect/size limits.
 - **Scheduler** — normal (30–60 s) / event‑key‑rotation (≤5 s, auto‑expiring) / full‑conformance
   modes; alert state machine `observed → pending → active → acknowledged → resolved` with
   consecutive‑failure thresholds and propagation grace.
