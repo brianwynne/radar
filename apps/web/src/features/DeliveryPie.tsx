@@ -34,7 +34,7 @@ export function DeliveryPie() {
       .then((d) => { if (active) { setData(d); setError(null); } })
       .catch((e) => { if (active) setError(e instanceof ApiError ? e.message : 'Failed to load delivery data.'); });
     load();
-    const id = setInterval(load, 15_000);
+    const id = setInterval(load, 10_000); // matches the CloudVision poll cadence
     return () => { active = false; clearInterval(id); };
   }, []);
 
@@ -58,7 +58,7 @@ export function DeliveryPie() {
     <section className="card delivery-pie">
       <div className="delivery-pie-head">
         <h2 style={{ margin: 0 }}>Live delivery mix</h2>
-        <span className="muted">Réalta to each eyeball network + commercial CDNs · updates every 15s</span>
+        <span className="muted">Réalta to each eyeball network + commercial CDNs · updates every 10s</span>
       </div>
 
       {error && <div className="notice info">{error} The delivery mix needs CloudVision and the commercial-CDN connectors.</div>}

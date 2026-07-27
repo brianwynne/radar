@@ -13,6 +13,8 @@ describe('Dashboard', () => {
     expect(await screen.findByRole('heading', { name: /NOC Overview/i })).toBeInTheDocument();
     // Live delivery pie: total live throughput + the eyeball/commercial slices + 1-hour average.
     expect(await screen.findByRole('heading', { name: 'Live delivery mix' })).toBeInTheDocument();
+    // Wait for the async delivery data to load (the per-link utilisation only renders once it has).
+    expect(await screen.findByText('2.2%')).toBeInTheDocument(); // Eir citywest link utilisation
     const pie = screen.getByRole('heading', { name: 'Live delivery mix' }).closest('.delivery-pie') as HTMLElement;
     expect(pie).toHaveTextContent('Eir');
     expect(pie).toHaveTextContent('INEX'); // public IX peering slice
@@ -21,7 +23,6 @@ describe('Dashboard', () => {
     expect(pie).toHaveTextContent('PNI links');
     expect(pie).toHaveTextContent('edge-citywest-router');
     expect(pie).toHaveTextContent('edge-parkwest-router');
-    expect(pie).toHaveTextContent('2.2%'); // Eir citywest link utilisation
     expect(pie).toHaveTextContent('Fastly');
     expect(pie).toHaveTextContent('9.5 Gb/s'); // 9.5e9 total live
     expect(await screen.findByRole('heading', { name: 'Top 10 network interfaces' })).toBeInTheDocument();
