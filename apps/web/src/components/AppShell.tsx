@@ -2,7 +2,7 @@
 // LIVE mode banner (the mock banner is intentionally suppressed — synthetic data is flagged
 // per-view by the provenance tags). Navigation hiding is cosmetic — the API enforces RBAC.
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { api } from '../api/client';
 import type { Ns1Status } from '../api/types';
@@ -41,14 +41,20 @@ export function AppShell() {
   const [mode, setMode] = useState<Ns1Status | null>(null);
   // A page may take over the top banner (e.g. the Commercial CDN page shows live-delivery status there).
   const [pageBanner, setPageBanner] = useState<ReactNode | null>(null);
+  // Mobile: the nav collapses behind a hamburger toggle; it closes on navigation.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
 
   useEffect(() => {
     api.ns1Config().then(setMode).catch(() => setMode(null));
   }, []);
 
+  useEffect(() => { setMenuOpen(false); }, [location.pathname]);
+
   return (
     <div className="shell">
       <header className="topbar">
+        <div className="topbar-bar">
         <div className="brand">
           {/* Animated radar: a blue beam sweeping across the island of Ireland (green coastline).
               The outline is a real Ireland silhouette (32-county coastline dissolved to a single
@@ -136,6 +142,21 @@ export function AppShell() {
           </svg>
           <span className="brand-name">RaDAR<small>Réalta Delivery Analysis &amp; Routing</small></span>
         </div>
+        <button
+          type="button"
+          className="nav-toggle"
+          aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+          aria-expanded={menuOpen}
+          onClick={() => setMenuOpen((v) => !v)}
+        >
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+            {menuOpen
+              ? <><line x1="6" y1="6" x2="18" y2="18" /><line x1="6" y1="18" x2="18" y2="6" /></>
+              : <><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" /></>}
+          </svg>
+        </button>
+        </div>
+        <div className={`topbar-menu${menuOpen ? ' open' : ''}`}>
         <nav className="nav">
           {NAV.filter((n) => hasPermission(n.perm)).map((n) => (
             <NavLink key={n.to} to={n.to} end={n.end} className={({ isActive }) => (isActive ? 'active' : '')}>
@@ -168,6 +189,7 @@ export function AppShell() {
             <div>{AUTH_METHOD_LABEL[principal.authenticationMethod] ?? principal.authenticationMethod}</div>
           </div>
         )}
+        </div>
       </header>
       {(pageBanner || (mode && mode.mode !== 'mock')) && (
         <div className={`mode-banner ${pageBanner ? 'page' : 'live'}`} role="status">

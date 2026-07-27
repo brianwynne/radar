@@ -37,6 +37,14 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
   background: var(--bg); color: #fff; display: flex; align-items: center; gap: 1.25rem;
   padding: 0.6rem 1.25rem;
 }
+.topbar-bar { display: flex; align-items: center; }
+.topbar-menu { display: flex; align-items: center; gap: 1.25rem; flex: 1; }
+/* Hamburger — desktop hides it; the mobile media query below reveals it and collapses the menu. */
+.nav-toggle {
+  display: none; align-items: center; justify-content: center; background: none; cursor: pointer;
+  color: #fff; border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 8px; padding: 0.3rem 0.4rem;
+}
+.nav-toggle:hover { background: rgba(255, 255, 255, 0.1); }
 .brand { display: flex; align-items: center; gap: 0.55rem; font-weight: 700; letter-spacing: 0.02em; font-size: 1.05rem; }
 .brand-logo { flex: none; color: var(--accent, #4aa3ff); }
 .brand-name { display: inline-flex; flex-direction: column; line-height: 1.1; }
@@ -60,6 +68,33 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .role-chip {
   display: inline-block; background: rgba(255,255,255,0.12); color: #dbe6f5;
   border-radius: 999px; padding: 0.05rem 0.5rem; font-size: 0.7rem; margin-left: 0.35rem;
+}
+
+/* Mobile: the header stacks — brand + hamburger on top, the nav/Integrations/principal collapse
+   into a tappable dropdown that opens on toggle and closes on navigation. */
+@media (max-width: 860px) {
+  .topbar { flex-wrap: wrap; gap: 0; padding: 0.6rem 1rem; }
+  .topbar-bar { flex: 1 0 100%; justify-content: space-between; }
+  .nav-toggle { display: inline-flex; }
+  .topbar-menu { flex: 1 0 100%; display: none; }
+  .topbar-menu.open { display: flex; flex-direction: column; align-items: stretch; gap: 0.15rem; padding-top: 0.6rem; }
+  .nav { flex-direction: column; flex: none; margin-left: 0; gap: 0.1rem; }
+  .nav a { padding: 0.65rem 0.6rem; border-radius: 8px; font-size: 0.98rem; }
+  .nav-aux { margin-right: 0; justify-content: flex-start; padding: 0.65rem 0.6rem; font-size: 0.98rem; }
+  .brand small { font-size: 0.64rem; }
+  .principal {
+    text-align: left; padding: 0.7rem 0.6rem 0.2rem; margin-top: 0.25rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+  }
+  .role-chip { margin-left: 0; margin-right: 0.35rem; }
+
+  /* Content: tighter gutters, calmer heading scale, and no sideways page scroll on small screens. */
+  .content { padding: 1rem 0.85rem; }
+  .page > h1, .page-head h1 { font-size: 1.5rem; }
+  .page > h2, .page > .section-head { margin-top: 1.6rem; }
+  .card { padding: 0.85rem; }
+  .subtabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+  .subtab { white-space: nowrap; }
 }
 
 .mode-banner {
