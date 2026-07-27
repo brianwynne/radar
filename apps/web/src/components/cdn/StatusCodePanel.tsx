@@ -25,11 +25,22 @@ export interface StatusCodePanelProps {
 }
 
 const CLASSES = [
-  { key: 'status2xx', label: '2xx', digit: '2', tone: 'ok' as const },
-  { key: 'status3xx', label: '3xx', digit: '3', tone: 'neutral' as const },
-  { key: 'status4xx', label: '4xx', digit: '4', tone: 'warn' as const },
-  { key: 'status5xx', label: '5xx', digit: '5', tone: 'crit' as const },
+  { key: 'status2xx', label: '2xx', digit: '2', tone: 'ok' as const, meaning: 'Success' },
+  { key: 'status3xx', label: '3xx', digit: '3', tone: 'neutral' as const, meaning: 'Redirection' },
+  { key: 'status4xx', label: '4xx', digit: '4', tone: 'warn' as const, meaning: 'Client error' },
+  { key: 'status5xx', label: '5xx', digit: '5', tone: 'crit' as const, meaning: 'Server error' },
 ] as const;
+
+// HTTP reason phrases beside each code so the cryptic numbers (206, 416, 523…) are self-explanatory.
+// Includes the CDN-relevant range plus the Cloudflare 52x edge codes. Unknown codes show no phrase.
+const REASON: Record<string, string> = {
+  '200': 'OK', '201': 'Created', '202': 'Accepted', '204': 'No Content', '206': 'Partial Content',
+  '301': 'Moved Permanently', '302': 'Found', '303': 'See Other', '304': 'Not Modified', '307': 'Temporary Redirect', '308': 'Permanent Redirect',
+  '400': 'Bad Request', '401': 'Unauthorized', '403': 'Forbidden', '404': 'Not Found', '405': 'Method Not Allowed', '408': 'Request Timeout', '409': 'Conflict', '410': 'Gone', '412': 'Precondition Failed', '416': 'Range Not Satisfiable', '421': 'Misdirected Request', '429': 'Too Many Requests', '451': 'Unavailable For Legal Reasons', '499': 'Client Closed Request',
+  '500': 'Internal Server Error', '501': 'Not Implemented', '502': 'Bad Gateway', '503': 'Service Unavailable', '504': 'Gateway Timeout', '505': 'HTTP Version Not Supported', '507': 'Insufficient Storage', '508': 'Loop Detected',
+  '520': 'Unknown Error (edge)', '521': 'Web Server Is Down', '522': 'Connection Timed Out', '523': 'Origin Is Unreachable', '524': 'A Timeout Occurred', '525': 'SSL Handshake Failed', '526': 'Invalid SSL Certificate',
+};
+const reasonOf = (code: string): string => REASON[code] ?? '';
 
 const fmt = (n: number | null): string => (n === null ? '—' : n.toLocaleString());
 
@@ -61,7 +72,7 @@ export function StatusCodePanel({ points, cadenceLabel, live }: StatusCodePanelP
               aria-expanded={isOpen}
               onClick={() => setExpanded(isOpen ? null : c.label)}
             >
-              <div className="muted" style={{ fontSize: '0.72rem' }}>{c.label}</div>
+              <div className="muted" style={{ fontSize: '0.72rem' }}>{c.label} <span style={{ opacity: 0.7 }}>· {c.meaning}</span></div>
               <div className="stat" style={{ lineHeight: 1.1, fontSize: '1.1rem' }}>{fmt(value)}</div>
               <div className="muted" style={{ fontSize: '0.68rem' }}>{share === null ? '' : `${share}%`}</div>
               <Sparkline data={series} width={120} height={22} ariaLabel={`${c.label} responses ${cadenceLabel}`} />
@@ -115,16 +126,18 @@ function CodeDetail({ points, classLabel }: { points: StatusCodePoint[]; classLa
       ) : (
         <>
           {rows.map((r) => (
-            <div key={r.code} className="code-row">
+            <div key={r.code} className="code-row" title={`${r.code} ${reasonOf(r.code)}`.trim()}>
               <span className="code-num">{r.code}</span>
+              <span className="muted code-reason">{reasonOf(r.code)}</span>
               <span className="code-val">{r.latest.toLocaleString()}</span>
               <span className="muted code-share">{pct(r.latest)}</span>
-              <Sparkline data={r.series} width={90} height={18} ariaLabel={`code ${r.code} trend`} />
+              <Sparkline data={r.series} width={90} height={18} ariaLabel={`code ${r.code} ${reasonOf(r.code)} trend`} />
             </div>
           ))}
           {otherTotal > 0 && (
             <div className="code-row" title="Codes in this class the CDN does not break out individually">
               <span className="code-num muted">other</span>
+              <span className="muted code-reason">(not itemised by the CDN)</span>
               <span className="code-val">{otherLatest.toLocaleString()}</span>
               <span className="muted code-share">{pct(otherLatest)}</span>
               <Sparkline data={otherSeries} width={90} height={18} ariaLabel={`other ${classLabel} trend`} />

@@ -37,12 +37,17 @@ describe('Commercial CDN page', () => {
     // Response-code panel: 2xx/3xx/4xx/5xx classes with the latest per-second values.
     for (const cls of ['2xx', '3xx', '4xx', '5xx']) expect(within(panel).getByText(cls)).toBeInTheDocument();
     expect(within(panel).getByText('573')).toBeInTheDocument(); // latest 2xx for SU-vod
+    // Each class is explained beside its label (Success / Redirection / Client error / Server error).
+    expect(within(panel).getByText('· Server error')).toBeInTheDocument();
 
     // Click the 2xx class → drill down to the individual codes (200, 206) within it.
     fireEvent.click(within(panel).getByRole('button', { name: /2xx/ }));
     expect(await within(panel).findByText('200')).toBeInTheDocument();
     expect(within(panel).getByText('206')).toBeInTheDocument();
     expect(within(panel).getByText('540')).toBeInTheDocument(); // latest 200 count
+    // The HTTP reason phrase appears beside each code (200 → OK, 206 → Partial Content).
+    expect(within(panel).getByText('OK')).toBeInTheDocument();
+    expect(within(panel).getByText('Partial Content')).toBeInTheDocument();
 
     // Both services are present (in the filter and the compact table); no token leaks anywhere.
     expect(within(fastly).getAllByText('RTÉ Live').length).toBeGreaterThan(0);
