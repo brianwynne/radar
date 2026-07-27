@@ -27,6 +27,9 @@ describe('computeDeliverySplit', () => {
     const byLabel = Object.fromEntries(split.slices.map((s) => [s.label, s]));
     expect(byLabel['Eir'].bps).toBe(5e9);
     expect(byLabel['Eir'].links).toBe(2); // two Eir PNIs summed (transparent multi-link)
+    // Aggregate utilisation = total delivery ÷ total capacity across both links (NOT mix share).
+    expect(byLabel['Eir'].capacityBps).toBe(200e9);
+    expect(byLabel['Eir'].utilisationPercent).toBe(2.5); // 5 Gb/s ÷ 200 Gb/s
     // Per-link detail: both links with their delivery utilisation (out-bps ÷ capacity).
     expect(byLabel['Eir'].linkDetails).toHaveLength(2);
     expect(byLabel['Eir'].linkDetails[0]).toMatchObject({ device: 'edge-citywest-router', bps: 3e9, capacityBps: 100e9, utilisationPercent: 3 });

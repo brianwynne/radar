@@ -22,9 +22,14 @@ export interface DeliverySlice {
   /** How many links/services were summed into `bps` — so a multi-link PNI (e.g. Eir 2× PNIs at
    *  different utilisation) is transparent: the value is the sum of each link's real throughput. */
   links: number;
+  /** Total configured capacity across the slice's links (PNI/IX only; null if unknown). */
+  capacityBps?: number | null;
+  /** AGGREGATE delivery utilisation = bps ÷ capacityBps (PNI/IX only). This is "% of capacity
+   *  consumed" — distinct from the pie slice's share of the total delivery mix. e.g. Eir 34 Gb/s
+   *  over 2×100 Gb/s = 17% utilised, even though it may be ~32% of the delivery MIX. */
+  utilisationPercent?: number | null;
   /** Per-link breakdown (PNI/IX slices only): each contributing link with its delivery throughput,
-   *  configured capacity, and delivery utilisation (out-bps ÷ capacity). Lets a 2-link PNI show both
-   *  links and each link's real % utilisation, rather than one aggregate figure. */
+   *  configured capacity, and delivery utilisation (out-bps ÷ capacity). */
   linkDetails?: DeliveryLink[];
 }
 
@@ -75,12 +80,18 @@ export function computeDeliverySplit(
     // Delivery utilisation = outbound bit-rate ÷ configured capacity (the delivery direction).
     utilisationPercent: i.speedBps && i.speedBps > 0 ? ((i.outBps ?? 0) / i.speedBps) * 100 : null,
   });
-  const sliceFrom = (label: string, kind: 'eyeball' | 'ix', ifaces: NetworkInterface[]): DeliverySlice => ({
-    label, kind, platform: 'Réalta',
-    bps: ifaces.reduce((s, i) => s + (i.outBps ?? 0), 0),
-    links: ifaces.length,
-    linkDetails: ifaces.map(linkDetail).sort((a, b) => b.bps - a.bps),
-  });
+  const sliceFrom = (label: string, kind: 'eyeball' | 'ix', ifaces: NetworkInterface[]): DeliverySlice => {
+    const bps = ifaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
+    const caps = ifaces.map((i) => i.speedBps).filter((c): c is number => c != null && c > 0);
+    const capacityBps = caps.length > 0 ? caps.reduce((s, c) => s + c, 0) : null;
+    // Aggregate utilisation = total delivery ÷ total capacity (both links), NOT the pie mix-share.
+    const utilisationPercent = capacityBps && capacityBps > 0 ? (bps / capacityBps) * 100 : null;
+    return {
+      label, kind, platform: 'Réalta', bps, links: ifaces.length,
+      capacityBps, utilisationPercent,
+      linkDetails: ifaces.map(linkDetail).sort((a, b) => b.bps - a.bps),
+    };
+  };
 
   // Réalta eyeball delivery: eyeball PNIs grouped by provider (Eir, Sky, …).
   const byEyeball = groupLinks((lt) => lt === 'PRIVATE_PEERING', (provider, name) => (EYEBALL.test(provider ?? name) ? (provider ?? name) : ''));

@@ -602,12 +602,12 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/ns1/active-record')) body = { provenance: PROV, entry: 'live.rte.ie', target: 'live.rte.ie', active: { zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }, filterCount: 2, warnings: [] };
       else if (p.endsWith('/dashboard/delivery')) body = {
         live: { slices: [
-          { label: 'Eir', kind: 'eyeball', platform: 'Réalta', bps: 4e9, links: 2, linkDetails: [
+          { label: 'Eir', kind: 'eyeball', platform: 'Réalta', bps: 4e9, links: 2, capacityBps: 200e9, utilisationPercent: 2, linkDetails: [
             { device: 'edge-citywest-router', iface: 'Port-Channel7', bps: 2.2e9, capacityBps: 100e9, utilisationPercent: 2.2 },
             { device: 'edge-parkwest-router', iface: 'Port-Channel7', bps: 1.8e9, capacityBps: 100e9, utilisationPercent: 1.8 },
           ] },
-          { label: 'Sky', kind: 'eyeball', platform: 'Réalta', bps: 2e9, links: 1, linkDetails: [{ device: 'edge-citywest-router', iface: 'Port-Channel4', bps: 2e9, capacityBps: 100e9, utilisationPercent: 2 }] },
-          { label: 'INEX', kind: 'ix', platform: 'Réalta', bps: 2e9, links: 2, linkDetails: [
+          { label: 'Sky', kind: 'eyeball', platform: 'Réalta', bps: 2e9, links: 1, capacityBps: 100e9, utilisationPercent: 2, linkDetails: [{ device: 'edge-citywest-router', iface: 'Port-Channel4', bps: 2e9, capacityBps: 100e9, utilisationPercent: 2 }] },
+          { label: 'INEX', kind: 'ix', platform: 'Réalta', bps: 2e9, links: 2, capacityBps: 200e9, utilisationPercent: 1, linkDetails: [
             { device: 'edge-citywest-router', iface: 'Port-Channel1', bps: 1.2e9, capacityBps: 100e9, utilisationPercent: 1.2 },
             { device: 'edge-parkwest-router', iface: 'Port-Channel2', bps: 0.8e9, capacityBps: 100e9, utilisationPercent: 0.8 },
           ] },

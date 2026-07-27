@@ -27,6 +27,11 @@ function donutSeg(a0: number, a1: number, R: number, r: number, cx: number, cy: 
 export function DeliveryPie() {
   const [data, setData] = useState<DashboardDeliveryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Per-PNI link detail is collapsed by default; a chip expands it.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (label: string) => setExpanded((s) => {
+    const n = new Set(s); if (n.has(label)) n.delete(label); else n.add(label); return n;
+  });
 
   useEffect(() => {
     let active = true;
@@ -103,34 +108,54 @@ export function DeliveryPie() {
                   {seg.s.kind === 'ix' && <span className="muted"> · Réalta · public peering</span>}
                   {seg.s.links > 1 && <span className="muted"> · {seg.s.links} {seg.s.kind === 'commercial' ? 'services' : 'links'}</span>}
                 </span>
-                <span className="delivery-legend-val">{formatBps(seg.s.bps)} <span className="muted">{Math.round(seg.frac * 100)}%</span></span>
+                <span className="delivery-legend-val">{formatBps(seg.s.bps)} <span className="muted">{Math.round(seg.frac * 100)}% share</span></span>
               </li>
             ))}
           </ul>
         </div>
       </div>
 
-      {/* Per-link utilisation for multi-link PNIs — both links and each one's real % utilisation
-          (delivery out-bps ÷ capacity), so a 2×PNI network isn't collapsed to one figure. */}
-      {segments.some((seg) => (seg.s.linkDetails?.length ?? 0) > 1) && (
+      {/* PNI utilisation — each PNI's AGGREGATE % consumed (total delivery ÷ total capacity across
+          its links; distinct from the pie's mix share). A chip expands the per-link detail (both
+          links + each link's % utilisation); collapsed by default. */}
+      {segments.some((seg) => seg.s.kind === 'eyeball' || seg.s.kind === 'ix') && (
         <div className="delivery-links">
-          <div className="delivery-links-title">PNI links · utilisation</div>
-          {segments.filter((seg) => (seg.s.linkDetails?.length ?? 0) > 1).map((seg) => (
-            <div key={seg.s.label} className="delivery-link-group">
-              <div className="delivery-link-net">
-                <span className="delivery-dot" style={{ background: seg.colour }} />
-                <strong>{seg.s.label}</strong>
-                <span className="muted"> · {seg.s.links} links · {formatBps(seg.s.bps)} total</span>
-              </div>
-              {seg.s.linkDetails!.map((l) => (
-                <div key={`${l.device}·${l.iface}`} className="delivery-link-row">
-                  <span className="delivery-link-name">{l.device} <span className="muted">{l.iface}</span></span>
-                  <span className="delivery-link-bw">{formatBps(l.bps)} <span className="muted">/ {formatBps(l.capacityBps)}</span></span>
-                  <span className="delivery-link-util">{formatPercent(l.utilisationPercent)}</span>
+          <div className="delivery-links-title">PNI utilisation <span className="muted">· % of capacity consumed</span></div>
+          <div className="pni-grid">
+            {segments.filter((seg) => seg.s.kind === 'eyeball' || seg.s.kind === 'ix').map((seg) => {
+              const s = seg.s;
+              const multi = (s.linkDetails?.length ?? 0) > 1;
+              const open = expanded.has(s.label);
+              return (
+                <div key={s.label} className={`pni-card${open ? ' open' : ''}`}>
+                  <button
+                    type="button"
+                    className="pni-card-head"
+                    onClick={() => multi && toggle(s.label)}
+                    aria-expanded={multi ? open : undefined}
+                    style={{ cursor: multi ? 'pointer' : 'default' }}
+                  >
+                    <span className="delivery-dot" style={{ background: seg.colour }} />
+                    <span className="pni-card-name">{s.label}{s.kind === 'ix' && <span className="muted"> · IX</span>}</span>
+                    <span className="pni-card-util">{formatPercent(s.utilisationPercent)}</span>
+                    {multi && <span className="pni-chip">{open ? '▾' : '▸'} {s.links}</span>}
+                  </button>
+                  <div className="pni-card-sub">{formatBps(s.bps)} <span className="muted">of {formatBps(s.capacityBps)}</span></div>
+                  {multi && open && (
+                    <div className="pni-links">
+                      {s.linkDetails!.map((l) => (
+                        <div key={`${l.device}·${l.iface}`} className="delivery-link-row">
+                          <span className="delivery-link-name">{l.device} <span className="muted">{l.iface}</span></span>
+                          <span className="delivery-link-bw">{formatBps(l.bps)} <span className="muted">/ {formatBps(l.capacityBps)}</span></span>
+                          <span className="delivery-link-util">{formatPercent(l.utilisationPercent)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
       )}
 

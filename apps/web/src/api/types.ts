@@ -1501,7 +1501,7 @@ export interface RisEvent { id: string; kind: 'announcement' | 'withdrawal'; pre
 // Dashboard delivery split (pie): live delivery to each eyeball network (Réalta) + commercial CDNs,
 // with the total live throughput and a 1-hour average from persisted samples.
 export interface DeliveryLink { device: string; iface: string; bps: number; capacityBps: number | null; utilisationPercent: number | null }
-export interface DeliverySlice { label: string; kind: 'eyeball' | 'ix' | 'commercial'; platform: 'Réalta' | 'Fastly' | 'Akamai'; bps: number; links: number; linkDetails?: DeliveryLink[] }
+export interface DeliverySlice { label: string; kind: 'eyeball' | 'ix' | 'commercial'; platform: 'Réalta' | 'Fastly' | 'Akamai'; bps: number; links: number; capacityBps?: number | null; utilisationPercent?: number | null; linkDetails?: DeliveryLink[] }
 export interface DashboardDeliveryResponse {
   live: { slices: DeliverySlice[]; realtaBps: number; commercialBps: number; totalBps: number };
   average: { avgRealtaBps: number | null; avgCommercialBps: number | null; avgTotalBps: number | null; sampleCount: number; windowMinutes: number };
