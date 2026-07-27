@@ -617,6 +617,7 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
         average: { avgRealtaBps: 7.7e9, avgCommercialBps: 1.5e9, avgTotalBps: 9.2e9, sampleCount: 120, windowMinutes: 60 },
       };
       else if (p.endsWith('/stream-assurance/rules')) body = { count: 1, rules: [{ id: 'SA-CDN-001', severity: 'critical', standard: 'RADAR delivery consistency', section: null, description: 'origin-variant / forwarded-Host mismatch', remediation: 'Align the forwarded Host with the origin hostname.' }] };
+      else if (p.includes('/stream-assurance/alerts')) body = { count: 1, alerts: [{ id: 'rte-one:akamai-edge:SA-CDN-001:ORIGIN_VARIANT_MISMATCH', profileId: 'rte-one', endpointId: 'akamai-edge', ruleId: 'SA-CDN-001', classification: 'ORIGIN_VARIANT_MISMATCH', severity: 'critical', state: 'active', occurrences: 3, firstObserved: '2026-07-27T20:00:00Z', lastObserved: '2026-07-27T21:00:00Z', explanation: 'akamai fetched from origin due to a Host mismatch.', remediation: 'Align the forwarded Host with the origin hostname.' }], eventModeProfiles: [] };
       else if (p.endsWith('/stream-assurance/profiles')) body = { count: 1, profiles: [{ id: 'rte-one', name: 'RTÉ One', enabled: true, tags: ['production'], endpointCount: 2, updatedAt: '2026-07-27T21:00:00Z' }] };
       else if (p.includes('/stream-assurance/profiles/') && p.endsWith('/latest')) body = { run: {
         id: 'run-1', profileId: 'rte-one', startedAt: '2026-07-27T21:00:00Z', finishedAt: '2026-07-27T21:00:02Z', mode: 'normal', status: 'findings', findingCount: 1,

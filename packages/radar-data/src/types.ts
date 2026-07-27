@@ -410,6 +410,46 @@ export interface NewStreamAssuranceRun {
   findingCount: number;
 }
 
+/** A durable alert with lifecycle state, keyed by finding identity across runs. */
+export interface StreamAlertRow {
+  id: string;
+  profileId: string;
+  endpointId: string;
+  ruleId: string;
+  classification: string;
+  severity: string;
+  state: string;
+  consecutivePresent: number;
+  consecutiveAbsent: number;
+  occurrences: number;
+  firstObserved: Date;
+  lastObserved: Date;
+  explanation: string | null;
+  remediation: string | null;
+  evidence: unknown;
+  acknowledgedBy: string | null;
+  acknowledgedAt: Date | null;
+  updatedAt: Date;
+}
+export interface UpsertStreamAlert {
+  id: string;
+  profileId: string;
+  endpointId: string;
+  ruleId: string;
+  classification: string;
+  severity: string;
+  state: string;
+  consecutivePresent: number;
+  consecutiveAbsent: number;
+  occurrences: number;
+  firstObserved: Date;
+  lastObserved: Date;
+  explanation: string | null;
+  remediation: string | null;
+  evidence: unknown;
+  updatedAt: Date;
+}
+
 export interface StreamAssuranceRepository {
   upsertProfile(p: NewStreamAssuranceProfile): Promise<void>;
   listProfiles(): Promise<StreamAssuranceProfileRow[]>;
@@ -419,6 +459,14 @@ export interface StreamAssuranceRepository {
   latestRun(profileId: string): Promise<StreamAssuranceRunRow | null>;
   listRuns(profileId: string, limit?: number): Promise<StreamAssuranceRunRow[]>;
   pruneRuns(olderThan: Date): Promise<number>;
+  // Alert lifecycle
+  listAlertsByProfile(profileId: string): Promise<StreamAlertRow[]>;
+  listOpenAlerts(profileId?: string): Promise<StreamAlertRow[]>;
+  getAlert(id: string): Promise<StreamAlertRow | null>;
+  upsertAlert(a: UpsertStreamAlert): Promise<void>;
+  acknowledgeAlert(id: string, by: string): Promise<StreamAlertRow | null>;
+  resolveAlert(id: string): Promise<StreamAlertRow | null>;
+  pruneAlerts(olderThan: Date): Promise<number>;
 }
 
 // --- NS1 live-validation results (bounded history) --------------------------

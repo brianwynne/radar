@@ -12,10 +12,10 @@ describe('Stream Assurance page', () => {
     renderAt('/stream-assurance');
     expect(await screen.findByRole('heading', { name: 'Stream Assurance', level: 1 })).toBeInTheDocument();
 
-    // Latest run loads for the default-selected profile → the incident finding is shown.
-    expect(await screen.findByText('ORIGIN_VARIANT_MISMATCH')).toBeInTheDocument();
-    expect(screen.getByText('SA-CDN-001')).toBeInTheDocument();
-    expect(screen.getByText(/live\.rte\.ie/)).toBeInTheDocument(); // Host mismatch surfaced in the explanation
+    // Latest run + durable alert both surface the incident classification.
+    expect((await screen.findAllByText('ORIGIN_VARIANT_MISMATCH')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/SA-CDN-001/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/live\.rte\.ie/)).toBeInTheDocument(); // Host mismatch surfaced in the run finding
     expect(screen.getByText(/Align the CDN forwarded Host header/)).toBeInTheDocument();
 
     // Comparison table lists both endpoints and the from-origin cache evidence.
@@ -24,13 +24,21 @@ describe('Stream Assurance page', () => {
     expect(within(table).getByText('fastly-edge')).toBeInTheDocument();
     expect(within(table).getByText(/from origin/)).toBeInTheDocument();
 
-    // NOC lacks dns.explain.read → no Run-now action.
+    // Durable alerts with lifecycle state are surfaced.
+    expect(await screen.findByRole('heading', { name: /Active alerts/ })).toBeInTheDocument();
+    expect(screen.getByText('active')).toBeInTheDocument(); // alert state badge
+
+    // NOC lacks dns.explain.read → no diagnostic actions.
     expect(screen.queryByRole('button', { name: /Run now/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /acknowledge/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Event mode/ })).toBeNull();
   });
 
-  it('offers the Run-now action to a viewing engineer', async () => {
+  it('offers diagnostic actions (run, event mode, acknowledge) to a viewing engineer', async () => {
     stubApi(VE);
     renderAt('/stream-assurance');
     expect(await screen.findByRole('button', { name: /Run now/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Event mode/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /acknowledge/ })).toBeInTheDocument();
   });
 });

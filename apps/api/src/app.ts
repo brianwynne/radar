@@ -62,6 +62,7 @@ import type { DnsObservationRepository, PniBandwidthRepository, RisEventReposito
 import { dashboardRoutes } from './routes/dashboard.js';
 import { streamAssuranceRoutes } from './routes/stream-assurance.js';
 import type { StreamAssuranceService } from './stream-assurance/service.js';
+import type { StreamAssuranceScheduler } from './stream-assurance/scheduler.js';
 import type { ValidationService } from './validation/index.js';
 import type { CloudVisionPoller } from './cloudvision/poller.js';
 import type { CloudVisionSource } from './cloudvision/types.js';
@@ -115,6 +116,7 @@ export interface BuildDeps extends AuthDeps {
   deliverySampleRepository?: DeliverySampleRepository;
   streamAssuranceRepository?: StreamAssuranceRepository;
   streamAssuranceService?: StreamAssuranceService;
+  streamAssuranceScheduler?: StreamAssuranceScheduler;
   atlasManager?: ResolverManager;
 }
 
@@ -271,7 +273,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(bgpToolsConnectionRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager });
   await app.register(ripeRoutes, { prefix: '/api/v1', service: deps.ripeService, history: deps.risEventRepository });
   await app.register(dashboardRoutes, { prefix: '/api/v1', cloudVisionPoller: deps.cloudVisionPoller, fastlyPoller: deps.fastlyPoller, akamaiConnector: deps.akamaiConnector, deliveryRepo: deps.deliverySampleRepository });
-  await app.register(streamAssuranceRoutes, { prefix: '/api/v1', repo: deps.streamAssuranceRepository, service: deps.streamAssuranceService, audit: deps.database?.audit });
+  await app.register(streamAssuranceRoutes, { prefix: '/api/v1', repo: deps.streamAssuranceRepository, service: deps.streamAssuranceService, scheduler: deps.streamAssuranceScheduler, audit: deps.database?.audit });
   await app.register(resolverRoutes, { prefix: '/api/v1', manager: deps.atlasManager ?? createAtlasManager(loadAtlasConfig()) });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.

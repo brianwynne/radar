@@ -40,6 +40,8 @@ export type {
   StreamAssuranceRunRow,
   NewStreamAssuranceRun,
   StreamAssuranceRepository,
+  StreamAlertRow,
+  UpsertStreamAlert,
   ValidationResultRecord,
   NewValidationResult,
   ValidationResultQuery,

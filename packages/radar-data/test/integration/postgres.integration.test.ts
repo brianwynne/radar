@@ -83,7 +83,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
 
     it('bootstraps schema_migrations, applies migrations in lexical order with timing', async () => {
       const applied = await migrate();
-      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations', '0005_connector_settings', '0006_bgptools', '0007_pni_bandwidth', '0008_pni_bandwidth_classification', '0009_ris_events', '0010_delivery_samples', '0011_stream_assurance']);
+      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations', '0005_connector_settings', '0006_bgptools', '0007_pni_bandwidth', '0008_pni_bandwidth_classification', '0009_ris_events', '0010_delivery_samples', '0011_stream_assurance', '0012_stream_assurance_alerts']);
       const cols = await pool.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'schema_migrations'`,
       );
@@ -167,9 +167,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
         }
       };
       const [a, b] = await Promise.all([runOnce(), runOnce()]);
-      expect([a.length, b.length].sort()).toEqual([0, 11]); // one applied all, the other found them applied
+      expect([a.length, b.length].sort()).toEqual([0, 12]); // one applied all, the other found them applied
       const count = await pool.query<{ n: number }>('SELECT count(*)::int n FROM schema_migrations');
-      expect(count.rows[0].n).toBe(11); // no duplicate
+      expect(count.rows[0].n).toBe(12); // no duplicate
     });
 
     it('releases the advisory lock after success and after failure', async () => {

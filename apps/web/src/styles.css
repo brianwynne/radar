@@ -123,6 +123,8 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .sa-profile .muted { font-size: 0.74rem; }
 .sa-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
 .sa-detail-actions { display: inline-flex; align-items: center; gap: 0.75rem; font-size: 0.8rem; }
+.sa-alerts { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1.25rem; }
+.sa-alerts .linklike { margin-left: auto; font-size: 0.78rem; }
 .sa-findings { display: flex; flex-direction: column; gap: 0.6rem; }
 .sa-finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 0.7rem 0.85rem; }
 .sa-finding.sa-sev-critical, .sa-finding.sa-sev-error { border-left-color: var(--danger); }

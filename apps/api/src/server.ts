@@ -28,6 +28,7 @@ import { PniBandwidthRecorder } from './cloudvision/pni-recorder.js';
 import { RisEventRecorder } from './ripe/ris-event-recorder.js';
 import { DeliveryRecorder } from './dashboard/delivery-recorder.js';
 import { StreamAssuranceService } from './stream-assurance/service.js';
+import { StreamAssuranceScheduler } from './stream-assurance/scheduler.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -185,6 +186,9 @@ async function main(): Promise<void> {
     allowManagedInternal: process.env.SA_ALLOW_MANAGED_INTERNAL === 'true',
     allowHosts: (process.env.SA_ALLOW_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean) || undefined,
   });
+  const streamAssuranceScheduler = new StreamAssuranceScheduler(streamAssuranceRepository, streamAssuranceService, {
+    normalIntervalMs: Number(process.env.SA_NORMAL_INTERVAL_MS) || undefined,
+  });
 
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
@@ -221,6 +225,7 @@ async function main(): Promise<void> {
     deliverySampleRepository,
     streamAssuranceRepository,
     streamAssuranceService,
+    streamAssuranceScheduler,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -238,6 +243,7 @@ async function main(): Promise<void> {
     bgpToolsManager.stop();
     risEventRecorder.stop();
     deliveryRecorder.stop();
+    streamAssuranceScheduler.stop();
     ripeService.stop();
     await app.close();
     await pool.end();
@@ -265,6 +271,7 @@ async function main(): Promise<void> {
     ripeService.start(); // self-guards: only polls RIPEstat + connects RIS Live when enabled
     if (config.ripe.enabled) risEventRecorder.start(); // drain the RIS buffer to bounded history
     deliveryRecorder.start(); // sample total delivery for the Dashboard pie's 1-hour average
+    if (process.env.SA_SCHEDULER_ENABLED === 'true') streamAssuranceScheduler.start(); // periodic stream-assurance runs (event mode is API-triggered regardless)
     app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

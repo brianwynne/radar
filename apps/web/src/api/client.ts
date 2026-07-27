@@ -13,6 +13,8 @@ import type {
   SaLatestResponse,
   SaRulesResponse,
   SaRunResponse,
+  SaAlertsResponse,
+  SaAlert,
   RipeEventsResponse,
   RisEventHistoryResponse,
   BgpToolsConnection,
@@ -304,6 +306,10 @@ export const api = {
   saLatest: (id: string) => request<SaLatestResponse>(`/api/v1/stream-assurance/profiles/${enc(id)}/latest`),
   saRules: () => request<SaRulesResponse>('/api/v1/stream-assurance/rules'),
   saRun: (id: string, mode?: string) => request<SaRunResponse>(`/api/v1/stream-assurance/profiles/${enc(id)}/run${mode ? `?mode=${enc(mode)}` : ''}`, { method: 'POST' }),
+  saAlerts: (profileId?: string) => request<SaAlertsResponse>(`/api/v1/stream-assurance/alerts${profileId ? `?profileId=${enc(profileId)}` : ''}`),
+  saAckAlert: (id: string) => request<{ alert: SaAlert }>(`/api/v1/stream-assurance/alerts/${enc(id)}/ack`, { method: 'POST' }),
+  saResolveAlert: (id: string) => request<{ alert: SaAlert }>(`/api/v1/stream-assurance/alerts/${enc(id)}/resolve`, { method: 'POST' }),
+  saEventMode: (id: string, enabled: boolean, durationMinutes?: number) => request<{ profileId: string; eventMode: boolean }>(`/api/v1/stream-assurance/profiles/${enc(id)}/event-mode`, { method: 'POST', body: JSON.stringify({ enabled, durationMinutes }) }),
 
   // RIPE BGP intelligence (read-only).
   ripeSnapshot: () => request<RipeSnapshotResponse>('/api/v1/ripe/snapshot'),

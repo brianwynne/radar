@@ -1514,6 +1514,8 @@ export interface SaCdnObservation { cdn: string; edge: string; parent: string; f
 export interface SaObservation { endpointId: string; provider: string; role: 'reference' | 'candidate'; reachable: boolean; httpStatus: number | null; kid: string | null; lastModified: string | null; cdn: SaCdnObservation; forwardedHost?: string | null; originHost?: string | null; error?: string | null }
 export interface SaFinding { ruleId: string; classification: string; severity: SaRule['severity']; endpointId: string; provider: string; protocol: string; likelyLayer: string; explanation: string; remediation: string; evidence: Record<string, unknown> }
 export interface SaRun { id: string; profileId: string; startedAt: string; finishedAt: string | null; mode: string; status: string; observations: SaObservation[]; findings: SaFinding[]; findingCount: number }
+export interface SaAlert { id: string; profileId: string; endpointId: string; ruleId: string; classification: string; severity: SaRule['severity']; state: string; occurrences: number; firstObserved: string; lastObserved: string; explanation: string | null; remediation: string | null }
+export interface SaAlertsResponse { count: number; alerts: SaAlert[]; eventModeProfiles: string[] }
 export interface SaProfilesResponse { count: number; profiles: SaProfileSummary[] }
 export interface SaLatestResponse { run: SaRun | null }
 export interface SaRunResponse { run: SaRun }

@@ -4,9 +4,10 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import type { SaFinding, SaObservation, SaProfileSummary, SaRun } from '../api/types';
+import type { SaAlert, SaFinding, SaObservation, SaProfileSummary, SaRun } from '../api/types';
 
 const sevBadge = (s: string): string => (s === 'critical' || s === 'error' ? 'danger' : s === 'warning' ? 'warn' : 'neutral');
+const stateBadge = (s: string): string => (s === 'active' ? 'danger' : s === 'acknowledged' ? 'neutral' : s === 'resolved' ? 'ok' : 'warn');
 const cacheLabel = (t: string): string => (t === 'hit' ? 'HIT' : t === 'miss' ? 'MISS' : '—');
 
 function ComparisonTable({ run }: { run: SaRun }) {
@@ -61,8 +62,15 @@ export function StreamAssurance() {
   const [profiles, setProfiles] = useState<SaProfileSummary[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [run, setRun] = useState<SaRun | null>(null);
+  const [alerts, setAlerts] = useState<SaAlert[]>([]);
+  const [eventOn, setEventOn] = useState(false);
   const [running, setRunning] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const loadAlerts = (id: string) => api.saAlerts(id)
+    .then((r) => { setAlerts(r.alerts); setEventOn(r.eventModeProfiles.includes(id)); })
+    .catch(() => { setAlerts([]); setEventOn(false); });
 
   useEffect(() => {
     api.saProfiles()
@@ -72,19 +80,30 @@ export function StreamAssurance() {
   }, []);
 
   useEffect(() => {
-    if (!selected) { setRun(null); return; }
+    if (!selected) { setRun(null); setAlerts([]); return; }
     let active = true;
     api.saLatest(selected).then((r) => { if (active) setRun(r.run); }).catch(() => { if (active) setRun(null); });
+    void loadAlerts(selected);
     return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
   const runNow = async () => {
     if (!selected) return;
     setRunning(true); setError(null);
-    try { const r = await api.saRun(selected); setRun(r.run); }
+    try { const r = await api.saRun(selected); setRun(r.run); await loadAlerts(selected); }
     catch (e) { setError(e instanceof ApiError ? e.message : 'Run failed.'); }
     finally { setRunning(false); }
   };
+
+  const act = async (fn: () => Promise<unknown>, key: string) => {
+    if (!selected) return;
+    setBusy(key); setError(null);
+    try { await fn(); await loadAlerts(selected); }
+    catch (e) { setError(e instanceof ApiError ? e.message : 'Action failed.'); }
+    finally { setBusy(null); }
+  };
+  const toggleEventMode = () => act(() => api.saEventMode(selected!, !eventOn, 30), 'event');
 
   const current = profiles?.find((p) => p.id === selected) ?? null;
 
@@ -115,10 +134,32 @@ export function StreamAssurance() {
                 <h2 style={{ margin: 0 }}>{current.name}</h2>
                 <div className="sa-detail-actions">
                   {run && <span className="muted">last run {new Date(run.startedAt).toLocaleTimeString()} · {run.findingCount} finding{run.findingCount === 1 ? '' : 's'}</span>}
+                  {eventOn && <span className="badge warn badge-sm">event mode</span>}
+                  {canRun && <button className={`btn${eventOn ? ' active' : ''}`} onClick={toggleEventMode} disabled={busy === 'event'}>{eventOn ? 'Stop event mode' : 'Event mode'}</button>}
                   {canRun && <button className="btn" onClick={runNow} disabled={running}>{running ? 'Running…' : 'Run now'}</button>}
                 </div>
               </div>
             )}
+
+            {alerts.length > 0 && (
+              <div className="sa-alerts">
+                <h3 style={{ margin: '0 0 0.5rem' }}>Active alerts <span className="muted">· {alerts.length}</span></h3>
+                {alerts.map((al) => (
+                  <div key={al.id} className={`sa-finding sa-sev-${al.severity}`}>
+                    <div className="sa-finding-head">
+                      <span className={`badge ${stateBadge(al.state)}`}>{al.state}</span>
+                      <strong>{al.classification}</strong>
+                      <span className="muted mono">{al.ruleId} · {al.endpointId}</span>
+                      <span className="muted">· seen ×{al.occurrences}</span>
+                      {canRun && al.state !== 'acknowledged' && <button className="linklike" onClick={() => act(() => api.saAckAlert(al.id), al.id)} disabled={busy === al.id}>acknowledge</button>}
+                      {canRun && <button className="linklike" onClick={() => act(() => api.saResolveAlert(al.id), al.id)} disabled={busy === al.id}>resolve</button>}
+                    </div>
+                    {al.explanation && <p className="sa-finding-explain">{al.explanation}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+
             {run ? (
               <>
                 <ComparisonTable run={run} />

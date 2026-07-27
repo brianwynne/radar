@@ -8,10 +8,12 @@ import { streamAssurance as sa } from '@radar/engine';
 import type { AuditRepository, StreamAssuranceRepository } from '@radar/data';
 import { requirePermission } from '../auth/guards.js';
 import { StreamAssuranceService, ProfileNotFoundError } from '../stream-assurance/service.js';
+import type { StreamAssuranceScheduler } from '../stream-assurance/scheduler.js';
 
 export interface StreamAssuranceRouteOptions {
   repo?: StreamAssuranceRepository;
   service?: StreamAssuranceService;
+  scheduler?: StreamAssuranceScheduler;
   audit?: Pick<AuditRepository, 'record'>;
 }
 
@@ -113,5 +115,49 @@ export const streamAssuranceRoutes: FastifyPluginAsync<StreamAssuranceRouteOptio
       if (e instanceof ProfileNotFoundError) return reply.code(404).send({ code: 'NOT_FOUND', message: e.message, correlationId: req.id });
       throw e;
     }
+  });
+
+  // Open alerts (durable lifecycle) — optionally scoped to a profile.
+  app.get('/stream-assurance/alerts', { preHandler: requirePermission('topology.summary.read'), schema: schema('Open Stream Assurance alerts') }, async (req, reply) => {
+    if (!opts.repo) return reply.code(503).send(unavailable(req.id));
+    const profileId = z.object({ profileId: z.string().max(64).optional() }).safeParse(req.query).data?.profileId;
+    const alerts = await opts.repo.listOpenAlerts(profileId);
+    const eventProfiles = opts.scheduler?.eventModeProfiles() ?? [];
+    return { count: alerts.length, alerts, eventModeProfiles: eventProfiles };
+  });
+
+  // Acknowledge / resolve an alert (viewing engineer) — audited.
+  for (const action of ['ack', 'resolve'] as const) {
+    app.post(`/stream-assurance/alerts/:id/${action}`, { preHandler: requirePermission('dns.explain.read'), schema: schema(`${action === 'ack' ? 'Acknowledge' : 'Resolve'} an alert`) }, async (req, reply) => {
+      if (!opts.repo) return reply.code(503).send(unavailable(req.id));
+      const id = (req.params as { id: string }).id;
+      const principal = req.principal!;
+      const alert = action === 'ack' ? await opts.repo.acknowledgeAlert(id, principal.subject) : await opts.repo.resolveAlert(id);
+      if (!alert) return reply.code(404).send({ code: 'NOT_FOUND', message: 'Alert not found.', correlationId: req.id });
+      await opts.audit?.record({
+        actorSubject: principal.subject, actorRoles: principal.roles, authenticationMethod: principal.authenticationMethod,
+        action: `stream-assurance.alert.${action}`, resourceType: 'record', resourceKey: id, outcome: 'success', correlationId: req.id,
+        details: { classification: alert.classification, state: alert.state },
+      });
+      return { alert };
+    });
+  }
+
+  // Start / stop event (key-rotation) mode for a profile (viewing engineer) — audited.
+  app.post('/stream-assurance/profiles/:id/event-mode', { preHandler: requirePermission('dns.explain.read'), schema: schema('Start or stop event mode') }, async (req, reply) => {
+    if (!opts.scheduler || !opts.repo) return reply.code(503).send(unavailable(req.id));
+    const id = (req.params as { id: string }).id;
+    const parsed = z.object({ enabled: z.boolean(), durationMinutes: z.number().int().min(1).max(240).optional() }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: 'Provide { enabled: boolean, durationMinutes?: number }.', correlationId: req.id });
+    if (!(await opts.repo.getProfile(id))) return reply.code(404).send({ code: 'NOT_FOUND', message: 'Profile not found.', correlationId: req.id });
+    if (parsed.data.enabled) opts.scheduler.startEventMode(id, (parsed.data.durationMinutes ?? 30) * 60_000);
+    else opts.scheduler.stopEventMode(id);
+    const principal = req.principal!;
+    await opts.audit?.record({
+      actorSubject: principal.subject, actorRoles: principal.roles, authenticationMethod: principal.authenticationMethod,
+      action: 'stream-assurance.event-mode', resourceType: 'record', resourceKey: id, outcome: 'success', correlationId: req.id,
+      details: { enabled: parsed.data.enabled, durationMinutes: parsed.data.durationMinutes ?? 30 },
+    });
+    return { profileId: id, eventMode: parsed.data.enabled };
   });
 };

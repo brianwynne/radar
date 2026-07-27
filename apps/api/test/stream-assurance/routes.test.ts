@@ -7,7 +7,8 @@ import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../../src/app.js';
 import { loadConfig } from '../../src/config.js';
 import { StreamAssuranceService } from '../../src/stream-assurance/service.js';
-import type { NewStreamAssuranceProfile, NewStreamAssuranceRun, StreamAssuranceProfileRow, StreamAssuranceRepository, StreamAssuranceRunRow } from '@radar/data';
+import { StreamAssuranceScheduler } from '../../src/stream-assurance/scheduler.js';
+import type { NewStreamAssuranceProfile, NewStreamAssuranceRun, StreamAlertRow, StreamAssuranceProfileRow, StreamAssuranceRepository, StreamAssuranceRunRow, UpsertStreamAlert } from '@radar/data';
 import { buildInit } from './init-fixture.js';
 
 const CURRENT = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -24,6 +25,14 @@ class FakeRepo implements StreamAssuranceRepository {
   async latestRun(pid: string): Promise<StreamAssuranceRunRow | null> { const r = this.runs.filter((x) => x.profileId === pid).at(-1); return r ? (r as StreamAssuranceRunRow) : null; }
   async listRuns(pid: string) { return this.runs.filter((x) => x.profileId === pid) as StreamAssuranceRunRow[]; }
   async pruneRuns() { return 0; }
+  alerts = new Map<string, StreamAlertRow>();
+  async listAlertsByProfile(pid: string) { return [...this.alerts.values()].filter((a) => a.profileId === pid); }
+  async listOpenAlerts(pid?: string) { return [...this.alerts.values()].filter((a) => a.state !== 'resolved' && (!pid || a.profileId === pid)); }
+  async getAlert(id: string) { return this.alerts.get(id) ?? null; }
+  async upsertAlert(a: UpsertStreamAlert) { const prev = this.alerts.get(a.id); this.alerts.set(a.id, { ...a, acknowledgedBy: prev?.acknowledgedBy ?? null, acknowledgedAt: prev?.acknowledgedAt ?? null } as StreamAlertRow); }
+  async acknowledgeAlert(id: string, by: string) { const a = this.alerts.get(id); if (!a || a.state === 'resolved') return a ?? null; a.state = 'acknowledged'; a.acknowledgedBy = by; a.acknowledgedAt = new Date(); return a; }
+  async resolveAlert(id: string) { const a = this.alerts.get(id); if (!a) return null; a.state = 'resolved'; return a; }
+  async pruneAlerts() { return 0; }
 }
 
 let server: http.Server; let port: number;
@@ -46,10 +55,12 @@ const seedProfile = () => repo.upsertProfile({ id: 'rte-test', name: 'RTÉ Test'
   { endpointId: 'akamai', provider: 'akamai', role: 'candidate', publicUrl: 'http://live.rte.ie/init.mp4', connectHost: '127.0.0.1', connectPort: port, hostHeader: 'live.rte.ie', managedInternal: true, originHost: 'live.rte.host' },
 ] } });
 
+const noopTimers = { setIntervalImpl: () => ({}) as never, clearIntervalImpl: () => {}, setTimeoutImpl: () => ({}) as never, clearTimeoutImpl: () => {} };
 async function app(role: string, auth = true): Promise<FastifyInstance> {
   const service = new StreamAssuranceService(repo, { allowManagedInternal: true }, { now: () => Date.parse('2026-07-27T00:00:00Z') });
+  const scheduler = new StreamAssuranceScheduler(repo, service, noopTimers);
   const a = await buildApp(loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', RADAR_DEV_AUTH: String(auth), RADAR_DEV_ROLE: role }), {
-    streamAssuranceRepository: repo, streamAssuranceService: service, database: { audit } as never,
+    streamAssuranceRepository: repo, streamAssuranceService: service, streamAssuranceScheduler: scheduler, database: { audit } as never,
   });
   await a.ready();
   return a;
@@ -106,5 +117,39 @@ describe('Stream Assurance routes', () => {
     const ve2 = await app('VIEWING_ENGINEER');
     expect((await ve2.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/nope/run' })).statusCode).toBe(404);
     await ve2.close();
+  });
+
+  it('alert lifecycle across runs: observed → active → acknowledged → resolved; event mode', async () => {
+    seedProfile(); repo.alerts.clear(); repo.runs = [];
+    const ve = await app('VIEWING_ENGINEER');
+
+    // Run 1 → the finding is observed (critical needs 2 occurrences before active).
+    await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/rte-test/run' });
+    let alerts = (await ve.inject({ url: '/api/v1/stream-assurance/alerts?profileId=rte-test' })).json();
+    expect(alerts.count).toBe(1);
+    const alert = alerts.alerts[0];
+    expect(alert.classification).toBe('ORIGIN_VARIANT_MISMATCH');
+    expect(alert.state).toBe('observed');
+
+    // Run 2 → active.
+    await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/rte-test/run' });
+    alerts = (await ve.inject({ url: '/api/v1/stream-assurance/alerts' })).json();
+    expect(alerts.alerts.find((a: { id: string }) => a.id === alert.id).state).toBe('active');
+
+    // Acknowledge (audited).
+    audit.record.mockClear();
+    const ack = await ve.inject({ method: 'POST', url: `/api/v1/stream-assurance/alerts/${encodeURIComponent(alert.id)}/ack` });
+    expect(ack.json().alert.state).toBe('acknowledged');
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'stream-assurance.alert.ack' }));
+
+    // Resolve → no longer open.
+    await ve.inject({ method: 'POST', url: `/api/v1/stream-assurance/alerts/${encodeURIComponent(alert.id)}/resolve` });
+    expect((await ve.inject({ url: '/api/v1/stream-assurance/alerts' })).json().count).toBe(0);
+
+    // Event mode on → reflected in the alerts feed.
+    const em = await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/rte-test/event-mode', payload: { enabled: true, durationMinutes: 5 } });
+    expect(em.statusCode).toBe(200);
+    expect((await ve.inject({ url: '/api/v1/stream-assurance/alerts' })).json().eventModeProfiles).toContain('rte-test');
+    await ve.close();
   });
 });

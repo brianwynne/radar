@@ -70,6 +70,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0009_ris_events', filename: '0009_ris_events.sql', applied: true, checksumMatches: true },
       { version: '0010_delivery_samples', filename: '0010_delivery_samples.sql', applied: true, checksumMatches: true },
       { version: '0011_stream_assurance', filename: '0011_stream_assurance.sql', applied: true, checksumMatches: true },
+      { version: '0012_stream_assurance_alerts', filename: '0012_stream_assurance_alerts.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -503,5 +504,29 @@ describe('PostgresStreamAssuranceRepository (pg-mem)', () => {
     expect(await repo.pruneRuns(t('2026-07-27T10:02:00Z'))).toBe(1); // removes run-1
     await repo.deleteProfile('rte-one');
     expect(await repo.getProfile('rte-one')).toBeNull();
+  });
+
+  it('durable alerts: upsert (idempotent on id), acknowledge, resolve, list-open and prune', async () => {
+    const repo = new PostgresStreamAssuranceRepository(db);
+    const t = (iso: string) => new Date(iso);
+    const alert = { id: 'rte-one:akamai:SA-CDN-001:ORIGIN_VARIANT_MISMATCH', profileId: 'rte-one', endpointId: 'akamai', ruleId: 'SA-CDN-001', classification: 'ORIGIN_VARIANT_MISMATCH', severity: 'critical' as const, explanation: 'x', remediation: 'y', evidence: { hostHeaderMismatch: true } };
+    await repo.upsertAlert({ ...alert, state: 'observed', consecutivePresent: 1, consecutiveAbsent: 0, occurrences: 1, firstObserved: t('2026-07-27T10:00:00Z'), lastObserved: t('2026-07-27T10:00:00Z'), updatedAt: t('2026-07-27T10:00:00Z') });
+    await repo.upsertAlert({ ...alert, state: 'active', consecutivePresent: 3, consecutiveAbsent: 0, occurrences: 3, firstObserved: t('2026-07-27T10:00:00Z'), lastObserved: t('2026-07-27T10:02:00Z'), updatedAt: t('2026-07-27T10:02:00Z') });
+
+    let open = await repo.listOpenAlerts('rte-one');
+    expect(open).toHaveLength(1);
+    expect(open[0].state).toBe('active');
+    expect(open[0].occurrences).toBe(3);
+    expect((open[0].evidence as { hostHeaderMismatch: boolean }).hostHeaderMismatch).toBe(true);
+
+    const acked = await repo.acknowledgeAlert(alert.id, 'noc-1');
+    expect(acked?.state).toBe('acknowledged');
+    expect(acked?.acknowledgedBy).toBe('noc-1');
+
+    await repo.resolveAlert(alert.id);
+    expect((await repo.listOpenAlerts('rte-one'))).toHaveLength(0); // resolved is not open
+    expect((await repo.getAlert(alert.id))?.state).toBe('resolved');
+
+    expect(await repo.pruneAlerts(t('2100-01-01T00:00:00Z'))).toBe(1); // resolved + old enough
   });
 });

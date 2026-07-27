@@ -70,13 +70,30 @@ The feature is now operable end‑to‑end from the console:
   status, differing KID highlighted) and **standards findings** (severity, rule, plain‑English
   explanation + remediation). A viewing engineer gets a **Run now** action.
 
+### Stage 4 — alert state machine + scheduler (DONE, on branch `feature/stream-assurance`)
+
+Findings become durable, acknowledgeable, automatically‑monitored alerts:
+
+- **Alert state machine** (`@radar/engine` `alert.ts`, pure): `observed → pending → active →
+  acknowledged → resolved` with a configurable consecutive‑present activation threshold (critical
+  rules activate faster but still need ≥2 occurrences — never a single transient failure) and a
+  consecutive‑absent auto‑resolve; re‑opens a fresh incident on recurrence.
+- **Durable alerts** (migration `0012_stream_assurance_alerts`): a `sa_alerts` row per finding
+  identity (profile + endpoint + rule + classification), tracking state, occurrences, first/last seen
+  and acknowledgement. `reconcileAlerts` on every run advances the lifecycle; `pruneAlerts` retention.
+- **Scheduler** (`scheduler.ts`): runs enabled profiles on a normal cadence and supports a faster,
+  **auto‑expiring event/key‑rotation mode** per profile (skipped by the normal tick while active).
+  Enabled by `SA_SCHEDULER_ENABLED`; event mode is API‑triggered regardless.
+- **API** (audited): `GET /alerts`, `POST /alerts/:id/ack`, `POST /alerts/:id/resolve`,
+  `POST /profiles/:id/event-mode`. **Console**: an *Active alerts* list with lifecycle‑state badges +
+  acknowledge/resolve actions, and an *Event mode* toggle (viewing engineer).
+
 ### Later stages (scoped, not yet built)
 
 Defined interfaces exist or are trivial to add on top of the engine + probe + persistence:
 
-- **Scheduler** — normal (30–60 s) / event‑key‑rotation (≤5 s, auto‑expiring) / full‑conformance
-  modes; alert state machine `observed → pending → active → acknowledged → resolved` with
-  consecutive‑failure thresholds and propagation grace.
+- **Full‑conformance mode** — deeper manifest/ladder/fragment validation, on demand + after config
+  change; optional self‑hosted DASH‑IF Conformance Tool adapter.
 - **REST API** (Fastify, existing RBAC + audit) — profiles/endpoints CRUD, trigger run, event
   mode, latest status, run/observation/comparison/finding reads, ack/resolve, rule catalogue.
 - **React UI** — a **Stream Assurance** nav area: Overview matrix, Service detail, CDN comparison,
