@@ -27,6 +27,11 @@ export type {
   PniBandwidthPoint,
   PniBandwidthRangeQuery,
   PniBandwidthRepository,
+  NewRisEvent,
+  RisEventRecord,
+  RisEventQuery,
+  RisConnectionChange,
+  RisEventRepository,
   ValidationResultRecord,
   NewValidationResult,
   ValidationResultQuery,
@@ -64,6 +69,7 @@ export { PostgresSteeringStateRepository } from './steering/postgres-steering-st
 export { PostgresSteeringEventRepository } from './steering/postgres-steering-event-repository.js';
 export { PostgresDnsObservationRepository } from './dns/postgres-dns-observation-repository.js';
 export { PostgresPniBandwidthRepository } from './network/postgres-pni-bandwidth-repository.js';
+export { PostgresRisEventRepository } from './ripe/postgres-ris-event-repository.js';
 export { PostgresValidationResultRepository } from './validation/postgres-validation-repository.js';
 export { PostgresConnectorSettingsRepository } from './connector/postgres-connector-settings-repository.js';
 export {

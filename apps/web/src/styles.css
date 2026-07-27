@@ -46,6 +46,14 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
   color: #c7d3e5; padding: 0.35rem 0.7rem; border-radius: 6px; font-weight: 500;
 }
 .nav a.active, .nav a:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+/* Integrations: connector/token config, placed by the principal chip (not in the main nav). */
+.nav-aux {
+  display: inline-flex; align-items: center; gap: 0.35rem; margin-right: 0.9rem;
+  color: #c7d3e5; padding: 0.35rem 0.7rem; border-radius: 6px; font-weight: 500; font-size: 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.nav-aux:hover, .nav-aux.active { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.nav-aux svg { flex: none; opacity: 0.85; }
 .principal { text-align: right; font-size: 0.8rem; color: #c7d3e5; }
 .principal b { color: #fff; }
 .principal-email { font-size: 0.72rem; color: #9fb0c9; }
@@ -457,6 +465,13 @@ table.shed-table td.util-crit { background: var(--danger-bg); color: var(--dange
 .subtab:hover { color: var(--ink); }
 .subtab.active { color: var(--brand-ink); border-bottom-color: var(--brand); }
 /* Nested sub-tabs (e.g. BGP Intelligence → RIPE / BGP.Tools) — lighter, sits above the embedded view. */
+/* RIS event timeline look-back range control */
+.ri-events-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin: 1.25rem 0 0.5rem; }
+.ri-range { display: inline-flex; gap: 0.3rem; flex-wrap: wrap; }
+.ri-range button { font: inherit; font-size: 0.76rem; font-weight: 600; padding: 0.22rem 0.6rem; border: 1px solid var(--line); background: transparent; color: var(--ink-soft); border-radius: 999px; cursor: pointer; }
+.ri-range button:hover { color: var(--ink); }
+.ri-range button.active { background: var(--brand); color: var(--brand-contrast, #fff); border-color: transparent; }
+
 .subtabs.nested { margin: 0 0 0.75rem; font-size: 0.9rem; }
 .subtabs.nested .subtab { padding: 0.35rem 0.7rem; }
 .bgp-tab .bgi { margin-top: 0; }

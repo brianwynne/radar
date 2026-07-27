@@ -29,9 +29,12 @@ const NAV = [
   // Hidden from the nav — routes remain, still reachable by URL.
   // { to: '/validation/ns1', label: 'NS1 Validation', perm: 'ns1.detail.read', end: false },
   // { to: '/activity', label: 'Activity', perm: 'audit.read', end: false },
-  { to: '/network/connection', label: 'Integrations', perm: 'connector.manage', end: false },
   // { to: '/settings', label: 'Settings', perm: 'mapping.manage', end: false },
 ];
+
+// Integrations is token/connector configuration, not a dashboard — it lives on the right, by the
+// principal chip, rather than among the main navigation.
+const INTEGRATIONS_NAV = { to: '/network/connection', label: 'Integrations', perm: 'connector.manage', end: false };
 
 export function AppShell() {
   const { principal, hasPermission } = useAuth();
@@ -140,6 +143,17 @@ export function AppShell() {
             </NavLink>
           ))}
         </nav>
+        {hasPermission(INTEGRATIONS_NAV.perm) && (
+          <NavLink
+            to={INTEGRATIONS_NAV.to}
+            end={INTEGRATIONS_NAV.end}
+            className={({ isActive }) => `nav-aux${isActive ? ' active' : ''}`}
+            title="Integrations — connector & token configuration"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>
+            <span>Integrations</span>
+          </NavLink>
+        )}
         {principal && (
           <div className="principal">
             <div>

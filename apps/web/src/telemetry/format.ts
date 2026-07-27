@@ -7,7 +7,9 @@ export function formatBps(bps: number | null | undefined): string {
   if (bps >= 1e9) return `${(bps / 1e9).toFixed(bps >= 1e10 ? 0 : 1)} Gb/s`;
   if (bps >= 1e6) return `${(bps / 1e6).toFixed(0)} Mb/s`;
   if (bps >= 1e3) return `${(bps / 1e3).toFixed(0)} kb/s`;
-  return `${bps} b/s`;
+  // Never render raw bits/sec (a tiny rate would otherwise print as a long unrounded float).
+  // kb/s is the floor unit; anything below is rounded to one decimal, and zero shows cleanly.
+  return bps > 0 ? `${(bps / 1e3).toFixed(1)} kb/s` : '0 kb/s';
 }
 
 export function formatPercent(pct: number | null | undefined): string {

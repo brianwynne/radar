@@ -23,8 +23,9 @@ import { FastlyConnectorManager } from './fastly/manager.js';
 import { AkamaiConnectorManager } from './akamai/manager.js';
 import { BgpToolsConnectorManager } from './bgptools/manager.js';
 import { RipeService } from './ripe/service.js';
-import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository, PostgresPniBandwidthRepository } from '@radar/data';
+import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository, PostgresPniBandwidthRepository, PostgresRisEventRepository } from '@radar/data';
 import { PniBandwidthRecorder } from './cloudvision/pni-recorder.js';
+import { RisEventRecorder } from './ripe/ris-event-recorder.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -113,6 +114,15 @@ async function main(): Promise<void> {
   // RIPE BGP intelligence: read-only public RIPEstat polling + one managed RIS Live connection.
   // No secrets. Self-guards: only polls/connects when enabled.
   const ripeService = new RipeService({ config: config.ripe });
+  // Persist RIS Live BGP events (bounded history, default 90 days) so the BGP Intelligence timeline
+  // can look back over a retention window, not only the in-memory last-N. Started only when RIPE is on.
+  const risEventRepository = new PostgresRisEventRepository(pool);
+  const risEventRecorder = new RisEventRecorder(risEventRepository, {
+    getEvents: () => ripeService.events(),
+    getState: () => ripeService.sourceHealth().risLiveState,
+    retentionDays: Number(process.env.RIS_EVENT_RETENTION_DAYS) || undefined, // default 90 days
+    logger: undefined,
+  });
 
   // Cloudflare Load Balancing: read-only connector managed by the connector manager. Non-secret
   // settings (account id, zones, mode) come from Postgres when an Engineer has set them, else the
@@ -187,6 +197,7 @@ async function main(): Promise<void> {
     bgpToolsIncidents,
     bgpToolsMonitored,
     ripeService,
+    risEventRepository,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -202,6 +213,7 @@ async function main(): Promise<void> {
     fastlyManager.stop();
     akamaiManager.stop();
     bgpToolsManager.stop();
+    risEventRecorder.stop();
     ripeService.stop();
     await app.close();
     await pool.end();
@@ -227,6 +239,7 @@ async function main(): Promise<void> {
     akamaiManager.start(); // self-guards: only polls S3 when enabled with credentials
     bgpToolsManager.start(); // self-guards: only polls when the effective config is enabled
     ripeService.start(); // self-guards: only polls RIPEstat + connects RIS Live when enabled
+    if (config.ripe.enabled) risEventRecorder.start(); // drain the RIS buffer to bounded history
     app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

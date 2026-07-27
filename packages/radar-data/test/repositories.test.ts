@@ -17,6 +17,7 @@ import {
   PostgresSteeringEventRepository,
   PostgresDnsObservationRepository,
   PostgresPniBandwidthRepository,
+  PostgresRisEventRepository,
   PostgresValidationResultRepository,
   PostgresConnectorSettingsRepository,
   type NewSteeringState,
@@ -64,6 +65,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0006_bgptools', filename: '0006_bgptools.sql', applied: true, checksumMatches: true },
       { version: '0007_pni_bandwidth', filename: '0007_pni_bandwidth.sql', applied: true, checksumMatches: true },
       { version: '0008_pni_bandwidth_classification', filename: '0008_pni_bandwidth_classification.sql', applied: true, checksumMatches: true },
+      { version: '0009_ris_events', filename: '0009_ris_events.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -398,5 +400,46 @@ describe('PostgresPniBandwidthRepository (pg-mem)', () => {
   it('an empty batch writes nothing', async () => {
     expect(await new PostgresPniBandwidthRepository(db).insertBatch(new Date(), [])).toBe(0);
     expect(await count()).toBe(0);
+  });
+});
+
+describe('PostgresRisEventRepository (pg-mem)', () => {
+  let db: Queryable;
+  beforeEach(async () => { ({ db } = await freshDb()); });
+
+  it('upserts events (idempotent on id), reads newest-first with filters, and prunes', async () => {
+    const repo = new PostgresRisEventRepository(db);
+    const t = (iso: string) => new Date(iso);
+    expect(await repo.upsertBatch([
+      { id: 'a', kind: 'announcement', prefix: '89.207.56.0/21', originAsn: 41073, peerAsn: 174, path: [174, 41073], observationCount: 3, firstAt: t('2026-07-27T10:00:00Z'), lastAt: t('2026-07-27T10:01:00Z') },
+      { id: 'w', kind: 'withdrawal', prefix: '89.207.57.0/24', originAsn: null, peerAsn: 3356, path: [], observationCount: 1, firstAt: t('2026-07-27T09:00:00Z'), lastAt: t('2026-07-27T09:00:00Z') },
+    ])).toBe(2);
+
+    // Re-upsert 'a' with a later observation — no new row, updated state.
+    await repo.upsertBatch([{ id: 'a', kind: 'announcement', prefix: '89.207.56.0/21', originAsn: 41073, peerAsn: 174, path: [174, 41073], observationCount: 9, firstAt: t('2026-07-27T10:00:00Z'), lastAt: t('2026-07-27T10:05:00Z') }]);
+
+    const all = await repo.range({ since: t('2026-07-27T00:00:00Z') });
+    expect(all.map((e) => e.id)).toEqual(['a', 'w']); // newest last_at first
+    expect(all[0].observationCount).toBe(9);
+    expect(all[0].path).toEqual([174, 41073]);
+
+    // Filter by kind and prefix.
+    expect((await repo.range({ since: t('2026-07-27T00:00:00Z'), kind: 'withdrawal' })).map((e) => e.id)).toEqual(['w']);
+    expect((await repo.range({ since: t('2026-07-27T00:00:00Z'), prefix: '89.207.56.0/21' })).map((e) => e.id)).toEqual(['a']);
+
+    // Connection transitions.
+    await repo.recordConnectionState({ at: t('2026-07-27T08:00:00Z'), state: 'disconnected', detail: 'collector reset' });
+    await repo.recordConnectionState({ at: t('2026-07-27T08:00:00Z'), state: 'disconnected', detail: 'dup' }); // idempotent on instant
+    await repo.recordConnectionState({ at: t('2026-07-27T08:05:00Z'), state: 'connected', detail: null });
+    const conns = await repo.connectionChanges({ since: t('2026-07-27T00:00:00Z') });
+    expect(conns.map((c) => c.state)).toEqual(['connected', 'disconnected']); // newest first
+
+    // Prune everything before 2026-07-27T09:30 → the withdrawal (09:00) + both conn rows go.
+    expect(await repo.prune(t('2026-07-27T09:30:00Z'))).toBe(3);
+    expect((await repo.range({ since: t('2026-07-27T00:00:00Z') })).map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('an empty batch writes nothing', async () => {
+    expect(await new PostgresRisEventRepository(db).upsertBatch([])).toBe(0);
   });
 });

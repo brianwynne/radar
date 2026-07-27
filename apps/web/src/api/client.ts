@@ -9,6 +9,7 @@ import type {
   PrefixWhoisResponse,
   RipeSnapshotResponse,
   RipeEventsResponse,
+  RisEventHistoryResponse,
   BgpToolsConnection,
   BgpToolsConnectionUpdate,
   BgpToolsConnectionTest,
@@ -299,6 +300,15 @@ export const api = {
     if (q.limit) p.set('limit', String(q.limit));
     const qs = p.toString();
     return request<RipeEventsResponse>(`/api/v1/ripe/events${qs ? `?${qs}` : ''}`);
+  },
+  ripeEventHistory: (q: { minutes?: number; endMs?: number; prefix?: string; kind?: string } = {}) => {
+    const p = new URLSearchParams();
+    if (q.minutes) p.set('minutes', String(q.minutes));
+    if (q.endMs) p.set('endMs', String(q.endMs));
+    if (q.prefix) p.set('prefix', q.prefix);
+    if (q.kind) p.set('kind', q.kind);
+    const qs = p.toString();
+    return request<RisEventHistoryResponse>(`/api/v1/ripe/events/history${qs ? `?${qs}` : ''}`);
   },
   // bgp.tools connection settings (Engineer). Prometheus URL is write-only.
   routingConnection: () => request<{ settings: BgpToolsConnection }>('/api/v1/routing/connection'),

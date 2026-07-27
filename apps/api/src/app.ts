@@ -58,7 +58,7 @@ import type { NetworkPathTelemetryClient } from './telemetry/types.js';
 import type { TelemetryMode } from './telemetry/index.js';
 import type { CacheTelemetryClient } from './telemetry/cache-types.js';
 import type { DnsObservationService } from './dns-observation/index.js';
-import type { DnsObservationRepository, PniBandwidthRepository, ValidationResultRepository } from '@radar/data';
+import type { DnsObservationRepository, PniBandwidthRepository, RisEventRepository, ValidationResultRepository } from '@radar/data';
 import type { ValidationService } from './validation/index.js';
 import type { CloudVisionPoller } from './cloudvision/poller.js';
 import type { CloudVisionSource } from './cloudvision/types.js';
@@ -108,6 +108,7 @@ export interface BuildDeps extends AuthDeps {
   bgpToolsIncidents?: BgpToolsIncidentRepository;
   bgpToolsMonitored?: BgpToolsMonitoredPrefixRepository;
   ripeService?: RipeService;
+  risEventRepository?: RisEventRepository;
   atlasManager?: ResolverManager;
 }
 
@@ -262,7 +263,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(cloudVisionConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudVisionManager });
   await app.register(bgpToolsRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager, incidents: deps.bgpToolsIncidents, monitored: deps.bgpToolsMonitored, resolver: deps.asnResolver });
   await app.register(bgpToolsConnectionRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager });
-  await app.register(ripeRoutes, { prefix: '/api/v1', service: deps.ripeService });
+  await app.register(ripeRoutes, { prefix: '/api/v1', service: deps.ripeService, history: deps.risEventRepository });
   await app.register(resolverRoutes, { prefix: '/api/v1', manager: deps.atlasManager ?? createAtlasManager(loadAtlasConfig()) });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.

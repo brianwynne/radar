@@ -7,7 +7,14 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useRipeIntelligence } from '../telemetry/use-ripe-intelligence';
 import { api } from '../api/client';
-import type { RipeRpkiState, RisEvent, RouteHealth, RouteVisibility, RouteVisibilitySnapshot } from '../api/types';
+import type { RipeRpkiState, RisConnectionChange, RisEvent, RouteHealth, RouteVisibility, RouteVisibilitySnapshot } from '../api/types';
+
+// Event timeline look-back ranges (persisted history; 90-day retention). null = the live in-memory buffer.
+const RANGES: { label: string; minutes: number }[] = [
+  { label: '1h', minutes: 60 }, { label: '6h', minutes: 360 }, { label: '24h', minutes: 1440 },
+  { label: '7d', minutes: 10080 }, { label: '30d', minutes: 43200 }, { label: '90d', minutes: 129600 },
+];
+const rangeLabel = (m: number): string => RANGES.find((r) => r.minutes === m)?.label ?? `${m}m`;
 
 // ASN → owner name, resolved via RIPEstat (same resolver as the bgp.tools page). Shown side-by-side
 // with each AS number so an operator reads "AS174 Cogent" without a second lookup. Ownership is
@@ -181,8 +188,35 @@ export function BgpIntelligence() {
 
 export function RipeIntelligence({ embedded = false }: { embedded?: boolean }) {
   const t = useRipeIntelligence(20000);
-  const owners = useAsnOwners(t.snapshot, t.events);
   const [open, setOpen] = useState<string | null>(null);
+  // BGP event timeline source: null = live in-memory buffer; a number = persisted look-back minutes.
+  const [range, setRange] = useState<number | null>(null);
+  const [hist, setHist] = useState<{ items: RisEvent[]; conns: RisConnectionChange[] } | null>(null);
+  const [histLoading, setHistLoading] = useState(false);
+
+  useEffect(() => {
+    if (range === null) { setHist(null); return; }
+    let active = true;
+    setHistLoading(true);
+    const load = () => api.ripeEventHistory({ minutes: range })
+      .then((r) => {
+        if (!active) return;
+        setHist({
+          // Persisted rows use `originAsn`; map to the RisEvent shape the timeline renders.
+          items: r.items.map((i) => ({ id: i.id, kind: i.kind, prefix: i.prefix, peerAsn: i.peerAsn, path: i.path, origin: i.originAsn, firstAt: i.firstAt, lastAt: i.lastAt, observationCount: i.observationCount })),
+          conns: r.connectionChanges,
+        });
+      })
+      .catch(() => { if (active) setHist(null); })
+      .finally(() => { if (active) setHistLoading(false); });
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { active = false; clearInterval(id); };
+  }, [range]);
+
+  const shownEvents = range === null ? t.events : (hist?.items ?? []);
+  const gapCount = hist?.conns.filter((c) => c.state !== 'connected').length ?? 0;
+  const owners = useAsnOwners(t.snapshot, shownEvents);
   const snap = t.snapshot;
   const source = t.source ?? snap?.source ?? null;
   const counts = snap?.counts ?? { healthy: 0, degraded: 0, withdrawn: 0, critical: 0, unknown: 0, rpkiInvalid: 0, unexpectedOrigin: 0, total: 0 };
@@ -263,14 +297,25 @@ export function RipeIntelligence({ embedded = false }: { embedded?: boolean }) {
         </table>
       </div>
 
-      {/* RIS Live event timeline */}
-      <h2>BGP events <span className="muted">· RIS Live {source?.risLiveState === 'connected' ? '(live)' : source?.risLiveState === 'disabled' ? '(disabled)' : `(${source?.risLiveState ?? '—'})`}</span></h2>
+      {/* BGP event timeline — the live in-memory buffer, or persisted history over a look-back window */}
+      <div className="ri-events-head">
+        <h2 style={{ margin: 0 }}>BGP events <span className="muted">· {range === null
+          ? `RIS Live ${source?.risLiveState === 'connected' ? '(live)' : source?.risLiveState === 'disabled' ? '(disabled)' : `(${source?.risLiveState ?? '—'})`}`
+          : `last ${rangeLabel(range)} · persisted`}</span></h2>
+        <div className="ri-range">
+          <button className={range === null ? 'active' : ''} onClick={() => setRange(null)}>Live</button>
+          {RANGES.map((r) => <button key={r.minutes} className={range === r.minutes ? 'active' : ''} onClick={() => setRange(r.minutes)}>{r.label}</button>)}
+        </div>
+      </div>
+      {range !== null && gapCount > 0 && (
+        <div className="notice warn">{gapCount} RIS collector {gapCount === 1 ? 'gap' : 'gaps'} in this window — observation may be incomplete (a gap is missing data, not a route withdrawal).</div>
+      )}
       <div className="matrix-wrap">
         <table className="matrix">
           <thead><tr><th>Type</th><th>Prefix</th><th>Origin</th><th>Path</th><th>Obs</th><th>Last</th></tr></thead>
           <tbody>
-            {t.events.length === 0 && <tr><td colSpan={6} className="center-note">{source?.risLiveState === 'disabled' ? 'RIS Live is disabled.' : 'No BGP events observed yet.'}</td></tr>}
-            {t.events.slice(0, 100).map((e) => <EventRow key={e.id} e={e} owners={owners} />)}
+            {shownEvents.length === 0 && <tr><td colSpan={6} className="center-note">{range !== null ? (histLoading ? 'Loading…' : 'No BGP events in this window.') : (source?.risLiveState === 'disabled' ? 'RIS Live is disabled.' : 'No BGP events observed yet.')}</td></tr>}
+            {shownEvents.slice(0, 200).map((e) => <EventRow key={e.id} e={e} owners={owners} />)}
           </tbody>
         </table>
       </div>

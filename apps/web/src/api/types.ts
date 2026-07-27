@@ -1500,3 +1500,9 @@ export interface RisEvent { id: string; kind: 'announcement' | 'withdrawal'; pre
 
 export interface RipeSnapshotResponse { snapshot: RouteVisibilitySnapshot | null; source: RipeSourceHealth }
 export interface RipeEventsResponse { count: number; items: RisEvent[] }
+
+// Persisted RIS Live event history (over a look-back window). Items carry `originAsn` (the persisted
+// column name); dates are ISO strings over JSON. `connectionChanges` surface RIS collector gaps.
+export interface RisEventHistoryItem { id: string; kind: 'announcement' | 'withdrawal'; prefix: string; originAsn: number | null; peerAsn: number | null; path: number[]; observationCount: number; firstAt: string; lastAt: string }
+export interface RisConnectionChange { at: string; state: string; detail: string | null }
+export interface RisEventHistoryResponse { count: number; items: RisEventHistoryItem[]; connectionChanges: RisConnectionChange[]; windowStartMs: number; windowEndMs: number; retentionDays: number }

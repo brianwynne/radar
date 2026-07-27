@@ -289,6 +289,58 @@ export interface PniBandwidthRepository {
   prune(olderThan: Date): Promise<number>;
 }
 
+// --- RIS Live BGP events (bounded history) ----------------------------------
+
+/** One RIS Live BGP event cluster to persist (announcement or withdrawal for a monitored prefix). */
+export interface NewRisEvent {
+  id: string;
+  kind: 'announcement' | 'withdrawal';
+  prefix: string;
+  originAsn: number | null;
+  peerAsn: number | null;
+  /** AS path (empty for a withdrawal). */
+  path: number[];
+  observationCount: number;
+  firstAt: Date;
+  lastAt: Date;
+}
+
+/** A persisted RIS Live BGP event (from `range`). */
+export interface RisEventRecord extends NewRisEvent {}
+
+export interface RisEventQuery {
+  /** Inclusive lower bound (on the cluster's most-recent observation). */
+  since: Date;
+  /** Inclusive upper bound (default: now). */
+  until?: Date;
+  prefix?: string;
+  kind?: 'announcement' | 'withdrawal';
+  /** Newest-first cap (default 500). */
+  limit?: number;
+}
+
+/** A RIS Live connection state transition — so a collector gap is visible, not silent. */
+export interface RisConnectionChange {
+  at: Date;
+  state: string;
+  detail: string | null;
+}
+
+/** Bounded RIS Live event history. Writes come from a periodic drain of the in-memory RIS buffer;
+ *  reads drive the BGP Intelligence timeline over a retention window. Old rows are pruned. */
+export interface RisEventRepository {
+  /** Upsert a batch of event clusters (idempotent on id; keeps the latest observation state). */
+  upsertBatch(events: NewRisEvent[]): Promise<number>;
+  /** Newest-first events within the window (optionally filtered by prefix/kind). */
+  range(query: RisEventQuery): Promise<RisEventRecord[]>;
+  /** Record a RIS connection state change (idempotent on the instant). */
+  recordConnectionState(change: RisConnectionChange): Promise<void>;
+  /** Newest-first connection transitions within the window. */
+  connectionChanges(query: { since: Date; until?: Date; limit?: number }): Promise<RisConnectionChange[]>;
+  /** Delete events and connection transitions older than the cutoff. Returns rows removed. */
+  prune(olderThan: Date): Promise<number>;
+}
+
 // --- NS1 live-validation results (bounded history) --------------------------
 
 /** A bounded-history record of one read-only NS1 production-readiness validation. Stores no
