@@ -97,6 +97,26 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
   .subtab { white-space: nowrap; }
 }
 
+/* Dashboard delivery pie */
+.delivery-pie-head { display: flex; flex-direction: column; gap: 0.1rem; margin-bottom: 0.75rem; }
+.delivery-pie-head .muted { font-size: 0.76rem; }
+.delivery-pie-body { display: flex; gap: 1.5rem; align-items: center; flex-wrap: wrap; }
+.delivery-pie-chart { flex: none; }
+.delivery-pie-total { font-size: 1.5rem; font-weight: 700; fill: var(--ink); font-variant-numeric: tabular-nums; }
+.delivery-pie-sub { font-size: 0.62rem; letter-spacing: 0.06em; text-transform: uppercase; fill: var(--ink-soft); }
+.delivery-pie-side { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 0.9rem; }
+.delivery-pie-stats { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+.delivery-pie-stats > div { display: flex; flex-direction: column; gap: 0.1rem; }
+.delivery-pie-stats .muted { font-size: 0.72rem; }
+.delivery-pie-stats strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.delivery-legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.25rem 1rem; }
+.delivery-legend li { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; }
+.delivery-dot { width: 0.7rem; height: 0.7rem; border-radius: 3px; flex: none; }
+.delivery-legend-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delivery-legend-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.delivery-pie-foot { font-size: 0.74rem; margin: 0.75rem 0 0; }
+@media (max-width: 560px) { .delivery-pie-body { justify-content: center; } }
+
 .mode-banner {
   padding: 0.4rem 1.25rem; font-size: 0.8rem; font-weight: 600; text-align: center;
 }

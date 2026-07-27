@@ -18,6 +18,7 @@ import {
   PostgresDnsObservationRepository,
   PostgresPniBandwidthRepository,
   PostgresRisEventRepository,
+  PostgresDeliverySampleRepository,
   PostgresValidationResultRepository,
   PostgresConnectorSettingsRepository,
   type NewSteeringState,
@@ -66,6 +67,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0007_pni_bandwidth', filename: '0007_pni_bandwidth.sql', applied: true, checksumMatches: true },
       { version: '0008_pni_bandwidth_classification', filename: '0008_pni_bandwidth_classification.sql', applied: true, checksumMatches: true },
       { version: '0009_ris_events', filename: '0009_ris_events.sql', applied: true, checksumMatches: true },
+      { version: '0010_delivery_samples', filename: '0010_delivery_samples.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -441,5 +443,31 @@ describe('PostgresRisEventRepository (pg-mem)', () => {
 
   it('an empty batch writes nothing', async () => {
     expect(await new PostgresRisEventRepository(db).upsertBatch([])).toBe(0);
+  });
+});
+
+describe('PostgresDeliverySampleRepository (pg-mem)', () => {
+  let db: Queryable;
+  beforeEach(async () => { ({ db } = await freshDb()); });
+
+  it('inserts samples, averages over a window, and prunes', async () => {
+    const repo = new PostgresDeliverySampleRepository(db);
+    const t = (iso: string) => new Date(iso);
+    await repo.insert({ at: t('2026-07-27T10:00:00Z'), realtaBps: 100, commercialBps: 20, totalBps: 120 });
+    await repo.insert({ at: t('2026-07-27T10:00:30Z'), realtaBps: 200, commercialBps: 40, totalBps: 240 });
+    await repo.insert({ at: t('2026-07-27T08:00:00Z'), realtaBps: 999, commercialBps: 999, totalBps: 1998 }); // outside window
+
+    const avg = await repo.averageSince(t('2026-07-27T09:00:00Z'));
+    expect(avg.sampleCount).toBe(2);
+    expect(avg.avgRealtaBps).toBe(150);
+    expect(avg.avgCommercialBps).toBe(30);
+    expect(avg.avgTotalBps).toBe(180);
+
+    // Empty window → nulls, count 0.
+    const none = await repo.averageSince(t('2026-07-27T12:00:00Z'));
+    expect(none.sampleCount).toBe(0);
+    expect(none.avgTotalBps).toBeNull();
+
+    expect(await repo.prune(t('2026-07-27T09:00:00Z'))).toBe(1); // the 08:00 row
   });
 });

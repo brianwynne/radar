@@ -341,6 +341,33 @@ export interface RisEventRepository {
   prune(olderThan: Date): Promise<number>;
 }
 
+// --- Delivery totals (bounded history for the Dashboard pie's hourly average) ----
+
+/** One periodic sample of total live delivery, split Réalta (eyeball) vs commercial CDNs. */
+export interface NewDeliverySample {
+  at: Date;
+  realtaBps: number;
+  commercialBps: number;
+  totalBps: number;
+}
+
+/** Averages over a window (nulls when no samples in range). */
+export interface DeliveryAverages {
+  avgRealtaBps: number | null;
+  avgCommercialBps: number | null;
+  avgTotalBps: number | null;
+  sampleCount: number;
+}
+
+export interface DeliverySampleRepository {
+  /** Insert one sample (idempotent on the instant). */
+  insert(sample: NewDeliverySample): Promise<void>;
+  /** Averages over all samples at or after `since`. */
+  averageSince(since: Date): Promise<DeliveryAverages>;
+  /** Delete samples older than the cutoff. Returns rows removed. */
+  prune(olderThan: Date): Promise<number>;
+}
+
 // --- NS1 live-validation results (bounded history) --------------------------
 
 /** A bounded-history record of one read-only NS1 production-readiness validation. Stores no

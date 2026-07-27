@@ -11,6 +11,12 @@ describe('Dashboard', () => {
     stubApi(NOC);
     renderAt('/');
     expect(await screen.findByRole('heading', { name: /NOC Overview/i })).toBeInTheDocument();
+    // Live delivery pie: total live throughput + the eyeball/commercial slices + 1-hour average.
+    expect(await screen.findByRole('heading', { name: 'Live delivery mix' })).toBeInTheDocument();
+    const pie = screen.getByRole('heading', { name: 'Live delivery mix' }).closest('.delivery-pie') as HTMLElement;
+    expect(pie).toHaveTextContent('Eir');
+    expect(pie).toHaveTextContent('Fastly');
+    expect(pie).toHaveTextContent('9.5 Gb/s'); // 9.5e9 total live
     expect(await screen.findByRole('heading', { name: 'Top 10 network interfaces' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Focused pools' })).toBeInTheDocument();
     // NOC lacks dns.explain.read → the steering overview is gated.

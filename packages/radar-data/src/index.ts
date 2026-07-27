@@ -32,6 +32,9 @@ export type {
   RisEventQuery,
   RisConnectionChange,
   RisEventRepository,
+  NewDeliverySample,
+  DeliveryAverages,
+  DeliverySampleRepository,
   ValidationResultRecord,
   NewValidationResult,
   ValidationResultQuery,
@@ -70,6 +73,7 @@ export { PostgresSteeringEventRepository } from './steering/postgres-steering-ev
 export { PostgresDnsObservationRepository } from './dns/postgres-dns-observation-repository.js';
 export { PostgresPniBandwidthRepository } from './network/postgres-pni-bandwidth-repository.js';
 export { PostgresRisEventRepository } from './ripe/postgres-ris-event-repository.js';
+export { PostgresDeliverySampleRepository } from './dashboard/postgres-delivery-sample-repository.js';
 export { PostgresValidationResultRepository } from './validation/postgres-validation-repository.js';
 export { PostgresConnectorSettingsRepository } from './connector/postgres-connector-settings-repository.js';
 export {

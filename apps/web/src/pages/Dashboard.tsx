@@ -7,6 +7,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useCloudVision } from '../telemetry/use-cloudvision';
 import { useCloudflare } from '../telemetry/use-cloudflare';
 import { IspSteeringOverview } from '../features/IspSteeringOverview';
+import { DeliveryPie } from '../features/DeliveryPie';
 import { formatBps, formatPercent } from '../telemetry/format';
 import { ispToScenario } from '../steering/isps';
 import type { Ns1ActiveRecordResponse } from '../api/types';
@@ -141,6 +142,8 @@ export function Dashboard() {
         <h1>Delivery Steering — NOC Overview</h1>
         <p>Welcome{principal?.displayName ? `, ${principal.displayName}` : ''}. RADAR explains NS1 steering; it never changes it (read-only v1).</p>
       </div>
+
+      {canTopology && <DeliveryPie />}
 
       {canSteer ? <SteeringSection /> : (
         <div className="card"><div className="muted">Steering overview requires the Viewing Engineer role.</div></div>

@@ -23,9 +23,10 @@ import { FastlyConnectorManager } from './fastly/manager.js';
 import { AkamaiConnectorManager } from './akamai/manager.js';
 import { BgpToolsConnectorManager } from './bgptools/manager.js';
 import { RipeService } from './ripe/service.js';
-import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository, PostgresPniBandwidthRepository, PostgresRisEventRepository } from '@radar/data';
+import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository, PostgresPniBandwidthRepository, PostgresRisEventRepository, PostgresDeliverySampleRepository } from '@radar/data';
 import { PniBandwidthRecorder } from './cloudvision/pni-recorder.js';
 import { RisEventRecorder } from './ripe/ris-event-recorder.js';
+import { DeliveryRecorder } from './dashboard/delivery-recorder.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -166,6 +167,15 @@ async function main(): Promise<void> {
   await akamaiManager.init();
   const akamaiConnector = akamaiManager.getConnector();
 
+  // Dashboard delivery pie: sample total live delivery (Réalta eyeball + commercial CDNs) into a
+  // bounded history so the pie can show a 1-hour average beside the live total.
+  const deliverySampleRepository = new PostgresDeliverySampleRepository(pool);
+  const deliveryRecorder = new DeliveryRecorder(deliverySampleRepository, {
+    getNetwork: () => cloudVisionPoller.getLatest(),
+    getFastly: () => fastlyPoller.latestSnapshot(),
+    getAkamai: () => akamaiConnector.snapshot(),
+  });
+
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
     database,
@@ -198,6 +208,7 @@ async function main(): Promise<void> {
     bgpToolsMonitored,
     ripeService,
     risEventRepository,
+    deliverySampleRepository,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },
@@ -214,6 +225,7 @@ async function main(): Promise<void> {
     akamaiManager.stop();
     bgpToolsManager.stop();
     risEventRecorder.stop();
+    deliveryRecorder.stop();
     ripeService.stop();
     await app.close();
     await pool.end();
@@ -240,6 +252,7 @@ async function main(): Promise<void> {
     bgpToolsManager.start(); // self-guards: only polls when the effective config is enabled
     ripeService.start(); // self-guards: only polls RIPEstat + connects RIS Live when enabled
     if (config.ripe.enabled) risEventRecorder.start(); // drain the RIS buffer to bounded history
+    deliveryRecorder.start(); // sample total delivery for the Dashboard pie's 1-hour average
     app.log.info({ mode: cloudVisionPoller.status().source, intervalSeconds: config.cloudVision.pollIntervalSeconds }, 'cloudvision connector manager started');
   } catch (err) {
     app.log.error(err, 'radar-api failed to start');

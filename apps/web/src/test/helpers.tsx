@@ -600,6 +600,15 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/ns1/records/clone/plan') || p.endsWith('/ns1/records/plan')) body = { allowed: true, blockedReason: null, target: { zone: 'livetest.rte.ie', domain: 'livetest.rte.ie', type: 'A' }, request: { method: 'PUT', path: '/zones/livetest.rte.ie/livetest.rte.ie/A', body: {} }, warnings: [] };
       else if (p.endsWith('/ns1/records/clone/apply') || p.endsWith('/ns1/records/apply')) body = { created: true, provenance: { source: 'ns1', readOnly: false, write: true, notice: 'Created.', appliedAt: '2026-07-21T00:00:00Z' }, record: { id: 'r1' } };
       else if (p.endsWith('/ns1/active-record')) body = { provenance: PROV, entry: 'live.rte.ie', target: 'live.rte.ie', active: { zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }, filterCount: 2, warnings: [] };
+      else if (p.endsWith('/dashboard/delivery')) body = {
+        live: { slices: [
+          { label: 'Eir', kind: 'eyeball', platform: 'Réalta', bps: 5e9 },
+          { label: 'Sky', kind: 'eyeball', platform: 'Réalta', bps: 3e9 },
+          { label: 'Fastly', kind: 'commercial', platform: 'Fastly', bps: 1e9 },
+          { label: 'Akamai', kind: 'commercial', platform: 'Akamai', bps: 5e8 },
+        ], realtaBps: 8e9, commercialBps: 1.5e9, totalBps: 9.5e9 },
+        average: { avgRealtaBps: 7.7e9, avgCommercialBps: 1.5e9, avgTotalBps: 9.2e9, sampleCount: 120, windowMinutes: 60 },
+      };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;
       else if (p.endsWith('/api/v1/audit')) body = AUDIT_LIST_BODY;

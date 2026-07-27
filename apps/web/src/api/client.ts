@@ -8,6 +8,7 @@ import type {
   RoutingAsnNamesResponse,
   PrefixWhoisResponse,
   RipeSnapshotResponse,
+  DashboardDeliveryResponse,
   RipeEventsResponse,
   RisEventHistoryResponse,
   BgpToolsConnection,
@@ -291,6 +292,9 @@ export const api = {
   },
   routingAsnNames: (asns: number[]) => request<RoutingAsnNamesResponse>(`/api/v1/routing/asn-names?asns=${asns.join(',')}`),
   routingPrefixWhois: (prefix: string) => request<PrefixWhoisResponse>(`/api/v1/routing/prefix-whois?prefix=${encodeURIComponent(prefix)}`),
+  // Dashboard aggregates (read-only).
+  dashboardDelivery: () => request<DashboardDeliveryResponse>('/api/v1/dashboard/delivery'),
+
   // RIPE BGP intelligence (read-only).
   ripeSnapshot: () => request<RipeSnapshotResponse>('/api/v1/ripe/snapshot'),
   ripeEvents: (q: { prefix?: string; kind?: string; limit?: number } = {}) => {
