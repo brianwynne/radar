@@ -4,8 +4,9 @@
 // such, never invented.
 //
 // This page takes over the top LIVE banner (via usePageBanner) to report, from NS1 data, whether
-// live delivery is being served (NS1's public entry resolving to an active steering record) and how
-// the live steering profile currently splits across delivery platforms.
+// live delivery is being served (NS1's public entry resolving to an active steering record) and,
+// from the live steering config, that the commercial CDNs are serving international traffic while
+// Réalta serves Irish eyeball networks.
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { Ns1ActiveRecordResponse } from '../api/types';
@@ -13,8 +14,9 @@ import { usePageBanner } from '../components/page-banner';
 import { FastlyColumn } from '../components/cdn/FastlyColumn';
 import { AkamaiColumn } from '../components/cdn/AkamaiColumn';
 
-type PlatformShare = { platform: string; share: number; commercial: boolean };
-type Profile = { rows: PlatformShare[]; commercial: number };
+// The delivery platforms in the live steering config, split into RTÉ's own PNI-based CDN (Réalta,
+// which serves Irish eyeball networks) and the commercial CDNs (which serve international traffic).
+type Profile = { domestic: string[]; commercial: string[]; commercialShare: number };
 
 // Commercial CDN delivery platforms (everything else — Réalta — is RTÉ's own PNI-based CDN).
 const COMMERCIAL = /fastly|akamai|cloudflare|cloudfront|edgio|limelight|amazon|cachefly/i;
@@ -36,12 +38,11 @@ export function CommercialCdn() {
   }, []);
 
   // Once the active steering record is known (the livebase CNAME the entry points to), evaluate it
-  // and aggregate the CONFIGURED answer-pool weights by platform — NOT expectedDistribution, which
-  // is only the answers that survive filtering for one resolver (an IE-geolocated resolver keeps
-  // Réalta and drops the commercial CDNs, hiding their ~1/3 share). evaluation.answers is the full,
-  // unfiltered pool, so it reflects the real steering profile — Réalta plus the commercial CDNs
-  // (Fastly/Akamai) that carry the international traffic. (asnBreakdown is per-ASN — it reported
-  // 100% Réalta — so it's wrong here too.)
+  // and read the FULL configured answer pool (evaluation.answers, not the filtered distribution).
+  // The record steers by geography: Réalta answers serve Irish eyeball networks, and the commercial
+  // CDNs (Fastly/Akamai) are gated for international requesters — so their answer weight is ~0 and a
+  // weight-based split hides them. We instead detect which commercial-CDN platforms are present in
+  // the config (i.e. are configured to serve international traffic) and report that.
   const rec = ns1?.active ?? null;
   const recKey = rec ? `${rec.zone}/${rec.domain}/${rec.type}` : null;
   useEffect(() => {
@@ -51,25 +52,21 @@ export function CommercialCdn() {
       .then((r) => {
         if (!active) return;
         const answers = r.evaluation.answers.filter((a) => a.deliveryPlatform);
-        // Weighted by NS1 answer weight; if the record carries no weights, weight all answers equally.
+        const platforms = [...new Set(answers.map((a) => a.deliveryPlatform!))];
+        const commercial = platforms.filter((p) => COMMERCIAL.test(p));
+        if (commercial.length === 0) { setProfile(null); return; } // config doesn't route to any commercial CDN
+        const domestic = platforms.filter((p) => !COMMERCIAL.test(p));
+        // Commercial share of the configured weight, when the record carries weights (a hint, not the
+        // international traffic volume — which NS1 config alone can't tell us).
         const weighted = answers.some((a) => typeof a.weight === 'number' && a.weight > 0);
-        const by = new Map<string, number>();
+        let commercialW = 0, totalW = 0;
         for (const a of answers) {
-          const w = weighted ? (a.weight ?? 0) : 1;
+          const w = weighted ? (a.weight ?? 0) : 0;
           if (w <= 0) continue;
-          by.set(a.deliveryPlatform!, (by.get(a.deliveryPlatform!) ?? 0) + w);
+          totalW += w;
+          if (COMMERCIAL.test(a.deliveryPlatform!)) commercialW += w;
         }
-        const total = [...by.values()].reduce((s, w) => s + w, 0);
-        if (total <= 0) { setProfile(null); return; }
-        let commercialW = 0;
-        for (const [platform, w] of by) if (COMMERCIAL.test(platform)) commercialW += w;
-        setProfile({
-          rows: [...by.entries()]
-            .filter(([, w]) => w / total >= 0.005) // drop sub-0.5% standbys
-            .map(([platform, w]) => ({ platform, share: Math.round((w / total) * 100), commercial: COMMERCIAL.test(platform) }))
-            .sort((a, b) => b.share - a.share),
-          commercial: Math.round((commercialW / total) * 100),
-        });
+        setProfile({ domestic, commercial, commercialShare: totalW > 0 ? Math.round((commercialW / totalW) * 100) : 0 });
       })
       .catch(() => { if (active) setProfile(null); });
     return () => { active = false; };
@@ -101,10 +98,12 @@ export function CommercialCdn() {
           <span className="live-dot" /> <strong>Live · Commercial CDN delivery data</strong> — NS1 is steering{' '}
           <span className="mono">{ns1.entry}</span> → <span className="mono">{ns1.target}</span>.
         </span>
-        {profile && profile.rows.length > 0 && (
+        {profile && (
           <span className="cdn-banner-sub">
-            Live profile: {profile.rows.map((p) => `${p.platform} ${p.share}%`).join(' · ')}
-            {profile.commercial > 0 && <> — commercial CDNs (Fastly + Akamai) carry <strong>~{profile.commercial}%</strong></>}
+            In this config,{' '}
+            {profile.domestic.length > 0 && <><strong>{profile.domestic.join(' + ')}</strong> serves Irish eyeball networks and{' '}</>}
+            commercial CDNs (<strong>{profile.commercial.join(' + ')}</strong>) serve international traffic
+            {profile.commercialShare > 0 && <> (~{profile.commercialShare}% of the live profile)</>}.
           </span>
         )}
       </span>
