@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import { ISPS, ispToScenario, type Isp } from '../steering/isps';
 import { colorFor, orderOf } from '../steering/platforms';
+import { Donut } from '../components/Donut';
 import type { ExplainResponse } from '../api/types';
 
 interface Segment {
@@ -16,7 +17,6 @@ interface Segment {
 interface Row {
   isp: Isp;
   segments: Segment[];
-  top?: Segment;
   complete: boolean;
   error?: string;
 }
@@ -51,8 +51,7 @@ export function IspSteeringOverview({ zone, domain, type, onPick }: Props) {
         try {
           const res = await api.explain({ zone, domain, type, scenario: { ...ispToScenario(isp), asn: Number(isp.asn) } });
           const segments = distribution(res);
-          const top = [...segments].sort((a, b) => b.share - a.share)[0];
-          return { isp, segments, top, complete: res.evaluation.complete };
+          return { isp, segments, complete: res.evaluation.complete };
         } catch (e) {
           return { isp, segments: [], complete: false, error: e instanceof ApiError ? `${e.code}` : 'failed' };
         }
@@ -97,7 +96,7 @@ export function IspSteeringOverview({ zone, domain, type, onPick }: Props) {
               title={`Explain a ${r.isp.name} subscriber (AS${r.isp.asn})`}
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(130px, 200px) 1fr minmax(96px, auto)',
+                gridTemplateColumns: 'minmax(120px, 190px) 34px 1fr minmax(130px, auto)',
                 gap: '0.7rem',
                 alignItems: 'center',
                 textAlign: 'left',
@@ -113,6 +112,13 @@ export function IspSteeringOverview({ zone, domain, type, onPick }: Props) {
               <span>
                 {r.isp.name} <span className="mono muted" style={{ fontSize: '0.78rem' }}>AS{r.isp.asn}</span>
               </span>
+              {/* Pie + bar side by side: the donut reads the mix at a glance, the bar compares across ISPs. */}
+              <Donut
+                data={r.segments.map((s) => ({ label: s.platform, value: s.share, color: colorFor(s.platform) }))}
+                size={34}
+                thickness={11}
+                ariaLabel={`${r.isp.name} delivery mix`}
+              />
               <span style={{ display: 'flex', height: 16, borderRadius: 4, overflow: 'hidden', background: 'var(--track, #e2e8f0)' }}>
                 {r.error ? (
                   <span className="muted" style={{ fontSize: '0.78rem', paddingLeft: 6 }}>unavailable ({r.error})</span>
@@ -126,13 +132,18 @@ export function IspSteeringOverview({ zone, domain, type, onPick }: Props) {
                   ))
                 )}
               </span>
-              <span style={{ fontSize: '0.85rem' }}>
-                {r.top ? (
-                  <>
-                    <b>{r.top.platform}</b> {(r.top.share * 100).toFixed(0)}%
-                  </>
-                ) : (
+              <span style={{ fontSize: '0.82rem' }}>
+                {r.error || r.segments.length === 0 ? (
                   <span className="muted">—</span>
+                ) : (
+                  // The FULL mix, not just the top platform — so an off-island subscriber shows
+                  // "Réalta 50% · Fastly 50%", not just "Réalta 50%".
+                  r.segments.map((s, i) => (
+                    <span key={s.platform}>
+                      {i > 0 && <span className="muted"> · </span>}
+                      <b style={{ color: colorFor(s.platform) }}>{s.platform}</b> {(s.share * 100).toFixed(0)}%
+                    </span>
+                  ))
                 )}
                 {!r.complete && !r.error && <span className="badge warn" style={{ marginLeft: '0.3rem' }}>partial</span>}
               </span>

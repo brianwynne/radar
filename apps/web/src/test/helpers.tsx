@@ -602,8 +602,9 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/ns1/active-record')) body = { provenance: PROV, entry: 'live.rte.ie', target: 'live.rte.ie', active: { zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }, filterCount: 2, warnings: [] };
       else if (p.endsWith('/dashboard/delivery')) body = {
         live: { slices: [
-          { label: 'Eir', kind: 'eyeball', platform: 'Réalta', bps: 5e9 },
-          { label: 'Sky', kind: 'eyeball', platform: 'Réalta', bps: 3e9 },
+          { label: 'Eir', kind: 'eyeball', platform: 'Réalta', bps: 4e9 },
+          { label: 'Sky', kind: 'eyeball', platform: 'Réalta', bps: 2e9 },
+          { label: 'INEX', kind: 'ix', platform: 'Réalta', bps: 2e9 },
           { label: 'Fastly', kind: 'commercial', platform: 'Fastly', bps: 1e9 },
           { label: 'Akamai', kind: 'commercial', platform: 'Akamai', bps: 5e8 },
         ], realtaBps: 8e9, commercialBps: 1.5e9, totalBps: 9.5e9 },

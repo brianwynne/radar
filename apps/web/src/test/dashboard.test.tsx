@@ -15,6 +15,7 @@ describe('Dashboard', () => {
     expect(await screen.findByRole('heading', { name: 'Live delivery mix' })).toBeInTheDocument();
     const pie = screen.getByRole('heading', { name: 'Live delivery mix' }).closest('.delivery-pie') as HTMLElement;
     expect(pie).toHaveTextContent('Eir');
+    expect(pie).toHaveTextContent('INEX'); // public IX peering slice
     expect(pie).toHaveTextContent('Fastly');
     expect(pie).toHaveTextContent('9.5 Gb/s'); // 9.5e9 total live
     expect(await screen.findByRole('heading', { name: 'Top 10 network interfaces' })).toBeInTheDocument();

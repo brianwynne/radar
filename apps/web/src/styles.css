@@ -111,6 +111,7 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .delivery-pie-stats strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
 .delivery-legend { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0.25rem 1rem; }
 .delivery-legend li { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; }
+.delivery-legend-sep { border-top: 1px dashed var(--line); padding-top: 0.3rem; margin-top: 0.1rem; }
 .delivery-dot { width: 0.7rem; height: 0.7rem; border-radius: 3px; flex: none; }
 .delivery-legend-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .delivery-legend-val { font-variant-numeric: tabular-nums; white-space: nowrap; }

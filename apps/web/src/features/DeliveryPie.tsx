@@ -10,7 +10,10 @@ import { formatBps } from '../telemetry/format';
 // Akamai blue) — matching the Steering-overview legend.
 const GREENS = ['#1a7f4b', '#2ecc71', '#159a5b', '#3ddc84', '#0f6e3f', '#5eead4'];
 const colourFor = (s: DeliverySlice, eyeballIndex: number): string =>
-  s.platform === 'Fastly' ? '#e2483a' : s.platform === 'Akamai' ? '#3b82f6' : GREENS[eyeballIndex % GREENS.length];
+  s.platform === 'Fastly' ? '#e2483a'
+    : s.platform === 'Akamai' ? '#3b82f6'
+      : s.kind === 'ix' ? '#14b8a6' // Réalta over public IX peering — teal, distinct from the PNI greens
+        : GREENS[eyeballIndex % GREENS.length];
 
 const TAU = Math.PI * 2;
 const polar = (cx: number, cy: number, r: number, a: number) => [cx + r * Math.cos(a), cy + r * Math.sin(a)] as const;
@@ -92,9 +95,13 @@ export function DeliveryPie() {
           <ul className="delivery-legend">
             {segments.length === 0 && <li className="muted">No live delivery observed.</li>}
             {segments.map((seg) => (
-              <li key={seg.s.label}>
+              <li key={seg.s.label} className={seg.s.kind !== 'eyeball' ? 'delivery-legend-sep' : undefined}>
                 <span className="delivery-dot" style={{ background: seg.colour }} />
-                <span className="delivery-legend-label">{seg.s.label}{seg.s.kind === 'eyeball' && <span className="muted"> · Réalta</span>}</span>
+                <span className="delivery-legend-label">
+                  {seg.s.label}
+                  {seg.s.kind === 'eyeball' && <span className="muted"> · Réalta PNI</span>}
+                  {seg.s.kind === 'ix' && <span className="muted"> · Réalta · public peering</span>}
+                </span>
                 <span className="delivery-legend-val">{formatBps(seg.s.bps)} <span className="muted">{Math.round(seg.frac * 100)}%</span></span>
               </li>
             ))}

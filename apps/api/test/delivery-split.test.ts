@@ -11,14 +11,14 @@ const fastly = (bps: number[]) => ({ services: bps.map((b) => ({ bandwidthBps: b
 const akamai = (bps: number[]) => ({ series: bps.map((b) => ({ bandwidthBps: b })) }) as unknown as AkamaiSnapshot;
 
 describe('computeDeliverySplit', () => {
-  it('sums eyeball PNI out-bps per provider and adds commercial CDN totals', () => {
+  it('sums eyeball PNI + public IX (INEX) delivery, and adds commercial CDN totals', () => {
     const split = computeDeliverySplit(
       net([
         iface({ provider: 'Eir', outBps: 3e9 }),
         iface({ provider: 'Eir', outBps: 2e9 }),                         // two Eir PNIs → 5e9
         iface({ provider: 'Sky', outBps: 4e9 }),
-        iface({ provider: 'Cogent', linkType: 'TRANSIT', outBps: 9e9 }), // transit — not eyeball
-        iface({ provider: 'INEX', linkType: 'IX_PEERING', outBps: 9e9 }),// IX — not eyeball PNI
+        iface({ provider: 'Cogent', linkType: 'TRANSIT', outBps: 9e9 }), // transit — excluded
+        iface({ provider: 'INEX', linkType: 'IX_PEERING', outBps: 6e9 }),// public IX peering → included as 'ix'
         iface({ provider: 'Eir', outBps: 1e9, memberOf: 'Port-Channel1' }), // LAG member skipped
       ]),
       fastly([1e9, 5e8]), // 1.5e9
@@ -29,13 +29,18 @@ describe('computeDeliverySplit', () => {
     expect(byLabel['Eir'].kind).toBe('eyeball');
     expect(byLabel['Eir'].platform).toBe('Réalta');
     expect(byLabel['Sky'].bps).toBe(4e9);
+    expect(byLabel['INEX'].bps).toBe(6e9);
+    expect(byLabel['INEX'].kind).toBe('ix');       // public peering, kept distinct from PNI
+    expect(byLabel['INEX'].platform).toBe('Réalta');
     expect(byLabel['Fastly'].bps).toBe(1.5e9);
     expect(byLabel['Akamai'].bps).toBe(1e9);
     expect(byLabel['Cogent']).toBeUndefined();
-    expect(split.realtaBps).toBe(9e9);
+    expect(split.realtaBps).toBe(15e9);            // 9 (PNI) + 6 (IX)
     expect(split.commercialBps).toBe(2.5e9);
-    expect(split.totalBps).toBe(11.5e9);
-    expect(split.slices[0].label).toBe('Eir'); // eyeball slices sorted desc, commercial appended
+    expect(split.totalBps).toBe(17.5e9);
+    // Order: private PNI eyeballs (desc), then IX, then commercial.
+    expect(split.slices.map((s) => s.kind)).toEqual(['eyeball', 'eyeball', 'ix', 'commercial', 'commercial']);
+    expect(split.slices[0].label).toBe('Eir');
   });
 
   it('handles empty/null inputs', () => {

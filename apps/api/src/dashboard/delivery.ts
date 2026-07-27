@@ -12,8 +12,10 @@ const EYEBALL = /\b(eir|eircom|vodafone|three|sky|virgin|liberty|digiweb|magnet|
 export type DeliveryPlatform = 'Réalta' | 'Fastly' | 'Akamai';
 
 export interface DeliverySlice {
-  label: string;                       // eyeball provider name, or the commercial CDN name
-  kind: 'eyeball' | 'commercial';
+  label: string;                       // eyeball provider name, INEX, or the commercial CDN name
+  // eyeball = Réalta over a private PNI; ix = Réalta over public IX peering (INEX — carries
+  // Vodafone + smaller ISPs); commercial = Fastly/Akamai.
+  kind: 'eyeball' | 'ix' | 'commercial';
   platform: DeliveryPlatform;
   bps: number;
 }
@@ -49,16 +51,33 @@ export function computeDeliverySplit(
     .map(([label, bps]) => ({ label, kind: 'eyeball' as const, platform: 'Réalta' as const, bps }))
     .sort((a, b) => b.bps - a.bps);
 
+  // Réalta delivery over PUBLIC IX peering (INEX) — the exchange LAN aggregates many peers
+  // (Vodafone + smaller ISPs), so it can't be split per-ISP; shown as one slice, kept distinct
+  // from the private PNIs.
+  const byIx = new Map<string, number>();
+  for (const i of net?.interfaces ?? []) {
+    if (i.memberOf !== null) continue;
+    if (i.linkType !== 'IX_PEERING') continue;
+    const bps = i.outBps ?? 0;
+    if (bps <= 0) continue;
+    const key = i.provider ?? 'INEX';
+    byIx.set(key, (byIx.get(key) ?? 0) + bps);
+  }
+  const ixSlices: DeliverySlice[] = [...byIx.entries()]
+    .map(([label, bps]) => ({ label, kind: 'ix' as const, platform: 'Réalta' as const, bps }))
+    .sort((a, b) => b.bps - a.bps);
+
   const fastlyBps = sumBps((fastly?.services ?? []).map((s) => ({ bps: s.bandwidthBps })));
   const akamaiBps = sumBps((akamai?.series ?? []).map((s) => ({ bps: s.bandwidthBps })));
   const commercialSlices: DeliverySlice[] = [];
   if (fastlyBps > 0) commercialSlices.push({ label: 'Fastly', kind: 'commercial', platform: 'Fastly', bps: fastlyBps });
   if (akamaiBps > 0) commercialSlices.push({ label: 'Akamai', kind: 'commercial', platform: 'Akamai', bps: akamaiBps });
 
-  const realtaBps = eyeballSlices.reduce((s, x) => s + x.bps, 0);
+  // Réalta delivery = private PNI (per eyeball) + public IX peering (INEX).
+  const realtaBps = [...eyeballSlices, ...ixSlices].reduce((s, x) => s + x.bps, 0);
   const commercialBps = fastlyBps + akamaiBps;
   return {
-    slices: [...eyeballSlices, ...commercialSlices],
+    slices: [...eyeballSlices, ...ixSlices, ...commercialSlices],
     realtaBps,
     commercialBps,
     totalBps: realtaBps + commercialBps,
