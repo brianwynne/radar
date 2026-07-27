@@ -37,7 +37,9 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
   background: var(--bg); color: #fff; display: flex; align-items: center; gap: 1.25rem;
   padding: 0.6rem 1.25rem;
 }
-.brand { font-weight: 700; letter-spacing: 0.02em; font-size: 1.05rem; }
+.brand { display: flex; align-items: center; gap: 0.55rem; font-weight: 700; letter-spacing: 0.02em; font-size: 1.05rem; }
+.brand-logo { flex: none; color: var(--accent, #4aa3ff); }
+.brand-name { display: inline-flex; flex-direction: column; line-height: 1.1; }
 .brand small { display: block; font-weight: 400; font-size: 0.68rem; color: #9fb0c7; letter-spacing: 0.01em; }
 .nav { display: flex; gap: 0.25rem; margin-left: 0.5rem; flex: 1; flex-wrap: wrap; }
 .nav a {

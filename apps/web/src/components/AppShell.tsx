@@ -44,7 +44,14 @@ export function AppShell() {
     <div className="shell">
       <header className="topbar">
         <div className="brand">
-          RADAR<small>Réalta Delivery Analysis &amp; Routing</small>
+          <svg className="brand-logo" viewBox="0 0 24 24" width="30" height="30" role="img" aria-label="RaDAR logo">
+            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeWidth="1.3" opacity="0.3" />
+            <circle cx="12" cy="12" r="5.5" fill="none" stroke="currentColor" strokeWidth="1.3" opacity="0.3" />
+            <path d="M12 12 L12 2.5 A9.5 9.5 0 0 1 20.5 8 Z" fill="currentColor" opacity="0.25" />
+            <line x1="12" y1="12" x2="12" y2="2.5" stroke="currentColor" strokeWidth="1.6" />
+            <circle cx="12" cy="12" r="1.8" fill="currentColor" />
+          </svg>
+          <span className="brand-name">RaDAR<small>Réalta Delivery Analysis &amp; Routing</small></span>
         </div>
         <nav className="nav">
           {NAV.filter((n) => hasPermission(n.perm)).map((n) => (

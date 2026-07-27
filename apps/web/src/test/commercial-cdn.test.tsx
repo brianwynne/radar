@@ -14,6 +14,11 @@ describe('Commercial CDN page', () => {
 
     expect(await screen.findByRole('heading', { name: /Commercial CDN/, level: 1 })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Fastly', level: 2 })).toBeInTheDocument();
+    // NS1-driven live-serving banner (active-record resolves in the stub → green "Live" status).
+    expect(await screen.findByText(/Live · Commercial CDN delivery data/)).toBeInTheDocument();
+    // Fastly column has NO whole-CDN summary cards (layout mirrors Akamai).
+    const fastlyCol = screen.getByRole('heading', { name: 'Fastly', level: 2 }).closest('.cdn-col') as HTMLElement;
+    expect(within(fastlyCol).queryByText('Hit ratio')).not.toBeInTheDocument();
 
     // Akamai column streams DataStream 2 telemetry: live badge + its CP-code service.
     const akamai = screen.getByRole('heading', { name: 'Akamai', level: 2 }).closest('.cdn-col') as HTMLElement;

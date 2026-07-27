@@ -44,16 +44,8 @@ export function FastlyColumn() {
       {mode === 'disabled' && <div className="notice info">Fastly connector is disabled — set a read-only <code>global:read</code> token to see live telemetry.</div>}
       {t.error && <div className="notice danger">{t.error}</div>}
 
-      {/* Whole-CDN summary */}
-      <div className="grid cols-4" style={{ gap: '0.4rem' }}>
-        <div className="card"><div className="muted">Services</div><div className="stat">{num(t.summary?.serviceCount)}</div></div>
-        <div className="card"><div className="muted">Requests</div><div className="stat">{rps(t.summary?.totalRequestsPerSecond)}</div></div>
-        <div className="card"><div className="muted">Bandwidth</div><div className="stat">{formatBps(t.summary?.totalBandwidthBps)}</div></div>
-        <div className="card"><div className="muted">Hit ratio</div><div className="stat">{formatPercent(t.summary?.avgHitRatioPercent)}</div></div>
-      </div>
-
-      {/* Per-CDN service filter */}
-      <label className="field" style={{ marginTop: '0.6rem' }}>
+      {/* Per-CDN service filter (layout mirrors the Akamai column — no whole-CDN summary cards) */}
+      <label className="field">
         <span>Service</span>
         <select value={selected} onChange={(e) => setSelected(e.target.value)}>
           {services.length === 0 && <option value="">No services</option>}
