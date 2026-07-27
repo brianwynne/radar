@@ -193,8 +193,8 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
       if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: badRequest(parsed.error.issues), correlationId: req.id });
       const minutes = parsed.data.minutes ?? 60;
       const nowMs = Date.parse(now());
-      // Clamp the window end to [now − 24h, now] (the retained horizon), then derive the start.
-      const endMs = Math.min(nowMs, Math.max(nowMs - 24 * 60 * 60_000, parsed.data.endMs ?? nowMs));
+      // Clamp the window end to [now − 7d, now] (the retained horizon), then derive the start.
+      const endMs = Math.min(nowMs, Math.max(nowMs - 7 * 24 * 60 * 60_000, parsed.data.endMs ?? nowMs));
       if (!opts.pniHistory) return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds: 0, windowStartMs: endMs - minutes * 60_000, windowEndMs: endMs, series: [] };
       const until = new Date(endMs);
       const since = new Date(endMs - minutes * 60_000);

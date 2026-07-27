@@ -78,7 +78,10 @@ async function main(): Promise<void> {
   // /run/secrets/radar_master_key. The manager owns the poller and reconfigures it at runtime.
   // Per-PNI bandwidth history: written by the poller (via onSnapshot), read by /network/pni-history.
   const pniBandwidthRepository = new PostgresPniBandwidthRepository(pool);
-  const pniBandwidthRecorder = new PniBandwidthRecorder(pniBandwidthRepository, { logger: undefined });
+  const pniBandwidthRecorder = new PniBandwidthRecorder(pniBandwidthRepository, {
+    retentionHours: Number(process.env.PNI_RETENTION_HOURS) || undefined, // default (a week) unless overridden
+    logger: undefined,
+  });
   const cloudVisionManager = new CloudVisionConnectorManager({
     baseConfig: config.cloudVision,
     repository: createConnectorSettingsStore(pool),

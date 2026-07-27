@@ -5,7 +5,7 @@
 import type { PniBandwidthRepository } from '@radar/data';
 import type { NetworkStateSnapshot } from './types.js';
 
-const DEFAULT_RETENTION_HOURS = 25; // just over 24h so the full 24h window is always covered
+const DEFAULT_RETENTION_HOURS = 24 * 7 + 1; // a week (plus 1h slack) so any day in the last 7 is covered
 const DEFAULT_PRUNE_INTERVAL_MS = 30 * 60_000;
 
 interface Logger {

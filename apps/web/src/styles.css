@@ -328,6 +328,8 @@ ul.notes li { margin: 0.15rem 0; }
 /* PNI Graphs */
 .pni-graphs { display: flex; flex-direction: column; gap: 0.6rem; }
 .pni-controls { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+.pni-day { flex-direction: row; align-items: center; gap: 0.4rem; font-size: 0.75rem; font-weight: 600; }
+.pni-day select { font-size: 0.75rem; padding: 0.15rem 0.3rem; }
 .pni-ranges, .pni-dir { display: inline-flex; gap: 0.25rem; }
 .pni-meta { margin-left: auto; font-size: 0.75rem; }
 .pni-chart-wrap { position: relative; }
@@ -346,8 +348,9 @@ ul.notes li { margin: 0.15rem 0; }
 .pni-legend { display: flex; flex-direction: column; gap: 0.5rem; }
 .pni-legend-actions { display: flex; align-items: center; gap: 0.5rem; }
 .pni-group { display: flex; flex-direction: column; gap: 0.3rem; }
-.pni-group-head { align-self: flex-start; background: none; border: none; padding: 0; cursor: pointer; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
+.pni-group-head { align-self: flex-start; background: none; border: none; padding: 0.1rem 0; cursor: pointer; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); }
 .pni-group-head:hover { color: var(--info); }
+.pni-group-caret { display: inline-block; width: 0.8em; color: var(--info); }
 .pni-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .pni-chip { display: inline-flex; align-items: center; gap: 0.4rem; border: 1px solid var(--line); border-radius: 999px; padding: 0.15rem 0.6rem; background: var(--panel); cursor: pointer; font-size: 0.76rem; }
 .pni-chip.off { opacity: 0.5; }

@@ -298,19 +298,28 @@ describe('Network Telemetry page', () => {
     expect(within(tile).getByText('1')).toBeInTheDocument();
   });
 
-  it('opens the PNI Graphs tab: plots per-PNI series, a range selector (default 1h) and a filter', async () => {
+  it('opens the PNI Graphs tab: grouped/collapsible key, day + range selectors, eyeball default', async () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('JPE00000001');
     fireEvent.click(screen.getByRole('button', { name: 'PNI Graphs' }));
 
-    // Legend chips populate from /network/pni-history — labelled with provider + datacentre (CTW/PKW).
-    expect(await screen.findByText('Eir CTW Et1')).toBeInTheDocument();
-    expect(screen.getByText('Sky CTW Et2')).toBeInTheDocument();
+    // The key is grouped by role, and groups are COLLAPSED by default — chips are hidden until opened.
+    await screen.findByRole('button', { name: /Eyeball PNI/ });
+    expect(screen.queryByText('Eir CTW Et1')).not.toBeInTheDocument();
     // The chart is a real time-series (SVG) labelled by direction + range.
     expect(screen.getByRole('img', { name: /PNI .*bandwidth over the last 60 minutes/ })).toBeInTheDocument();
-    // Range selector present with the 1-hour default active.
+    // Range selector present with the 1-hour default active; day selector spans the last 7 days, live.
     expect(screen.getByRole('button', { name: '1h' }).className).toContain('active');
+    const daySel = screen.getByRole('combobox', { name: 'Day' }) as HTMLSelectElement;
+    expect(daySel.options).toHaveLength(7);
+    expect(daySel.value).toBe('0');
+
+    // Expand the Eyeball PNI and Transit groups to inspect their chips.
+    fireEvent.click(screen.getByRole('button', { name: /Eyeball PNI/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Transit \(/ }));
+    expect(screen.getByText('Eir CTW Et1')).toBeInTheDocument();
+    expect(screen.getByText('Sky CTW Et2')).toBeInTheDocument();
 
     // ALL links are logged, but non-eyeball ones (transit Cogent) start HIDDEN by default.
     const cogent = () => screen.getByText('Cogent PKW Et4').closest('button')!;
@@ -326,6 +335,10 @@ describe('Network Telemetry page', () => {
     expect(cogent().className).not.toContain('off');
     fireEvent.click(screen.getByRole('button', { name: 'Eyeball' }));
     expect(cogent().className).toContain('off');
+
+    // Selecting a past day pauses live-follow (a "Live" button appears to return to now).
+    fireEvent.change(daySel, { target: { value: '2' } });
+    expect(screen.getByRole('button', { name: /Live/ })).toBeInTheDocument();
 
     // The legend doubles as a PNI filter — clicking a chip toggles that series off.
     fireEvent.click(screen.getByText('Eir CTW Et1'));

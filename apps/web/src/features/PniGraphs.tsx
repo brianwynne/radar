@@ -21,6 +21,16 @@ const RANGES = [
 
 const PALETTE = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16', '#06b6d4', '#e11d48', '#a855f7', '#22c55e'];
 const DAY_MS = 24 * 60 * 60_000;
+const RETENTION_DAYS = 7; // history kept server-side; the day selector spans this many days
+
+const startOfTodayMs = (): number => { const d = new Date(); d.setHours(0, 0, 0, 0); return d.getTime(); };
+// Which calendar day (0 = today … N = N days ago) a window ending at `endMs` falls in.
+const dayOffsetOf = (endMs: number): number => {
+  const d = new Date(endMs - 1); d.setHours(0, 0, 0, 0); // the day the window's last moment is in
+  return Math.round((startOfTodayMs() - d.getTime()) / DAY_MS);
+};
+const dayLabel = (offset: number): string =>
+  offset === 0 ? 'Today' : new Date(startOfTodayMs() - offset * DAY_MS).toLocaleDateString([], { weekday: 'short', day: '2-digit', month: 'short' });
 
 const shortIf = (n: string) => n.replace(/^Port-Channel/, 'Po').replace(/^Ethernet/, 'Et');
 const keyOf = (s: { deviceId: string; interfaceName: string }) => `${s.deviceId}::${s.interfaceName}`;
@@ -149,6 +159,14 @@ export function PniGraphs() {
   const tMin = win ? win.start : tMax - widthMs;
   const live = viewEndMs === null;
 
+  // Day selector (last 7 days). Picking a past day views that whole calendar day; "Today" is live.
+  const currentDayOffset = live ? 0 : dayOffsetOf(tMax);
+  const selectDay = (offset: number) => {
+    if (offset === 0) { setViewEndMs(null); return; } // today → live
+    setViewEndMs(startOfTodayMs() - (offset - 1) * DAY_MS); // window ends at the end of that day
+    setMinutes(1440); // show the whole day; the width buttons then zoom within it
+  };
+
   const val = (p: { inBps: number | null; outBps: number | null }) => (dir === 'out' ? p.outBps : p.inBps);
 
   const yMax = useMemo(() => {
@@ -167,14 +185,9 @@ export function PniGraphs() {
     return null;
   };
   const toggle = (k: string) => setHidden((h) => { const n = new Set(h ?? defaultHidden); if (n.has(k)) n.delete(k); else n.add(k); return n; });
-  // Toggle a whole group: if every link in it is shown, hide them all; otherwise show them all.
-  const toggleGroup = (items: PniHistorySeries[]) => setHidden((h) => {
-    const n = new Set(h ?? defaultHidden);
-    const keys = items.map(keyOf);
-    const allShown = keys.every((k) => !n.has(k));
-    for (const k of keys) { if (allShown) n.add(k); else n.delete(k); }
-    return n;
-  });
+  // Legend groups are collapsed by default (compact key); `expandedGroups` holds the opened ones.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const toggleGroupCollapse = (group: string) => setExpandedGroups((g) => { const n = new Set(g); if (n.has(group)) n.delete(group); else n.add(group); return n; });
 
   // Pointer → viewBox X (independent of the SVG's rendered/scaled width).
   const toVx = (clientX: number): number => {
@@ -197,7 +210,7 @@ export function PniGraphs() {
     if (!drag) return;
     const dtMs = -(dragVx / PLOT_W) * widthMs; // drag right → reveal earlier → end decreases
     const nowMs = Date.now();
-    const newEnd = Math.min(nowMs, Math.max(nowMs - DAY_MS, drag.startEnd + dtMs));
+    const newEnd = Math.min(nowMs, Math.max(nowMs - RETENTION_DAYS * DAY_MS, drag.startEnd + dtMs));
     setViewEndMs(newEnd >= nowMs - 1500 ? null : newEnd); // snapped back to now ⇒ resume live
     setDrag(null);
     setDragVx(0);
@@ -218,6 +231,14 @@ export function PniGraphs() {
   return (
     <section className="card pni-graphs">
       <div className="pni-controls">
+        <label className="field pni-day">
+          <span>Day</span>
+          <select value={currentDayOffset} onChange={(e) => selectDay(Number(e.target.value))} aria-label="Day">
+            {Array.from({ length: RETENTION_DAYS }, (_, d) => (
+              <option key={d} value={d}>{dayLabel(d)}{d === 0 ? ' (live)' : ''}</option>
+            ))}
+          </select>
+        </label>
         <div className="pni-ranges" role="group" aria-label="Window">
           {RANGES.map((r) => (
             <button key={r.minutes} className={`subtab ${minutes === r.minutes ? 'active' : ''}`} onClick={() => setMinutes(r.minutes)}>{r.label}</button>
@@ -310,25 +331,28 @@ export function PniGraphs() {
             </div>
             {grouped.map(({ group, items }) => {
               const shownInGroup = items.filter((s) => !effectiveHidden.has(keyOf(s))).length;
+              const expanded = expandedGroups.has(group);
               return (
                 <div key={group} className="pni-group">
-                  <button className="pni-group-head" onClick={() => toggleGroup(items)} title="Show/hide this whole group">
-                    {group} <span className="muted">({shownInGroup}/{items.length})</span>
+                  <button className="pni-group-head" onClick={() => toggleGroupCollapse(group)} aria-expanded={expanded} title="Expand/collapse this group">
+                    <span className="pni-group-caret">{expanded ? '▾' : '▸'}</span> {group} <span className="muted">({shownInGroup}/{items.length} shown)</span>
                   </button>
-                  <div className="pni-chips">
-                    {items.map((s) => {
-                      const k = keyOf(s);
-                      const off = effectiveHidden.has(k);
-                      const v = latest(s);
-                      return (
-                        <button key={k} className={`pni-chip ${off ? 'off' : ''}`} onClick={() => toggle(k)} title={`${s.provider ?? ''} ${s.interfaceName}`}>
-                          <span className="pni-swatch" style={{ background: off ? 'var(--line)' : colorByKey.get(k) }} />
-                          <span className="pni-chip-label">{labelOf(s)}</span>
-                          <span className="pni-chip-val">{v === null ? '—' : formatBps(v)}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {expanded && (
+                    <div className="pni-chips">
+                      {items.map((s) => {
+                        const k = keyOf(s);
+                        const off = effectiveHidden.has(k);
+                        const v = latest(s);
+                        return (
+                          <button key={k} className={`pni-chip ${off ? 'off' : ''}`} onClick={() => toggle(k)} title={`${s.provider ?? ''} ${s.interfaceName}`}>
+                            <span className="pni-swatch" style={{ background: off ? 'var(--line)' : colorByKey.get(k) }} />
+                            <span className="pni-chip-label">{labelOf(s)}</span>
+                            <span className="pni-chip-val">{v === null ? '—' : formatBps(v)}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
