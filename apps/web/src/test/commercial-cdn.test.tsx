@@ -16,9 +16,12 @@ describe('Commercial CDN page', () => {
     expect(screen.getByRole('heading', { name: 'Fastly', level: 2 })).toBeInTheDocument();
     // NS1-driven live-serving banner (active-record resolves in the stub → green "Live" status).
     expect(await screen.findByText(/Live · Commercial CDN delivery data/)).toBeInTheDocument();
-    // …and the live steering profile's platform split, from the active record's weighted
-    // expectedDistribution (/dns/explain) — so a commercial CDN shows a real weight, not 0%.
-    expect(await screen.findByText(/Live profile:/)).toHaveTextContent(/Réalta 78% · Fastly 22%/);
+    // …and the live steering profile's platform split, aggregated from the active record's full
+    // answer pool (/dns/explain evaluation.answers) — so commercial CDNs show their real share and
+    // the combined commercial figure is called out, not collapsed to 0% by geo-filtering.
+    const prof = await screen.findByText(/Live profile:/);
+    expect(prof).toHaveTextContent(/Réalta 78% · Fastly 22%/);
+    expect(prof).toHaveTextContent(/commercial CDNs \(Fastly \+ Akamai\) carry ~22%/);
     // Fastly column has NO whole-CDN summary cards (layout mirrors Akamai).
     const fastlyCol = screen.getByRole('heading', { name: 'Fastly', level: 2 }).closest('.cdn-col') as HTMLElement;
     expect(within(fastlyCol).queryByText('Hit ratio')).not.toBeInTheDocument();
