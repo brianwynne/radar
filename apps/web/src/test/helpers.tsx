@@ -600,6 +600,11 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/ns1/records/clone/plan') || p.endsWith('/ns1/records/plan')) body = { allowed: true, blockedReason: null, target: { zone: 'livetest.rte.ie', domain: 'livetest.rte.ie', type: 'A' }, request: { method: 'PUT', path: '/zones/livetest.rte.ie/livetest.rte.ie/A', body: {} }, warnings: [] };
       else if (p.endsWith('/ns1/records/clone/apply') || p.endsWith('/ns1/records/apply')) body = { created: true, provenance: { source: 'ns1', readOnly: false, write: true, notice: 'Created.', appliedAt: '2026-07-21T00:00:00Z' }, record: { id: 'r1' } };
       else if (p.endsWith('/ns1/active-record')) body = { provenance: PROV, entry: 'live.rte.ie', target: 'live.rte.ie', active: { zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }, filterCount: 2, warnings: [] };
+      else if (p.includes('/ns1/asn-breakdown/')) body = { provenance: PROV, record: { zone: 'rte.ie', domain: 'live.rte.ie', type: 'A' }, source: 'ns1', asnCount: 0, resolvedCount: 0, unresolvedCount: 0, rows: [], answers: [
+        { answerId: 'a1', note: null, platform: 'Réalta', weight: 70, target: '1.1.1.1', asnCount: 0, networks: [] },
+        { answerId: 'a2', note: null, platform: 'Fastly', weight: 20, target: '2.2.2.2', asnCount: 0, networks: [] },
+        { answerId: 'a3', note: null, platform: 'Akamai', weight: 10, target: '3.3.3.3', asnCount: 0, networks: [] },
+      ] };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;
       else if (p.endsWith('/api/v1/audit')) body = AUDIT_LIST_BODY;

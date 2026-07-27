@@ -11,6 +11,7 @@ import { ResolverView } from '../features/ResolverView';
 import { DcBandwidth } from '../features/DcBandwidth';
 import { PniGraphs } from '../features/PniGraphs';
 import { RoutingIntelligence } from '../features/RoutingIntelligence';
+import { RipeIntelligence } from './BgpIntelligence';
 import { nextUtilLevel, utilClass, type UtilLevel } from '../network/util-level';
 import { isEyeballPni } from '../network/peering';
 import type { LinkType, NetworkHealth, NetworkInterface } from '../api/types';
@@ -100,7 +101,8 @@ export function NetworkTelemetry() {
   // Poll on CloudVision's ~10-second publish grid — the interface `rates` node republishes
   // every ~10s, so this is the freshest the analytics API meaningfully offers.
   const t = useCloudVision(10_000);
-  const [tab, setTab] = useState<'telemetry' | 'bandwidth' | 'pni' | 'resolvers' | 'routing'>('telemetry');
+  const [tab, setTab] = useState<'telemetry' | 'bandwidth' | 'pni' | 'resolvers' | 'bgp'>('telemetry');
+  const [bgpTab, setBgpTab] = useState<'ripe' | 'tools'>('ripe'); // nested tabs under BGP Intelligence
   const [provider, setProvider] = useState('');
   const [linkType, setLinkType] = useState('');
   const [status, setStatus] = useState('');
@@ -382,13 +384,21 @@ export function NetworkTelemetry() {
         <button className={`subtab ${tab === 'bandwidth' ? 'active' : ''}`} onClick={() => setTab('bandwidth')}>OTT Delivery</button>
         <button className={`subtab ${tab === 'pni' ? 'active' : ''}`} onClick={() => setTab('pni')}>PNI Graphs</button>
         <button className={`subtab ${tab === 'resolvers' ? 'active' : ''}`} onClick={() => setTab('resolvers')}>Resolvers</button>
-        <button className={`subtab ${tab === 'routing' ? 'active' : ''}`} onClick={() => setTab('routing')}>Routing Intelligence</button>
+        <button className={`subtab ${tab === 'bgp' ? 'active' : ''}`} onClick={() => setTab('bgp')}>BGP Intelligence</button>
       </nav>
 
       {tab === 'bandwidth' && <DcBandwidth interfaces={t.interfaces} />}
       {tab === 'pni' && <PniGraphs />}
       {tab === 'resolvers' && <ResolverView />}
-      {tab === 'routing' && <RoutingIntelligence />}
+      {tab === 'bgp' && (
+        <div className="bgp-tab">
+          <nav className="subtabs nested">
+            <button className={`subtab ${bgpTab === 'ripe' ? 'active' : ''}`} onClick={() => setBgpTab('ripe')}>RIPE BGP Intelligence</button>
+            <button className={`subtab ${bgpTab === 'tools' ? 'active' : ''}`} onClick={() => setBgpTab('tools')}>BGP.Tools</button>
+          </nav>
+          {bgpTab === 'ripe' ? <RipeIntelligence embedded /> : <RoutingIntelligence />}
+        </div>
+      )}
       {tab === 'telemetry' && (<>
       {t.mode === 'disabled' && <div className="notice info">Telemetry not connected — the CloudVision connector is disabled. Enable it to see live edge-router state.</div>}
       {t.mode !== 'disabled' && t.status && t.status.edgeDeviceIdCount === 0 && t.status.deviceCount > 0 && (

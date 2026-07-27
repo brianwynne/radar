@@ -59,6 +59,13 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 }
 .mode-banner.mock { background: var(--warn-bg); color: var(--warn); border-bottom: 1px solid #f0dcae; }
 .mode-banner.live { background: var(--ok-bg); color: var(--ok); border-bottom: 1px solid #bfe3cd; }
+/* Page-supplied banner: the outer strip is a neutral container; the inner node owns the colour. */
+.mode-banner.page { padding: 0; background: transparent; }
+.mode-banner-inner { display: block; padding: 0.4rem 1.25rem; border-bottom: 1px solid transparent; }
+.mode-banner-inner.ok { background: var(--ok-bg); color: var(--ok); border-bottom-color: #bfe3cd; }
+.mode-banner-inner.warn { background: var(--warn-bg); color: var(--warn); border-bottom-color: #f0dcae; }
+.cdn-banner { display: inline-flex; flex-direction: column; gap: 0.12rem; align-items: center; }
+.cdn-banner-sub { font-weight: 500; font-size: 0.75rem; opacity: 0.92; }
 
 .content { padding: 1.25rem; max-width: 1180px; width: 100%; margin: 0 auto; }
 .page-head { margin-bottom: 1rem; }
@@ -449,6 +456,10 @@ table.shed-table td.util-crit { background: var(--danger-bg); color: var(--dange
 .subtab { background: none; border: none; border-bottom: 2px solid transparent; padding: 0.5rem 0.9rem; cursor: pointer; font: inherit; font-weight: 600; color: var(--ink-soft); }
 .subtab:hover { color: var(--ink); }
 .subtab.active { color: var(--brand-ink); border-bottom-color: var(--brand); }
+/* Nested sub-tabs (e.g. BGP Intelligence → RIPE / BGP.Tools) — lighter, sits above the embedded view. */
+.subtabs.nested { margin: 0 0 0.75rem; font-size: 0.9rem; }
+.subtabs.nested .subtab { padding: 0.35rem 0.7rem; }
+.bgp-tab .bgi { margin-top: 0; }
 
 /* "Current" throughput cell: busier direction big, quieter direction small beneath it. */
 .bw-cell { display: flex; flex-direction: column; line-height: 1.2; }

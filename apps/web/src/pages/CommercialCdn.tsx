@@ -1,17 +1,25 @@
 // Commercial CDN observability — read-only, informational. Shows the commercial CDN delivery
 // platforms NS1 can steer to (Fastly, Akamai) side by side, each with its own service filter and a
 // realtime per-service response-code panel. RADAR issues no CDN writes; absent values are shown as
-// such, never invented. The header banner reflects, from NS1 data, whether live delivery is being
-// served (NS1's public entry resolving to an active steering record).
-import { useEffect, useState } from 'react';
+// such, never invented.
+//
+// This page takes over the top LIVE banner (via usePageBanner) to report, from NS1 data, whether
+// live delivery is being served (NS1's public entry resolving to an active steering record) and how
+// the live steering profile currently splits across delivery platforms.
+import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { Ns1ActiveRecordResponse } from '../api/types';
+import { usePageBanner } from '../components/page-banner';
 import { FastlyColumn } from '../components/cdn/FastlyColumn';
 import { AkamaiColumn } from '../components/cdn/AkamaiColumn';
+
+type PlatformShare = { platform: string; share: number };
 
 export function CommercialCdn() {
   const [ns1, setNs1] = useState<Ns1ActiveRecordResponse | null>(null);
   const [ns1Error, setNs1Error] = useState(false);
+  const [profile, setProfile] = useState<PlatformShare[] | null>(null);
+
   useEffect(() => {
     let active = true;
     const load = () =>
@@ -23,7 +31,70 @@ export function CommercialCdn() {
     return () => { active = false; clearInterval(id); };
   }, []);
 
+  // Once the active steering record is known, read its answer groups to show how the live profile
+  // currently splits across delivery platforms (Réalta + commercial CDNs). Weight → share.
+  const rec = ns1?.active ?? null;
+  const recKey = rec ? `${rec.zone}/${rec.domain}/${rec.type}` : null;
+  useEffect(() => {
+    if (!rec) { setProfile(null); return; }
+    let active = true;
+    api.asnBreakdown(rec.zone, rec.domain, rec.type)
+      .then((r) => {
+        if (!active) return;
+        const weights = new Map<string, number>();
+        for (const a of r.answers) {
+          if (!a.platform || a.weight == null || a.weight <= 0) continue;
+          weights.set(a.platform, (weights.get(a.platform) ?? 0) + a.weight);
+        }
+        const total = [...weights.values()].reduce((s, w) => s + w, 0);
+        if (total <= 0) { setProfile([]); return; }
+        setProfile(
+          [...weights.entries()]
+            .map(([platform, w]) => ({ platform, share: Math.round((w / total) * 100) }))
+            .sort((a, b) => b.share - a.share),
+        );
+      })
+      .catch(() => { if (active) setProfile(null); });
+    return () => { active = false; };
+    // recKey captures the record identity; rec object identity changes every poll.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recKey]);
+
   const serving = !!ns1?.active && !!ns1?.target;
+
+  const banner = useMemo(() => {
+    if (ns1Error) {
+      return (
+        <span>
+          <strong>Commercial CDN delivery data</strong> — NS1 live-serving status is unavailable.
+        </span>
+      );
+    }
+    if (!ns1) return <span>Checking NS1 live-serving status…</span>;
+    if (!serving) {
+      return (
+        <span>
+          <strong>Commercial CDN delivery data</strong> — NS1 has no active live steering record resolved; live delivery may not be serving.
+        </span>
+      );
+    }
+    return (
+      <span className="cdn-banner">
+        <span className="cdn-banner-line">
+          <span className="live-dot" /> <strong>Live · Commercial CDN delivery data</strong> — NS1 is steering{' '}
+          <span className="mono">{ns1.entry}</span> → <span className="mono">{ns1.target}</span>.
+        </span>
+        {profile && profile.length > 0 && (
+          <span className="cdn-banner-sub">
+            Live profile: {profile.map((p) => `${p.platform} ${p.share}%`).join(' · ')}
+          </span>
+        )}
+      </span>
+    );
+  }, [ns1, ns1Error, serving, profile]);
+
+  // The banner colour follows the state: green when serving, amber otherwise.
+  usePageBanner(<div className={serving || (!ns1Error && !ns1) ? 'mode-banner-inner ok' : 'mode-banner-inner warn'}>{banner}</div>);
 
   return (
     <section className="page">
@@ -33,22 +104,6 @@ export function CommercialCdn() {
           <span className="muted">read-only delivery telemetry · platforms NS1 can steer to</span>
         </div>
       </header>
-
-      {/* Live-serving status from NS1 (green when NS1 is steering live delivery to an active record). */}
-      {ns1Error ? (
-        <div className="notice warn">Commercial CDN delivery data — NS1 live-serving status is unavailable.</div>
-      ) : serving ? (
-        <div className="notice ok">
-          <span className="live-dot" /> <strong>Live · Commercial CDN delivery data</strong> — NS1 is steering{' '}
-          <span className="mono">{ns1!.entry}</span> → <span className="mono">{ns1!.target}</span>.
-        </div>
-      ) : ns1 ? (
-        <div className="notice warn">
-          <strong>Commercial CDN delivery data</strong> — NS1 has no active live steering record resolved; live delivery may not be serving.
-        </div>
-      ) : (
-        <div className="notice info">Checking NS1 live-serving status…</div>
-      )}
 
       <div className="cdn-grid">
         <FastlyColumn />

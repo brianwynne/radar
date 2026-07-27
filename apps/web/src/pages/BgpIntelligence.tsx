@@ -173,7 +173,13 @@ function EventRow({ e, owners }: { e: RisEvent; owners: Owners }) {
   );
 }
 
+// The standalone page (kept for the /bgp-intelligence route and direct links). The body also renders
+// inside the Network Telemetry → BGP Intelligence tab via <RipeIntelligence embedded />.
 export function BgpIntelligence() {
+  return <RipeIntelligence />;
+}
+
+export function RipeIntelligence({ embedded = false }: { embedded?: boolean }) {
   const t = useRipeIntelligence(20000);
   const owners = useAsnOwners(t.snapshot, t.events);
   const [open, setOpen] = useState<string | null>(null);
@@ -186,9 +192,11 @@ export function BgpIntelligence() {
   const srcStatus = source?.status ?? 'unavailable';
 
   return (
-    <section className="page bgi">
+    <section className={embedded ? 'bgi' : 'page bgi'}>
       <header className="page-head">
-        <h1>BGP Intelligence <span className="muted">· RIPE</span></h1>
+        {embedded
+          ? <h2>BGP Intelligence <span className="muted">· RIPE</span></h2>
+          : <h1>BGP Intelligence <span className="muted">· RIPE</span></h1>}
         <div className="head-meta">
           <span className={`badge ${HEALTH[overall].cls}`}>{HEALTH[overall].label}</span>
           <span className={`badge ${SOURCE[srcStatus] ?? 'neutral'}`} title="RIPE source status">RIPE source: {srcStatus}</span>

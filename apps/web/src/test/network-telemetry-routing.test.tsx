@@ -4,7 +4,11 @@ import { describe, expect, it } from 'vitest';
 import { screen, within, fireEvent } from '@testing-library/react';
 import { NOC, renderAt, stubApi } from './helpers';
 
-const openTab = () => fireEvent.click(screen.getByRole('button', { name: 'Routing Intelligence' }));
+// bgp.tools now lives under the BGP Intelligence tab → BGP.Tools nested tab.
+const openTab = () => {
+  fireEvent.click(screen.getByRole('button', { name: 'BGP Intelligence' }));
+  fireEvent.click(screen.getByRole('button', { name: 'BGP.Tools' }));
+};
 
 describe('Routing Intelligence tab', () => {
   it('shows the overview, the visibility matrix worst-first, and an incident', async () => {
@@ -47,5 +51,15 @@ describe('Routing Intelligence tab', () => {
     // Drawer reveals the upstreams evidence (with resolved owner) and the prefix WHOIS.
     expect(await screen.findByText(/AS174 \(Cogent Communications\)/)).toBeInTheDocument();
     expect(await screen.findByText(/RTE-NET/)).toBeInTheDocument(); // whois netname
+  });
+
+  it('the BGP Intelligence tab defaults to the RIPE nested tab', async () => {
+    stubApi(NOC);
+    renderAt('/network');
+    await screen.findByRole('heading', { name: 'Network Telemetry', level: 1 });
+    fireEvent.click(screen.getByRole('button', { name: 'BGP Intelligence' }));
+    // RIPE view is shown first (embedded → h2), with its RIPE source badge.
+    expect(await screen.findByRole('heading', { name: /BGP Intelligence/, level: 2 })).toBeInTheDocument();
+    expect(await screen.findByText(/RIPE source:/)).toBeInTheDocument();
   });
 });
