@@ -96,8 +96,8 @@ export function IspSteeringOverview({ zone, domain, type, onPick }: Props) {
               title={`Explain a ${r.isp.name} subscriber (AS${r.isp.asn})`}
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(120px, 190px) 34px 1fr minmax(130px, auto)',
-                gap: '0.7rem',
+                gridTemplateColumns: 'minmax(120px, 190px) 44px 1fr',
+                gap: '0.9rem',
                 alignItems: 'center',
                 textAlign: 'left',
                 background: 'transparent',
@@ -112,28 +112,17 @@ export function IspSteeringOverview({ zone, domain, type, onPick }: Props) {
               <span>
                 {r.isp.name} <span className="mono muted" style={{ fontSize: '0.78rem' }}>AS{r.isp.asn}</span>
               </span>
-              {/* Pie + bar side by side: the donut reads the mix at a glance, the bar compares across ISPs. */}
+              {/* Delivery-platform mix as a donut. */}
               <Donut
                 data={r.segments.map((s) => ({ label: s.platform, value: s.share, color: colorFor(s.platform) }))}
-                size={34}
-                thickness={11}
+                size={44}
+                thickness={14}
                 ariaLabel={`${r.isp.name} delivery mix`}
               />
-              <span style={{ display: 'flex', height: 16, borderRadius: 4, overflow: 'hidden', background: 'var(--track, #e2e8f0)' }}>
+              <span style={{ fontSize: '0.85rem' }}>
                 {r.error ? (
-                  <span className="muted" style={{ fontSize: '0.78rem', paddingLeft: 6 }}>unavailable ({r.error})</span>
-                ) : (
-                  r.segments.map((s) => (
-                    <span
-                      key={s.platform}
-                      title={`${s.platform} ${(s.share * 100).toFixed(0)}%`}
-                      style={{ width: `${s.share * 100}%`, background: colorFor(s.platform) }}
-                    />
-                  ))
-                )}
-              </span>
-              <span style={{ fontSize: '0.82rem' }}>
-                {r.error || r.segments.length === 0 ? (
+                  <span className="muted">unavailable ({r.error})</span>
+                ) : r.segments.length === 0 ? (
                   <span className="muted">—</span>
                 ) : (
                   // The FULL mix, not just the top platform — so an off-island subscriber shows
