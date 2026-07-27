@@ -31,26 +31,32 @@ export function CommercialCdn() {
     return () => { active = false; clearInterval(id); };
   }, []);
 
-  // Once the active steering record is known, read its answer groups to show how the live profile
-  // currently splits across delivery platforms (Réalta + commercial CDNs). Weight → share.
+  // Once the active steering record is known (the livebase CNAME the entry points to), evaluate it
+  // with a neutral resolver to get the real weighted split across delivery platforms — the same
+  // expectedDistribution the Live Steering page shows. asnBreakdown is per-ASN and does NOT reflect
+  // the base answer-pool weights (it reported 100% Réalta), so we must use /dns/explain here.
   const rec = ns1?.active ?? null;
   const recKey = rec ? `${rec.zone}/${rec.domain}/${rec.type}` : null;
   useEffect(() => {
     if (!rec) { setProfile(null); return; }
     let active = true;
-    api.asnBreakdown(rec.zone, rec.domain, rec.type)
+    api.explain({ zone: rec.zone, domain: rec.domain, type: rec.type, scenario: { resolverIp: '9.9.9.9', ecsPresent: false } })
       .then((r) => {
         if (!active) return;
-        const weights = new Map<string, number>();
-        for (const a of r.answers) {
-          if (!a.platform || a.weight == null || a.weight <= 0) continue;
-          weights.set(a.platform, (weights.get(a.platform) ?? 0) + a.weight);
+        const ev = r.evaluation;
+        const by = new Map<string, number>();
+        const shares = ev.expectedDistribution?.shares ?? [];
+        if (shares.length) {
+          for (const s of shares) by.set(s.deliveryPlatform ?? 'Unclassified', (by.get(s.deliveryPlatform ?? 'Unclassified') ?? 0) + s.share);
+        } else if (ev.selected) {
+          // Deterministic single answer → 100% to its platform.
+          const a = ev.answers.find((x) => x.id === ev.selected);
+          if (a) by.set(a.deliveryPlatform ?? 'Unclassified', 1);
         }
-        const total = [...weights.values()].reduce((s, w) => s + w, 0);
-        if (total <= 0) { setProfile([]); return; }
         setProfile(
-          [...weights.entries()]
-            .map(([platform, w]) => ({ platform, share: Math.round((w / total) * 100) }))
+          [...by.entries()]
+            .filter(([, s]) => s >= 0.005) // drop sub-0.5% standbys
+            .map(([platform, s]) => ({ platform, share: Math.round(s * 100) }))
             .sort((a, b) => b.share - a.share),
         );
       })
