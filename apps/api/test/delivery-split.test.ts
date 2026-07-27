@@ -5,7 +5,7 @@ import type { NetworkStateSnapshot } from '../src/cloudvision/types.js';
 import type { FastlySnapshot } from '../src/fastly/types.js';
 import type { AkamaiSnapshot } from '../src/akamai/types.js';
 
-const iface = (o: Record<string, unknown>) => ({ memberOf: null, linkType: 'PRIVATE_PEERING', provider: null, name: '', outBps: 0, ...o });
+const iface = (o: Record<string, unknown>) => ({ memberOf: null, linkType: 'PRIVATE_PEERING', provider: null, name: 'Port-Channel1', deviceHostname: 'edge', outBps: 0, speedBps: 100e9, ...o });
 const net = (ifaces: unknown[]) => ({ interfaces: ifaces }) as unknown as NetworkStateSnapshot;
 const fastly = (bps: number[]) => ({ services: bps.map((b) => ({ bandwidthBps: b })) }) as unknown as FastlySnapshot;
 const akamai = (bps: number[]) => ({ series: bps.map((b) => ({ bandwidthBps: b })) }) as unknown as AkamaiSnapshot;
@@ -14,8 +14,8 @@ describe('computeDeliverySplit', () => {
   it('sums eyeball PNI + public IX (INEX) delivery, and adds commercial CDN totals', () => {
     const split = computeDeliverySplit(
       net([
-        iface({ provider: 'Eir', outBps: 3e9 }),
-        iface({ provider: 'Eir', outBps: 2e9 }),                         // two Eir PNIs → 5e9
+        iface({ provider: 'Eir', outBps: 3e9, deviceHostname: 'edge-citywest-router', speedBps: 100e9 }),
+        iface({ provider: 'Eir', outBps: 2e9, deviceHostname: 'edge-parkwest-router', speedBps: 100e9 }), // two Eir PNIs → 5e9
         iface({ provider: 'Sky', outBps: 4e9 }),
         iface({ provider: 'Cogent', linkType: 'TRANSIT', outBps: 9e9 }), // transit — excluded
         iface({ provider: 'INEX', linkType: 'IX_PEERING', outBps: 6e9 }),// public IX peering → included as 'ix'
@@ -27,6 +27,10 @@ describe('computeDeliverySplit', () => {
     const byLabel = Object.fromEntries(split.slices.map((s) => [s.label, s]));
     expect(byLabel['Eir'].bps).toBe(5e9);
     expect(byLabel['Eir'].links).toBe(2); // two Eir PNIs summed (transparent multi-link)
+    // Per-link detail: both links with their delivery utilisation (out-bps ÷ capacity).
+    expect(byLabel['Eir'].linkDetails).toHaveLength(2);
+    expect(byLabel['Eir'].linkDetails[0]).toMatchObject({ device: 'edge-citywest-router', bps: 3e9, capacityBps: 100e9, utilisationPercent: 3 });
+    expect(byLabel['Eir'].linkDetails[1]).toMatchObject({ device: 'edge-parkwest-router', bps: 2e9, utilisationPercent: 2 });
     expect(byLabel['Eir'].kind).toBe('eyeball');
     expect(byLabel['Eir'].platform).toBe('Réalta');
     expect(byLabel['Sky'].bps).toBe(4e9);

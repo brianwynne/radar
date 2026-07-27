@@ -131,6 +131,17 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .delivery-legend-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .delivery-legend-val { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .delivery-pie-foot { font-size: 0.74rem; margin: 0.75rem 0 0; }
+/* Per-link utilisation for multi-link PNIs */
+.delivery-links { margin-top: 1rem; padding-top: 0.85rem; border-top: 1px solid var(--line); }
+.delivery-links-title { font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 0.5rem; }
+.delivery-link-group { margin-bottom: 0.6rem; }
+.delivery-link-net { display: flex; align-items: center; gap: 0.4rem; font-size: 0.84rem; margin-bottom: 0.15rem; }
+.delivery-link-row {
+  display: grid; grid-template-columns: 1fr auto 3.4rem; gap: 0.6rem; align-items: baseline;
+  font-size: 0.8rem; padding: 0.12rem 0 0.12rem 1.15rem; font-variant-numeric: tabular-nums;
+}
+.delivery-link-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.delivery-link-util { text-align: right; font-weight: 650; }
 @media (max-width: 560px) { .delivery-pie-body { justify-content: center; } }
 
 .mode-banner {

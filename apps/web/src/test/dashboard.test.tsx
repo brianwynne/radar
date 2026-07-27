@@ -17,6 +17,11 @@ describe('Dashboard', () => {
     expect(pie).toHaveTextContent('Eir');
     expect(pie).toHaveTextContent('INEX'); // public IX peering slice
     expect(pie).toHaveTextContent('2 links'); // multi-link PNI aggregation shown transparently
+    // Per-link utilisation breakdown for the 2-link Eir PNI (both links + their % utilisation).
+    expect(pie).toHaveTextContent('PNI links');
+    expect(pie).toHaveTextContent('edge-citywest-router');
+    expect(pie).toHaveTextContent('edge-parkwest-router');
+    expect(pie).toHaveTextContent('2.2%'); // Eir citywest link utilisation
     expect(pie).toHaveTextContent('Fastly');
     expect(pie).toHaveTextContent('9.5 Gb/s'); // 9.5e9 total live
     expect(await screen.findByRole('heading', { name: 'Top 10 network interfaces' })).toBeInTheDocument();

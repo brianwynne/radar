@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { DashboardDeliveryResponse, DeliverySlice } from '../api/types';
-import { formatBps } from '../telemetry/format';
+import { formatBps, formatPercent } from '../telemetry/format';
 
 // Réalta (eyeball) slices take green shades; commercial CDNs keep their brand colours (Fastly red,
 // Akamai blue) — matching the Steering-overview legend.
@@ -109,6 +109,31 @@ export function DeliveryPie() {
           </ul>
         </div>
       </div>
+
+      {/* Per-link utilisation for multi-link PNIs — both links and each one's real % utilisation
+          (delivery out-bps ÷ capacity), so a 2×PNI network isn't collapsed to one figure. */}
+      {segments.some((seg) => (seg.s.linkDetails?.length ?? 0) > 1) && (
+        <div className="delivery-links">
+          <div className="delivery-links-title">PNI links · utilisation</div>
+          {segments.filter((seg) => (seg.s.linkDetails?.length ?? 0) > 1).map((seg) => (
+            <div key={seg.s.label} className="delivery-link-group">
+              <div className="delivery-link-net">
+                <span className="delivery-dot" style={{ background: seg.colour }} />
+                <strong>{seg.s.label}</strong>
+                <span className="muted"> · {seg.s.links} links · {formatBps(seg.s.bps)} total</span>
+              </div>
+              {seg.s.linkDetails!.map((l) => (
+                <div key={`${l.device}·${l.iface}`} className="delivery-link-row">
+                  <span className="delivery-link-name">{l.device} <span className="muted">{l.iface}</span></span>
+                  <span className="delivery-link-bw">{formatBps(l.bps)} <span className="muted">/ {formatBps(l.capacityBps)}</span></span>
+                  <span className="delivery-link-util">{formatPercent(l.utilisationPercent)}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+
       {data && data.average.sampleCount === 0 && (
         <p className="muted delivery-pie-foot">The 1-hour average fills in as samples accrue (first hour after start).</p>
       )}
