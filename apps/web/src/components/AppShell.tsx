@@ -63,12 +63,12 @@ export function AppShell() {
               <g>
                 <path d="M89 110 L219 110 A130 130 0 0 0 188.6 26.4 Z" fill="#4aa3ff" opacity="0.28" />
                 <line x1="89" y1="110" x2="219" y2="110" stroke="#4aa3ff" strokeWidth="4" opacity="0.9" />
-                <animateTransform attributeName="transform" type="rotate" from="0 89 110" to="360 89 110" dur="4s" repeatCount="indefinite" />
+                <animateTransform attributeName="transform" type="rotate" from="0 89 110" to="360 89 110" dur="8s" repeatCount="indefinite" />
               </g>
               {/* Dublin origin blip (RADAR's CTW/PKW datacentres) — pings as the beam sweeps past (east). */}
               <circle cx="136" cy="111" r="3.5" fill="#4aa3ff">
-                <animate attributeName="opacity" values="1;0.25;0.25;1" keyTimes="0;0.08;0.92;1" dur="4s" repeatCount="indefinite" />
-                <animate attributeName="r" values="6;3.5;3.5;6" keyTimes="0;0.08;0.92;1" dur="4s" repeatCount="indefinite" />
+                <animate attributeName="opacity" values="1;0.25;0.25;1" keyTimes="0;0.08;0.92;1" dur="8s" repeatCount="indefinite" />
+                <animate attributeName="r" values="6;3.5;3.5;6" keyTimes="0;0.08;0.92;1" dur="8s" repeatCount="indefinite" />
               </circle>
             </g>
             <use href="#ie-outline" fill="none" stroke="#2ecc71" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
