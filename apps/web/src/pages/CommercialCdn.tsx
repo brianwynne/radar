@@ -11,12 +11,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import type { Ns1ActiveRecordResponse } from '../api/types';
 import { usePageBanner } from '../components/page-banner';
+import { ISPS, ispToScenario } from '../steering/isps';
 import { FastlyColumn } from '../components/cdn/FastlyColumn';
 import { AkamaiColumn } from '../components/cdn/AkamaiColumn';
 
-// The delivery platforms in the live steering config, split into RTÉ's own PNI-based CDN (Réalta,
-// which serves Irish eyeball networks) and the commercial CDNs (which serve international traffic).
-type Profile = { domestic: string[]; commercial: string[]; commercialShare: number };
+// The off-island steering split for international traffic (the same off-island subscriber the
+// Dashboard steering overview evaluates — AS3320 / Germany).
+type PlatformShare = { platform: string; share: number; commercial: boolean };
+type Profile = { rows: PlatformShare[]; commercialShare: number };
 
 // Commercial CDN delivery platforms (everything else — Réalta — is RTÉ's own PNI-based CDN).
 const COMMERCIAL = /fastly|akamai|cloudflare|cloudfront|edgio|limelight|amazon|cachefly/i;
@@ -38,35 +40,42 @@ export function CommercialCdn() {
   }, []);
 
   // Once the active steering record is known (the livebase CNAME the entry points to), evaluate it
-  // and read the FULL configured answer pool (evaluation.answers, not the filtered distribution).
-  // The record steers by geography: Réalta answers serve Irish eyeball networks, and the commercial
-  // CDNs (Fastly/Akamai) are gated for international requesters — so their answer weight is ~0 and a
-  // weight-based split hides them. We instead detect which commercial-CDN platforms are present in
-  // the config (i.e. are configured to serve international traffic) and report that.
+  // for an OFF-ISLAND subscriber (AS3320 / Germany — the same preset the Dashboard steering overview
+  // uses). The record steers by geography: Irish eyeball networks get Réalta, and only off-island
+  // requesters get the commercial CDNs (Fastly/Akamai) in the weighted shuffle. Evaluating an Irish
+  // resolver would show Réalta 100% and hide them — so we use the off-island scenario and read its
+  // expectedDistribution (exactly the split the Dashboard bar shows).
   const rec = ns1?.active ?? null;
   const recKey = rec ? `${rec.zone}/${rec.domain}/${rec.type}` : null;
   useEffect(() => {
     if (!rec) { setProfile(null); return; }
     let active = true;
-    api.explain({ zone: rec.zone, domain: rec.domain, type: rec.type, scenario: { resolverIp: '9.9.9.9', ecsPresent: false } })
+    const off = ISPS.find((i) => i.id === 'offisland');
+    if (!off) { setProfile(null); return; }
+    const scenario = { ...ispToScenario(off), asn: Number(off.asn) };
+    api.explain({ zone: rec.zone, domain: rec.domain, type: rec.type, scenario })
       .then((r) => {
         if (!active) return;
-        const answers = r.evaluation.answers.filter((a) => a.deliveryPlatform);
-        const platforms = [...new Set(answers.map((a) => a.deliveryPlatform!))];
-        const commercial = platforms.filter((p) => COMMERCIAL.test(p));
-        if (commercial.length === 0) { setProfile(null); return; } // config doesn't route to any commercial CDN
-        const domestic = platforms.filter((p) => !COMMERCIAL.test(p));
-        // Commercial share of the configured weight, when the record carries weights (a hint, not the
-        // international traffic volume — which NS1 config alone can't tell us).
-        const weighted = answers.some((a) => typeof a.weight === 'number' && a.weight > 0);
-        let commercialW = 0, totalW = 0;
-        for (const a of answers) {
-          const w = weighted ? (a.weight ?? 0) : 0;
-          if (w <= 0) continue;
-          totalW += w;
-          if (COMMERCIAL.test(a.deliveryPlatform!)) commercialW += w;
+        const ev = r.evaluation;
+        const by = new Map<string, number>();
+        const shares = ev.expectedDistribution?.shares ?? [];
+        if (shares.length) {
+          for (const s of shares) if (s.deliveryPlatform) by.set(s.deliveryPlatform, (by.get(s.deliveryPlatform) ?? 0) + s.share);
+        } else if (ev.selected) {
+          const a = ev.answers.find((x) => x.id === ev.selected);
+          if (a?.deliveryPlatform) by.set(a.deliveryPlatform, 1);
         }
-        setProfile({ domestic, commercial, commercialShare: totalW > 0 ? Math.round((commercialW / totalW) * 100) : 0 });
+        const total = [...by.values()].reduce((s, w) => s + w, 0);
+        if (total <= 0) { setProfile(null); return; }
+        let commercialW = 0;
+        for (const [platform, w] of by) if (COMMERCIAL.test(platform)) commercialW += w;
+        setProfile({
+          rows: [...by.entries()]
+            .filter(([, w]) => w / total >= 0.005)
+            .map(([platform, w]) => ({ platform, share: Math.round((w / total) * 100), commercial: COMMERCIAL.test(platform) }))
+            .sort((a, b) => b.share - a.share),
+          commercialShare: Math.round((commercialW / total) * 100),
+        });
       })
       .catch(() => { if (active) setProfile(null); });
     return () => { active = false; };
@@ -98,12 +107,11 @@ export function CommercialCdn() {
           <span className="live-dot" /> <strong>Live · Commercial CDN delivery data</strong> — NS1 is steering{' '}
           <span className="mono">{ns1.entry}</span> → <span className="mono">{ns1.target}</span>.
         </span>
-        {profile && (
+        {profile && profile.rows.length > 0 && (
           <span className="cdn-banner-sub">
-            In this config,{' '}
-            {profile.domestic.length > 0 && <><strong>{profile.domestic.join(' + ')}</strong> serves Irish eyeball networks and{' '}</>}
-            commercial CDNs (<strong>{profile.commercial.join(' + ')}</strong>) serve international traffic
-            {profile.commercialShare > 0 && <> (~{profile.commercialShare}% of the live profile)</>}.
+            Irish eyeball networks → <strong>Réalta</strong>; international (off-island) traffic:{' '}
+            {profile.rows.map((p) => `${p.platform} ${p.share}%`).join(' · ')}
+            {profile.commercialShare > 0 && <> — commercial CDNs serve <strong>~{profile.commercialShare}%</strong> of it</>}.
           </span>
         )}
       </span>

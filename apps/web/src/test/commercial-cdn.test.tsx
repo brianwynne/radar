@@ -16,11 +16,11 @@ describe('Commercial CDN page', () => {
     expect(screen.getByRole('heading', { name: 'Fastly', level: 2 })).toBeInTheDocument();
     // NS1-driven live-serving banner (active-record resolves in the stub → green "Live" status).
     expect(await screen.findByText(/Live · Commercial CDN delivery data/)).toBeInTheDocument();
-    // …and, from the active record's configured answer pool (/dns/explain evaluation.answers), that
-    // the commercial CDNs are serving international traffic while Réalta serves Irish eyeball networks.
-    const prof = await screen.findByText(/In this config,/);
-    expect(prof).toHaveTextContent(/Réalta serves Irish eyeball networks/);
-    expect(prof).toHaveTextContent(/commercial CDNs \(Fastly\) serve international traffic/);
+    // …and the off-island steering split (evaluated for AS3320/Germany via /dns/explain, the same
+    // subscriber the Dashboard steering overview uses) — where the commercial CDNs get their weight.
+    const prof = await screen.findByText(/international \(off-island\) traffic/i);
+    expect(prof).toHaveTextContent(/Réalta 78% · Fastly 22%/);
+    expect(prof).toHaveTextContent(/commercial CDNs serve ~22% of it/);
     // Fastly column has NO whole-CDN summary cards (layout mirrors Akamai).
     const fastlyCol = screen.getByRole('heading', { name: 'Fastly', level: 2 }).closest('.cdn-col') as HTMLElement;
     expect(within(fastlyCol).queryByText('Hit ratio')).not.toBeInTheDocument();
