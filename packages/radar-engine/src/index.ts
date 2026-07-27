@@ -4,3 +4,4 @@ export * from './ns1.js'; // NS1 raw types (grounded in the NS1 SDK)
 export * from './identity.js'; // DNS identity model + deriveIdentity
 export * from './model.js'; // source-agnostic evaluation trace/result model
 export { evaluate, platformOf as deliveryPlatformOf } from './engine.js'; // NS1 Filter Chain evaluation engine + platform mapping
+export * as streamAssurance from './stream-assurance/index.js'; // Stream Conformance & CDN Consistency engine (Stage 1)
