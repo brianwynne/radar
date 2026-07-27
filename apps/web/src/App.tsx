@@ -4,6 +4,7 @@ import { AppShell } from './components/AppShell';
 import { Dashboard } from './pages/Dashboard';
 import { RealtaCacheLb } from './pages/RealtaCacheLb';
 import { CommercialCdn } from './pages/CommercialCdn';
+import { StreamAssurance } from './pages/StreamAssurance';
 import { Ns1Explorer } from './pages/Ns1Explorer';
 import { ValidationNs1 } from './pages/ValidationNs1';
 import { Steering } from './pages/Steering';
@@ -48,6 +49,7 @@ export function App() {
         <Route path="load-balancing" element={<RealtaCacheLb />} />
         <Route path="realta-cache" element={<RealtaCacheLb />} />
         <Route path="cdn" element={<CommercialCdn />} />
+        <Route path="stream-assurance" element={<StreamAssurance />} />
         <Route path="cdn/fastly" element={<CommercialCdn />} />
         <Route path="network/connection" element={<ConnectorSettings />} />
         <Route path="explorer" element={<Ns1Explorer />} />

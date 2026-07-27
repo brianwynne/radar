@@ -368,6 +368,59 @@ export interface DeliverySampleRepository {
   prune(olderThan: Date): Promise<number>;
 }
 
+// --- Stream Assurance (profiles + bounded run snapshots) --------------------
+
+/** Operator-defined channel + endpoint configuration. `config` is app-shaped jsonb (no secrets). */
+export interface StreamAssuranceProfileRow {
+  id: string;
+  name: string;
+  config: unknown;
+  enabled: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+export interface NewStreamAssuranceProfile {
+  id: string;
+  name: string;
+  config: unknown;
+  enabled?: boolean;
+}
+
+/** A bounded snapshot of one probe run: per-endpoint observations + classified findings. */
+export interface StreamAssuranceRunRow {
+  id: string;
+  profileId: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  mode: string;
+  status: string;
+  observations: unknown;
+  findings: unknown;
+  findingCount: number;
+}
+export interface NewStreamAssuranceRun {
+  id: string;
+  profileId: string;
+  startedAt: Date;
+  finishedAt: Date | null;
+  mode: string;
+  status: string;
+  observations: unknown;
+  findings: unknown;
+  findingCount: number;
+}
+
+export interface StreamAssuranceRepository {
+  upsertProfile(p: NewStreamAssuranceProfile): Promise<void>;
+  listProfiles(): Promise<StreamAssuranceProfileRow[]>;
+  getProfile(id: string): Promise<StreamAssuranceProfileRow | null>;
+  deleteProfile(id: string): Promise<void>;
+  insertRun(r: NewStreamAssuranceRun): Promise<void>;
+  latestRun(profileId: string): Promise<StreamAssuranceRunRow | null>;
+  listRuns(profileId: string, limit?: number): Promise<StreamAssuranceRunRow[]>;
+  pruneRuns(olderThan: Date): Promise<number>;
+}
+
 // --- NS1 live-validation results (bounded history) --------------------------
 
 /** A bounded-history record of one read-only NS1 production-readiness validation. Stores no

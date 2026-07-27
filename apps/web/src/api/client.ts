@@ -9,6 +9,10 @@ import type {
   PrefixWhoisResponse,
   RipeSnapshotResponse,
   DashboardDeliveryResponse,
+  SaProfilesResponse,
+  SaLatestResponse,
+  SaRulesResponse,
+  SaRunResponse,
   RipeEventsResponse,
   RisEventHistoryResponse,
   BgpToolsConnection,
@@ -294,6 +298,12 @@ export const api = {
   routingPrefixWhois: (prefix: string) => request<PrefixWhoisResponse>(`/api/v1/routing/prefix-whois?prefix=${encodeURIComponent(prefix)}`),
   // Dashboard aggregates (read-only).
   dashboardDelivery: () => request<DashboardDeliveryResponse>('/api/v1/dashboard/delivery'),
+
+  // Stream Assurance (Stream Conformance & CDN Consistency).
+  saProfiles: () => request<SaProfilesResponse>('/api/v1/stream-assurance/profiles'),
+  saLatest: (id: string) => request<SaLatestResponse>(`/api/v1/stream-assurance/profiles/${enc(id)}/latest`),
+  saRules: () => request<SaRulesResponse>('/api/v1/stream-assurance/rules'),
+  saRun: (id: string, mode?: string) => request<SaRunResponse>(`/api/v1/stream-assurance/profiles/${enc(id)}/run${mode ? `?mode=${enc(mode)}` : ''}`, { method: 'POST' }),
 
   // RIPE BGP intelligence (read-only).
   ripeSnapshot: () => request<RipeSnapshotResponse>('/api/v1/ripe/snapshot'),

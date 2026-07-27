@@ -23,10 +23,11 @@ import { FastlyConnectorManager } from './fastly/manager.js';
 import { AkamaiConnectorManager } from './akamai/manager.js';
 import { BgpToolsConnectorManager } from './bgptools/manager.js';
 import { RipeService } from './ripe/service.js';
-import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository, PostgresPniBandwidthRepository, PostgresRisEventRepository, PostgresDeliverySampleRepository } from '@radar/data';
+import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository, PostgresPniBandwidthRepository, PostgresRisEventRepository, PostgresDeliverySampleRepository, PostgresStreamAssuranceRepository } from '@radar/data';
 import { PniBandwidthRecorder } from './cloudvision/pni-recorder.js';
 import { RisEventRecorder } from './ripe/ris-event-recorder.js';
 import { DeliveryRecorder } from './dashboard/delivery-recorder.js';
+import { StreamAssuranceService } from './stream-assurance/service.js';
 import { createConnectorSettingsStore } from './database/connector-settings-store.js';
 import { SecretBox } from './security/secret-box.js';
 
@@ -176,6 +177,15 @@ async function main(): Promise<void> {
     getAkamai: () => akamaiConnector.snapshot(),
   });
 
+  // Stream Assurance: profile persistence + the SSRF-guarded probe/classify service. SSRF policy is
+  // secure by default — managed-internal (on-net/loopback) targets are only reachable when explicitly
+  // enabled, and an optional host allowlist further narrows it.
+  const streamAssuranceRepository = new PostgresStreamAssuranceRepository(pool);
+  const streamAssuranceService = new StreamAssuranceService(streamAssuranceRepository, {
+    allowManagedInternal: process.env.SA_ALLOW_MANAGED_INTERNAL === 'true',
+    allowHosts: (process.env.SA_ALLOW_HOSTS ?? '').split(',').map((s) => s.trim()).filter(Boolean) || undefined,
+  });
+
   const app = await buildApp(config, {
     databaseHealth: databaseHealthCheck(pool),
     database,
@@ -209,6 +219,8 @@ async function main(): Promise<void> {
     ripeService,
     risEventRepository,
     deliverySampleRepository,
+    streamAssuranceRepository,
+    streamAssuranceService,
   });
   app.log.info(
     { database: redactDatabaseUrl(config.database.url), poolMax: config.database.poolMax },

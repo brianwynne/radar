@@ -51,14 +51,29 @@ two mock "CDNs" backed by one origin that returns a different object per forward
 fetches each, the engine extracts the real KIDs and the set is classified `ORIGIN_VARIANT_MISMATCH`
 — reproducing the incident through real HTTP, plus an SSRF‑block test.
 
+### Stage 3 — persistence + REST API + console page (DONE, on branch `feature/stream-assurance`)
+
+The feature is now operable end‑to‑end from the console:
+
+- **Persistence** (`radar-data`, migration `0011_stream_assurance`): `sa_profiles` (operator channel +
+  endpoint config as jsonb — no secrets) and `sa_runs` (bounded per‑run snapshot: observations +
+  findings). `PostgresStreamAssuranceRepository` with `pruneRuns` retention. (pg‑mem + migration‑count
+  tests updated.)
+- **Service** (`apps/api/src/stream-assurance/service.ts`): runs a profile through the SSRF‑guarded
+  probe + engine classification and persists the snapshot. SSRF policy from env
+  (`SA_ALLOW_MANAGED_INTERNAL`, `SA_ALLOW_HOSTS`) — secure by default.
+- **REST API** (`routes/stream-assurance.ts`, RBAC + audit): `GET /rules`, `GET /profiles`,
+  `GET /profiles/:id`, `GET /profiles/:id/latest`, `POST /profiles` (Engineer), `POST /profiles/:id/run`
+  (Viewing Engineer, **audited**). NOC views (topology.summary.read).
+- **Console** (`pages/StreamAssurance.tsx`, nav **Stream Assurance**): profile list, a **CDN comparison
+  table** (endpoint · provider · KID · edge/parent cache + "from origin" · origin · Last‑Modified ·
+  status, differing KID highlighted) and **standards findings** (severity, rule, plain‑English
+  explanation + remediation). A viewing engineer gets a **Run now** action.
+
 ### Later stages (scoped, not yet built)
 
-Defined interfaces exist or are trivial to add on top of the engine + probe:
+Defined interfaces exist or are trivial to add on top of the engine + probe + persistence:
 
-- **Persistence** — `radar-data` migration + repositories for stream profiles, endpoint
-  definitions, probe runs, per‑endpoint observations, manifest/representation/init/media/DRM
-  observations, rule results, cross‑CDN/cross‑protocol comparisons, findings, expected‑KID
-  windows, acknowledgements, audit; retention + cleanup jobs. Bounded evidence only (no media).
 - **Scheduler** — normal (30–60 s) / event‑key‑rotation (≤5 s, auto‑expiring) / full‑conformance
   modes; alert state machine `observed → pending → active → acknowledged → resolved` with
   consecutive‑failure thresholds and propagation grace.

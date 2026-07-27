@@ -1507,6 +1507,18 @@ export interface DashboardDeliveryResponse {
   average: { avgRealtaBps: number | null; avgCommercialBps: number | null; avgTotalBps: number | null; sampleCount: number; windowMinutes: number };
 }
 
+// Stream Assurance (Stream Conformance & CDN Consistency)
+export interface SaRule { id: string; severity: 'info' | 'warning' | 'error' | 'critical'; standard: string; section: string | null; description: string; remediation: string }
+export interface SaProfileSummary { id: string; name: string; enabled: boolean; tags: string[]; endpointCount: number; updatedAt: string }
+export interface SaCdnObservation { cdn: string; edge: string; parent: string; fetchedFromOrigin: boolean; originIdentity: string | null; servedBy: string | null; age: number | null }
+export interface SaObservation { endpointId: string; provider: string; role: 'reference' | 'candidate'; reachable: boolean; httpStatus: number | null; kid: string | null; lastModified: string | null; cdn: SaCdnObservation; forwardedHost?: string | null; originHost?: string | null; error?: string | null }
+export interface SaFinding { ruleId: string; classification: string; severity: SaRule['severity']; endpointId: string; provider: string; protocol: string; likelyLayer: string; explanation: string; remediation: string; evidence: Record<string, unknown> }
+export interface SaRun { id: string; profileId: string; startedAt: string; finishedAt: string | null; mode: string; status: string; observations: SaObservation[]; findings: SaFinding[]; findingCount: number }
+export interface SaProfilesResponse { count: number; profiles: SaProfileSummary[] }
+export interface SaLatestResponse { run: SaRun | null }
+export interface SaRunResponse { run: SaRun }
+export interface SaRulesResponse { count: number; rules: SaRule[] }
+
 export interface RipeSnapshotResponse { snapshot: RouteVisibilitySnapshot | null; source: RipeSourceHealth }
 export interface RipeEventsResponse { count: number; items: RisEvent[] }
 

@@ -19,6 +19,7 @@ import {
   PostgresPniBandwidthRepository,
   PostgresRisEventRepository,
   PostgresDeliverySampleRepository,
+  PostgresStreamAssuranceRepository,
   PostgresValidationResultRepository,
   PostgresConnectorSettingsRepository,
   type NewSteeringState,
@@ -68,6 +69,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0008_pni_bandwidth_classification', filename: '0008_pni_bandwidth_classification.sql', applied: true, checksumMatches: true },
       { version: '0009_ris_events', filename: '0009_ris_events.sql', applied: true, checksumMatches: true },
       { version: '0010_delivery_samples', filename: '0010_delivery_samples.sql', applied: true, checksumMatches: true },
+      { version: '0011_stream_assurance', filename: '0011_stream_assurance.sql', applied: true, checksumMatches: true },
     ]);
   });
 
@@ -469,5 +471,37 @@ describe('PostgresDeliverySampleRepository (pg-mem)', () => {
     expect(none.avgTotalBps).toBeNull();
 
     expect(await repo.prune(t('2026-07-27T09:00:00Z'))).toBe(1); // the 08:00 row
+  });
+});
+
+describe('PostgresStreamAssuranceRepository (pg-mem)', () => {
+  let db: Queryable;
+  beforeEach(async () => { ({ db } = await freshDb()); });
+
+  it('upserts profiles (jsonb config round-trips) and stores/reads run snapshots', async () => {
+    const repo = new PostgresStreamAssuranceRepository(db);
+    await repo.upsertProfile({ id: 'rte-one', name: 'RTÉ One', config: { endpoints: [{ endpointId: 'akamai', provider: 'akamai' }], tags: ['production'] } });
+    await repo.upsertProfile({ id: 'rte-one', name: 'RTÉ One HD', config: { endpoints: [], tags: ['production', 'event'] } }); // update
+
+    const profiles = await repo.listProfiles();
+    expect(profiles).toHaveLength(1);
+    expect(profiles[0].name).toBe('RTÉ One HD');
+    expect((profiles[0].config as { tags: string[] }).tags).toEqual(['production', 'event']);
+
+    const t = (iso: string) => new Date(iso);
+    await repo.insertRun({ id: 'run-1', profileId: 'rte-one', startedAt: t('2026-07-27T10:00:00Z'), finishedAt: t('2026-07-27T10:00:02Z'), mode: 'normal', status: 'findings', observations: [{ endpointId: 'akamai', kid: 'abc' }], findings: [{ ruleId: 'SA-CDN-001', classification: 'ORIGIN_VARIANT_MISMATCH' }], findingCount: 1 });
+    await repo.insertRun({ id: 'run-2', profileId: 'rte-one', startedAt: t('2026-07-27T10:05:00Z'), finishedAt: t('2026-07-27T10:05:01Z'), mode: 'normal', status: 'ok', observations: [], findings: [], findingCount: 0 });
+
+    const latest = await repo.latestRun('rte-one');
+    expect(latest?.id).toBe('run-2'); // newest first
+    expect(latest?.status).toBe('ok');
+
+    const runs = await repo.listRuns('rte-one', 10);
+    expect(runs.map((r) => r.id)).toEqual(['run-2', 'run-1']);
+    expect((runs[1].findings as { ruleId: string }[])[0].ruleId).toBe('SA-CDN-001');
+
+    expect(await repo.pruneRuns(t('2026-07-27T10:02:00Z'))).toBe(1); // removes run-1
+    await repo.deleteProfile('rte-one');
+    expect(await repo.getProfile('rte-one')).toBeNull();
   });
 });

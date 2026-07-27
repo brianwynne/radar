@@ -25,6 +25,7 @@ const NAV = [
   // BGP Intelligence now lives inside Network Telemetry as a tab (RIPE + BGP.Tools); route kept for direct links.
   { to: '/load-balancing', label: 'DNS Load Balancing', perm: 'topology.summary.read', end: false },
   { to: '/cdn', label: 'Commercial CDN', perm: 'topology.summary.read', end: false },
+  { to: '/stream-assurance', label: 'Stream Assurance', perm: 'topology.summary.read', end: false },
   { to: '/explorer', label: 'NS1 Explorer', perm: 'ns1.detail.read', end: false },
   // Hidden from the nav — routes remain, still reachable by URL.
   // { to: '/validation/ns1', label: 'NS1 Validation', perm: 'ns1.detail.read', end: false },

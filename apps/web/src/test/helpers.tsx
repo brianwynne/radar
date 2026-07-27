@@ -616,6 +616,16 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
         ], realtaBps: 8e9, commercialBps: 1.5e9, totalBps: 9.5e9 },
         average: { avgRealtaBps: 7.7e9, avgCommercialBps: 1.5e9, avgTotalBps: 9.2e9, sampleCount: 120, windowMinutes: 60 },
       };
+      else if (p.endsWith('/stream-assurance/rules')) body = { count: 1, rules: [{ id: 'SA-CDN-001', severity: 'critical', standard: 'RADAR delivery consistency', section: null, description: 'origin-variant / forwarded-Host mismatch', remediation: 'Align the forwarded Host with the origin hostname.' }] };
+      else if (p.endsWith('/stream-assurance/profiles')) body = { count: 1, profiles: [{ id: 'rte-one', name: 'RTÉ One', enabled: true, tags: ['production'], endpointCount: 2, updatedAt: '2026-07-27T21:00:00Z' }] };
+      else if (p.includes('/stream-assurance/profiles/') && p.endsWith('/latest')) body = { run: {
+        id: 'run-1', profileId: 'rte-one', startedAt: '2026-07-27T21:00:00Z', finishedAt: '2026-07-27T21:00:02Z', mode: 'normal', status: 'findings', findingCount: 1,
+        observations: [
+          { endpointId: 'fastly-edge', provider: 'fastly', role: 'reference', reachable: true, httpStatus: 200, kid: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', lastModified: 'Sun, 26 Jul 2026 12:00:00 GMT', cdn: { cdn: 'fastly', edge: 'hit', parent: 'unknown', fetchedFromOrigin: false, originIdentity: null, servedBy: 'cache-lhr-1', age: null }, forwardedHost: 'live.rte.host', originHost: 'live.rte.host' },
+          { endpointId: 'akamai-edge', provider: 'akamai', role: 'candidate', reachable: true, httpStatus: 200, kid: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', lastModified: 'Wed, 01 Jan 2026 00:00:00 GMT', cdn: { cdn: 'akamai', edge: 'miss', parent: 'miss', fetchedFromOrigin: true, originIdentity: null, servedBy: null, age: null }, forwardedHost: 'live.rte.ie', originHost: 'live.rte.host' },
+        ],
+        findings: [{ ruleId: 'SA-CDN-001', classification: 'ORIGIN_VARIANT_MISMATCH', severity: 'critical', endpointId: 'akamai-edge', provider: 'akamai', protocol: 'cenc', likelyLayer: 'config', explanation: "akamai returned KID … origin, not a stale CDN cache. It forwarded Host 'live.rte.ie' while the origin hostname is 'live.rte.host'.", remediation: 'Align the CDN forwarded Host header with the origin hostname.', evidence: {} }],
+      } };
       else if (p.includes('/dns/explain')) body = makeExplain(JSON.parse(String(init?.body)) as ReqBody);
       else if (p.endsWith('/ns1/activity')) body = ACTIVITY_BODY;
       else if (p.endsWith('/api/v1/audit')) body = AUDIT_LIST_BODY;

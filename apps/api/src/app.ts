@@ -58,8 +58,10 @@ import type { NetworkPathTelemetryClient } from './telemetry/types.js';
 import type { TelemetryMode } from './telemetry/index.js';
 import type { CacheTelemetryClient } from './telemetry/cache-types.js';
 import type { DnsObservationService } from './dns-observation/index.js';
-import type { DnsObservationRepository, PniBandwidthRepository, RisEventRepository, DeliverySampleRepository, ValidationResultRepository } from '@radar/data';
+import type { DnsObservationRepository, PniBandwidthRepository, RisEventRepository, DeliverySampleRepository, StreamAssuranceRepository, ValidationResultRepository } from '@radar/data';
 import { dashboardRoutes } from './routes/dashboard.js';
+import { streamAssuranceRoutes } from './routes/stream-assurance.js';
+import type { StreamAssuranceService } from './stream-assurance/service.js';
 import type { ValidationService } from './validation/index.js';
 import type { CloudVisionPoller } from './cloudvision/poller.js';
 import type { CloudVisionSource } from './cloudvision/types.js';
@@ -111,6 +113,8 @@ export interface BuildDeps extends AuthDeps {
   ripeService?: RipeService;
   risEventRepository?: RisEventRepository;
   deliverySampleRepository?: DeliverySampleRepository;
+  streamAssuranceRepository?: StreamAssuranceRepository;
+  streamAssuranceService?: StreamAssuranceService;
   atlasManager?: ResolverManager;
 }
 
@@ -267,6 +271,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(bgpToolsConnectionRoutes, { prefix: '/api/v1', manager: deps.bgpToolsManager });
   await app.register(ripeRoutes, { prefix: '/api/v1', service: deps.ripeService, history: deps.risEventRepository });
   await app.register(dashboardRoutes, { prefix: '/api/v1', cloudVisionPoller: deps.cloudVisionPoller, fastlyPoller: deps.fastlyPoller, akamaiConnector: deps.akamaiConnector, deliveryRepo: deps.deliverySampleRepository });
+  await app.register(streamAssuranceRoutes, { prefix: '/api/v1', repo: deps.streamAssuranceRepository, service: deps.streamAssuranceService, audit: deps.database?.audit });
   await app.register(resolverRoutes, { prefix: '/api/v1', manager: deps.atlasManager ?? createAtlasManager(loadAtlasConfig()) });
 
   // Machine-readable spec, available in all environments; hidden from the spec itself.

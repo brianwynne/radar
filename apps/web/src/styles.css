@@ -112,6 +112,26 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .isp-pie-name .mono { font-size: 0.74rem; }
 .isp-pie-mix { font-size: 0.78rem; line-height: 1.5; }
 
+/* Stream Assurance */
+.sa-layout { display: grid; grid-template-columns: minmax(200px, 260px) 1fr; gap: 1.25rem; align-items: start; }
+@media (max-width: 760px) { .sa-layout { grid-template-columns: 1fr; } }
+.sa-profiles { display: flex; flex-direction: column; gap: 0.35rem; }
+.sa-profile { display: flex; flex-direction: column; gap: 0.1rem; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 0.6rem 0.75rem; cursor: pointer; font: inherit; color: inherit; }
+.sa-profile:hover { border-color: color-mix(in srgb, var(--brand) 40%, var(--line)); }
+.sa-profile.active { border-color: var(--brand); background: color-mix(in srgb, var(--brand) 6%, transparent); }
+.sa-profile-name { font-weight: 650; font-size: 0.9rem; }
+.sa-profile .muted { font-size: 0.74rem; }
+.sa-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 0.75rem; }
+.sa-detail-actions { display: inline-flex; align-items: center; gap: 0.75rem; font-size: 0.8rem; }
+.sa-findings { display: flex; flex-direction: column; gap: 0.6rem; }
+.sa-finding { border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; padding: 0.7rem 0.85rem; }
+.sa-finding.sa-sev-critical, .sa-finding.sa-sev-error { border-left-color: var(--danger); }
+.sa-finding.sa-sev-warning { border-left-color: var(--warn); }
+.sa-finding.sa-sev-info { border-left-color: var(--line); }
+.sa-finding-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.9rem; }
+.sa-finding-explain { margin: 0.4rem 0 0.2rem; font-size: 0.86rem; }
+.sa-finding-fix { margin: 0; font-size: 0.8rem; }
+
 /* Dashboard delivery pie */
 .delivery-pie-head { display: flex; flex-direction: column; gap: 0.1rem; margin-bottom: 0.75rem; }
 .delivery-pie-head .muted { font-size: 0.76rem; }

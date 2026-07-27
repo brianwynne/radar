@@ -35,6 +35,11 @@ export type {
   NewDeliverySample,
   DeliveryAverages,
   DeliverySampleRepository,
+  StreamAssuranceProfileRow,
+  NewStreamAssuranceProfile,
+  StreamAssuranceRunRow,
+  NewStreamAssuranceRun,
+  StreamAssuranceRepository,
   ValidationResultRecord,
   NewValidationResult,
   ValidationResultQuery,
@@ -74,6 +79,7 @@ export { PostgresDnsObservationRepository } from './dns/postgres-dns-observation
 export { PostgresPniBandwidthRepository } from './network/postgres-pni-bandwidth-repository.js';
 export { PostgresRisEventRepository } from './ripe/postgres-ris-event-repository.js';
 export { PostgresDeliverySampleRepository } from './dashboard/postgres-delivery-sample-repository.js';
+export { PostgresStreamAssuranceRepository } from './stream-assurance/postgres-stream-assurance-repository.js';
 export { PostgresValidationResultRepository } from './validation/postgres-validation-repository.js';
 export { PostgresConnectorSettingsRepository } from './connector/postgres-connector-settings-repository.js';
 export {
