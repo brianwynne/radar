@@ -65,14 +65,56 @@ export function AppShell() {
                 <line x1="89" y1="110" x2="219" y2="110" stroke="#4aa3ff" strokeWidth="4" opacity="0.9" />
                 <animateTransform attributeName="transform" type="rotate" from="0 89 110" to="360 89 110" dur="8s" repeatCount="indefinite" />
               </g>
-              {/* Dublin origin blip (RADAR's CTW/PKW datacentres) — pings as the beam sweeps past (east). */}
-              <circle cx="136" cy="111" r="3.5" fill="#4aa3ff">
-                <animate attributeName="opacity" values="1;0.25;0.25;1" keyTimes="0;0.08;0.92;1" dur="8s" repeatCount="indefinite" />
-                <animate attributeName="r" values="6;3.5;3.5;6" keyTimes="0;0.08;0.92;1" dur="8s" repeatCount="indefinite" />
-              </circle>
             </g>
             <use href="#ie-outline" fill="none" stroke="#2ecc71" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
-            <circle cx="89" cy="110" r="5" fill="#4aa3ff" />
+            {/* Edge PoPs across the island — content delivered from the Dublin origin. Each city's
+                blue ring ripples outward as the sweep beam reaches it (begin = its bearing / 8s). */}
+            <g>
+              {/* Dublin — RTÉ origin (CTW/PKW) */}
+              <circle cx="142" cy="114" r="4.5" fill="#4aa3ff" />
+              {/* Cork */}
+              <circle cx="71" cy="193" r="2.6" fill="#2ecc71" />
+              <circle cx="71" cy="193" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="2.27s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="2.27s" repeatCount="indefinite" /></circle>
+              {/* Limerick */}
+              <circle cx="66" cy="152" r="2.6" fill="#2ecc71" />
+              <circle cx="66" cy="152" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="2.64s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="2.64s" repeatCount="indefinite" /></circle>
+              {/* Galway */}
+              <circle cx="52" cy="118" r="2.6" fill="#2ecc71" />
+              <circle cx="52" cy="118" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="3.73s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="3.73s" repeatCount="indefinite" /></circle>
+              {/* Waterford */}
+              <circle cx="115" cy="173" r="2.6" fill="#2ecc71" />
+              <circle cx="115" cy="173" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="1.5s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="1.5s" repeatCount="indefinite" /></circle>
+              {/* Belfast */}
+              <circle cx="153" cy="46" r="2.6" fill="#2ecc71" />
+              <circle cx="153" cy="46" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="7s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="7s" repeatCount="indefinite" /></circle>
+              {/* Derry */}
+              <circle cx="108" cy="24" r="2.6" fill="#2ecc71" />
+              <circle cx="108" cy="24" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="6.28s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="6.28s" repeatCount="indefinite" /></circle>
+              {/* Sligo */}
+              <circle cx="71" cy="64" r="2.6" fill="#2ecc71" />
+              <circle cx="71" cy="64" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="5.53s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="5.53s" repeatCount="indefinite" /></circle>
+              {/* Letterkenny */}
+              <circle cx="95" cy="27" r="2.6" fill="#2ecc71" />
+              <circle cx="95" cy="27" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="6.09s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="6.09s" repeatCount="indefinite" /></circle>
+              {/* Kilkenny */}
+              <circle cx="110" cy="152" r="2.6" fill="#2ecc71" />
+              <circle cx="110" cy="152" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="1.41s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="1.41s" repeatCount="indefinite" /></circle>
+              {/* Wexford */}
+              <circle cx="136" cy="169" r="2.6" fill="#2ecc71" />
+              <circle cx="136" cy="169" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="1.14s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="1.14s" repeatCount="indefinite" /></circle>
+              {/* Drogheda */}
+              <circle cx="139" cy="94" r="2.6" fill="#2ecc71" />
+              <circle cx="139" cy="94" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="7.61s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="7.61s" repeatCount="indefinite" /></circle>
+              {/* Athlone (centre of Ireland — sits on the radar pivot) */}
+              <circle cx="88" cy="110" r="2.6" fill="#2ecc71" />
+              <circle cx="88" cy="110" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="4s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="4s" repeatCount="indefinite" /></circle>
+              {/* Tralee */}
+              <circle cx="31" cy="173" r="2.6" fill="#2ecc71" />
+              <circle cx="31" cy="173" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="2.95s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="2.95s" repeatCount="indefinite" /></circle>
+              {/* Ennis */}
+              <circle cx="54" cy="142" r="2.6" fill="#2ecc71" />
+              <circle cx="54" cy="142" r="2.6" fill="none" stroke="#4aa3ff" strokeWidth="1.8"><animate attributeName="r" values="2.6;12;12" keyTimes="0;0.14;1" dur="8s" begin="3.06s" repeatCount="indefinite" /><animate attributeName="opacity" values="0.85;0;0" keyTimes="0;0.14;1" dur="8s" begin="3.06s" repeatCount="indefinite" /></circle>
+            </g>
           </svg>
           <span className="brand-name">RaDAR<small>Réalta Delivery Analysis &amp; Routing</small></span>
         </div>
