@@ -97,6 +97,21 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
   .subtab { white-space: nowrap; }
 }
 
+/* Steering overview — a grid of per-ISP delivery-mix pies, side by side */
+.isp-pie-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 0.9rem; }
+.isp-pie-card {
+  display: flex; flex-direction: column; align-items: center; gap: 0.5rem; text-align: center;
+  background: transparent; border: 1px solid var(--line); border-radius: 12px; padding: 1rem 0.7rem;
+  font: inherit; color: inherit;
+}
+.isp-pie-card:hover {
+  background: color-mix(in srgb, var(--brand) 6%, transparent);
+  border-color: color-mix(in srgb, var(--brand) 40%, var(--line));
+}
+.isp-pie-name { font-weight: 650; font-size: 0.88rem; line-height: 1.2; }
+.isp-pie-name .mono { font-size: 0.74rem; }
+.isp-pie-mix { font-size: 0.78rem; line-height: 1.5; }
+
 /* Dashboard delivery pie */
 .delivery-pie-head { display: flex; flex-direction: column; gap: 0.1rem; margin-bottom: 0.75rem; }
 .delivery-pie-head .muted { font-size: 0.76rem; }

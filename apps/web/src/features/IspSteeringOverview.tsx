@@ -88,45 +88,32 @@ export function IspSteeringOverview({ zone, domain, type, onPick }: Props) {
       {rows === null ? (
         <span className="muted">Evaluating every ISP…</span>
       ) : (
-        <div style={{ display: 'grid', gap: '0.4rem' }}>
+        <div className="isp-pie-grid">
           {rows.map((r) => (
             <button
               key={r.isp.id}
+              className="isp-pie-card"
               onClick={() => onPick?.(r.isp)}
               title={`Explain a ${r.isp.name} subscriber (AS${r.isp.asn})`}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'minmax(120px, 190px) 44px 1fr',
-                gap: '0.9rem',
-                alignItems: 'center',
-                textAlign: 'left',
-                background: 'transparent',
-                border: 'none',
-                borderBottom: '1px solid var(--border, #2d3748)',
-                padding: '0.45rem 0.2rem',
-                cursor: onPick ? 'pointer' : 'default',
-                font: 'inherit',
-                color: 'inherit',
-              }}
+              style={{ cursor: onPick ? 'pointer' : 'default' }}
             >
-              <span>
-                {r.isp.name} <span className="mono muted" style={{ fontSize: '0.78rem' }}>AS{r.isp.asn}</span>
-              </span>
               {/* Delivery-platform mix as a donut. */}
               <Donut
                 data={r.segments.map((s) => ({ label: s.platform, value: s.share, color: colorFor(s.platform) }))}
-                size={44}
-                thickness={14}
+                size={96}
+                thickness={28}
                 ariaLabel={`${r.isp.name} delivery mix`}
               />
-              <span style={{ fontSize: '0.85rem' }}>
+              <div className="isp-pie-name">
+                {r.isp.name} <span className="mono muted">AS{r.isp.asn}</span>
+              </div>
+              <div className="isp-pie-mix">
                 {r.error ? (
                   <span className="muted">unavailable ({r.error})</span>
                 ) : r.segments.length === 0 ? (
                   <span className="muted">—</span>
                 ) : (
-                  // The FULL mix, not just the top platform — so an off-island subscriber shows
-                  // "Réalta 50% · Fastly 50%", not just "Réalta 50%".
+                  // The FULL mix, not just the top platform — off-island shows "Réalta 50% · Fastly 50%".
                   r.segments.map((s, i) => (
                     <span key={s.platform}>
                       {i > 0 && <span className="muted"> · </span>}
@@ -135,7 +122,7 @@ export function IspSteeringOverview({ zone, domain, type, onPick }: Props) {
                   ))
                 )}
                 {!r.complete && !r.error && <span className="badge warn" style={{ marginLeft: '0.3rem' }}>partial</span>}
-              </span>
+              </div>
             </button>
           ))}
         </div>
