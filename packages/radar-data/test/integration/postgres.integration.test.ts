@@ -167,9 +167,9 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
         }
       };
       const [a, b] = await Promise.all([runOnce(), runOnce()]);
-      expect([a.length, b.length].sort()).toEqual([0, 12]); // one applied all, the other found them applied
+      expect([a.length, b.length].sort()).toEqual([0, 13]); // one applied all, the other found them applied
       const count = await pool.query<{ n: number }>('SELECT count(*)::int n FROM schema_migrations');
-      expect(count.rows[0].n).toBe(12); // no duplicate
+      expect(count.rows[0].n).toBe(13); // no duplicate
     });
 
     it('releases the advisory lock after success and after failure', async () => {

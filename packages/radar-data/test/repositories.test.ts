@@ -71,6 +71,7 @@ describe('migrations (pg-mem)', () => {
       { version: '0010_delivery_samples', filename: '0010_delivery_samples.sql', applied: true, checksumMatches: true },
       { version: '0011_stream_assurance', filename: '0011_stream_assurance.sql', applied: true, checksumMatches: true },
       { version: '0012_stream_assurance_alerts', filename: '0012_stream_assurance_alerts.sql', applied: true, checksumMatches: true },
+      { version: '0013_pni_bandwidth_index', filename: '0013_pni_bandwidth_index.sql', applied: true, checksumMatches: true },
     ]);
   });
 
