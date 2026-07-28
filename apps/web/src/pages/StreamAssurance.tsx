@@ -73,15 +73,16 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   };
 
   // Resolve a whole channel (feed → SMIL → redirects → discover) and fill the form from RADAR's own IP.
-  const resolveChannel = async () => {
-    if (!channel) return;
-    setResolving(true); setErr(null);
+  // Takes the callSign explicitly so it never depends on state that may not have committed yet.
+  const resolveChannel = async (cs: string = channel) => {
+    if (!cs) { setErr('Pick a channel from the dropdown first.'); return; }
+    setResolving(true); setErr(null); setDiscovered(null);
     try {
-      const { resolved } = await api.saResolveChannel(channel);
+      const { resolved } = await api.saResolveChannel(cs);
       applyManifest(resolved.manifest, resolved.finalManifestUrl);
       setMpdUrl(resolved.finalManifestUrl);
-      if (!id.trim() || id === 'channel4') { setId(channel.toLowerCase().replace(/[^a-z0-9-]+/g, '-')); }
-      const title = channels?.find((c) => c.callSign === channel)?.title;
+      if (!id.trim() || id === 'channel4') setId(cs.toLowerCase().replace(/[^a-z0-9-]+/g, '-'));
+      const title = channels?.find((c) => c.callSign === cs)?.title;
       if (title) setName(title);
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Channel resolve failed.');
@@ -130,12 +131,13 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
           <>
             <h4 className="sa-form-h">Pick a channel <span className="muted">· resolves the manifest from RADAR — no URLs needed</span></h4>
             <div className="sa-form-row">
-              <select value={channel} onChange={(e) => setChannel(e.target.value)} aria-label="Channel">
+              <select value={channel} onChange={(e) => { setChannel(e.target.value); if (e.target.value) void resolveChannel(e.target.value); }} disabled={resolving} aria-label="Channel">
                 <option value="">Select a channel…</option>
                 {channels.map((c) => <option key={c.callSign} value={c.callSign}>{c.title} ({c.delivery})</option>)}
               </select>
-              <button type="button" className="btn" onClick={resolveChannel} disabled={resolving || !channel}>{resolving ? 'Resolving…' : 'Load channel'}</button>
+              <button type="button" className="btn" onClick={() => resolveChannel()} disabled={resolving || !channel}>{resolving ? 'Resolving…' : 'Reload'}</button>
             </div>
+            {resolving && <div className="muted" style={{ fontSize: '0.76rem' }}>Resolving <b>{channel}</b> from RADAR (feed → SMIL → CDN)…</div>}
             <div className="muted" style={{ fontSize: '0.72rem' }}>Or resolve a DASH manifest URL directly:</div>
           </>
         )}

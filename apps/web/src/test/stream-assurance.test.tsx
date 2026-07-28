@@ -89,9 +89,8 @@ describe('Stream Tests page', () => {
     expect((screen.getByDisplayValue('t.sni.global.fastly.net') as HTMLInputElement)).toBeInTheDocument(); // Fastly
     expect((screen.getByDisplayValue('live.rte.ie.akamaized.net') as HTMLInputElement)).toBeInTheDocument(); // Akamai
 
-    // Pick a channel → RADAR resolves the manifest (feed → SMIL → redirects) and fills the form.
+    // Picking a channel auto-resolves (feed → SMIL → redirects) and fills the form — no extra click.
     fireEvent.change(await screen.findByRole('combobox', { name: /Channel/ }), { target: { value: 'RTEONE' } });
-    fireEvent.click(screen.getByRole('button', { name: /Load channel/ }));
     await vi.waitFor(() => {
       const urls = screen.getAllByPlaceholderText(/public object URL/) as HTMLInputElement[];
       expect(urls[0].value).toBe('https://live.rte.ie/live/b/vc11/vc11.isml/dash/vc11-video=6000000.dash');
