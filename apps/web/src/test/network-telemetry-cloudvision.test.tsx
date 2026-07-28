@@ -302,11 +302,11 @@ describe('Network Telemetry page', () => {
     stubApi(NOC);
     renderAt('/network');
     await screen.findByText('JPE00000001');
-    fireEvent.click(screen.getByRole('button', { name: 'PNI Graphs' }));
+    fireEvent.click(screen.getByRole('button', { name: 'PNI / Interface Graphs' }));
 
     // The key is grouped by role, and groups are COLLAPSED by default — chips are hidden until opened.
     await screen.findByRole('button', { name: /Eyeball PNI/ });
-    expect(screen.queryByText('Eir CTW Et1')).not.toBeInTheDocument();
+    expect(screen.queryByText('Eir CTW Po7')).not.toBeInTheDocument();
     // The chart is a real time-series (SVG) labelled by direction + range.
     expect(screen.getByRole('img', { name: /PNI .*bandwidth over the last 60 minutes/ })).toBeInTheDocument();
     // Range selector present with the 1-hour default active; day selector spans the last 7 days, live.
@@ -318,8 +318,9 @@ describe('Network Telemetry page', () => {
     // Expand the Eyeball PNI and Transit groups to inspect their chips.
     fireEvent.click(screen.getByRole('button', { name: /Eyeball PNI/ }));
     fireEvent.click(screen.getByRole('button', { name: /Transit \(/ }));
-    expect(screen.getByText('Eir CTW Et1')).toBeInTheDocument();
-    expect(screen.getByText('Sky CTW Et2')).toBeInTheDocument();
+    expect(screen.getByText('Eir CTW Po7')).toBeInTheDocument();
+    expect(screen.getByText('Sky CTW Po4')).toBeInTheDocument();
+    expect(screen.queryByText(/Et8\/3\/1/)).not.toBeInTheDocument(); // stray unresolved LAG member filtered out
 
     // ALL links are logged, but non-eyeball ones (transit Cogent) start HIDDEN by default.
     const cogent = () => screen.getByText('Cogent PKW Et4').closest('button')!;
@@ -328,7 +329,7 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Vodafone PKW Po9').closest('button')!.className).not.toContain('off');
     // Eyeball networks are listed FIRST in the key.
     const chips = screen.getAllByText(/(CTW|PKW) (Et|Po)/).map((el) => el.textContent);
-    expect(chips.indexOf('Eir CTW Et1')).toBeLessThan(chips.indexOf('Cogent PKW Et4'));
+    expect(chips.indexOf('Eir CTW Po7')).toBeLessThan(chips.indexOf('Cogent PKW Et4'));
 
     // "All" reveals the transit link; the "Eyeball" button hides the non-eyeball links again.
     fireEvent.click(screen.getByRole('button', { name: 'All' }));
@@ -341,7 +342,7 @@ describe('Network Telemetry page', () => {
     expect(screen.getByRole('button', { name: /Live/ })).toBeInTheDocument();
 
     // The legend doubles as a PNI filter — clicking a chip toggles that series off.
-    fireEvent.click(screen.getByText('Eir CTW Et1'));
-    expect(screen.getByText('Eir CTW Et1').closest('button')!.className).toContain('off');
+    fireEvent.click(screen.getByText('Eir CTW Po7'));
+    expect(screen.getByText('Eir CTW Po7').closest('button')!.className).toContain('off');
   });
 });

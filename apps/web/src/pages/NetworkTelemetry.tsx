@@ -380,10 +380,10 @@ export function NetworkTelemetry() {
       </header>
 
       <nav className="subtabs">
-        <button className={`subtab ${tab === 'telemetry' ? 'active' : ''}`} onClick={() => setTab('telemetry')}>Telemetry</button>
-        <button className={`subtab ${tab === 'bandwidth' ? 'active' : ''}`} onClick={() => setTab('bandwidth')}>OTT Delivery</button>
-        <button className={`subtab ${tab === 'pni' ? 'active' : ''}`} onClick={() => setTab('pni')}>PNI Graphs</button>
-        <button className={`subtab ${tab === 'resolvers' ? 'active' : ''}`} onClick={() => setTab('resolvers')}>Resolvers</button>
+        <button className={`subtab ${tab === 'telemetry' ? 'active' : ''}`} onClick={() => setTab('telemetry')}>Edge Network Telemetry</button>
+        <button className={`subtab ${tab === 'bandwidth' ? 'active' : ''}`} onClick={() => setTab('bandwidth')}>OTT Delivery Links</button>
+        <button className={`subtab ${tab === 'pni' ? 'active' : ''}`} onClick={() => setTab('pni')}>PNI / Interface Graphs</button>
+        <button className={`subtab ${tab === 'resolvers' ? 'active' : ''}`} onClick={() => setTab('resolvers')}>DNS Resolvers</button>
         <button className={`subtab ${tab === 'bgp' ? 'active' : ''}`} onClick={() => setTab('bgp')}>BGP Intelligence</button>
       </nav>
 

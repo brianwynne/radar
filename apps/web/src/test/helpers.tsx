@@ -364,13 +364,17 @@ export const PNI_HISTORY_BODY = {
   provenance: cvProv, rangeMinutes: 60, bucketSeconds: 10,
   windowStartMs: Date.parse('2026-07-15T11:00:00Z'), windowEndMs: Date.parse('2026-07-15T12:00:00Z'),
   series: [
-    { deviceId: 'JPE00000001', interfaceName: 'Ethernet1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', points: [
+    { deviceId: 'JPE00000001', interfaceName: 'Port-Channel7', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', points: [
       { at: '2026-07-15T11:59:50Z', inBps: 8e9, outBps: 40e9 },
       { at: '2026-07-15T12:00:00Z', inBps: 9e9, outBps: 44e9 },
     ] },
-    { deviceId: 'JPE00000001', interfaceName: 'Ethernet2', provider: 'Sky', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', points: [
+    { deviceId: 'JPE00000001', interfaceName: 'Port-Channel4', provider: 'Sky', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', points: [
       { at: '2026-07-15T11:59:50Z', inBps: 3e9, outBps: 60e9 },
       { at: '2026-07-15T12:00:00Z', inBps: 3.2e9, outBps: 66e9 },
+    ] },
+    // A stray physical sub-port CVaaS failed to resolve as a LAG member — must be filtered out (bug fix).
+    { deviceId: 'JPE00000001', interfaceName: 'Ethernet8/3/1', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', points: [
+      { at: '2026-07-15T12:00:00Z', inBps: 0, outBps: 0 },
     ] },
     // A non-eyeball (transit) link — logged, but hidden by default.
     { deviceId: 'JPE00000002', interfaceName: 'Ethernet4', provider: 'Cogent', linkType: 'TRANSIT', datacentre: 'Parkwest', points: [

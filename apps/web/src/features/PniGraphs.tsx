@@ -48,6 +48,14 @@ const NON_EYEBALL_TYPES = new Set(['TRANSIT', 'IX_PEERING', 'INTERNAL']);
 const isEyeball = (s: PniHistorySeries): boolean =>
   EYEBALL.test(s.provider ?? s.interfaceName ?? '') && !NON_EYEBALL_TYPES.has(s.linkType ?? '');
 
+// A PNI / eyeball link is a Port-Channel (LAG) bundle. CVaaS sometimes fails to resolve a LAG member's
+// bundle (memberOf comes back null), so a stray physical sub-port (e.g. Et8/3/1) leaks in as a bogus
+// 0-traffic "PNI" next to its real aggregate. Drop any private-peering / eyeball link that is NOT a
+// Port-Channel — the real traffic is on the bundle. (IX / transit / inter-DC on plain Ethernet stay.)
+const isUnbundledPni = (s: PniHistorySeries): boolean =>
+  !s.interfaceName.startsWith('Port-Channel') &&
+  (s.linkType === 'PRIVATE_PEERING' || EYEBALL.test(s.provider ?? ''));
+
 // Group links by role for a neat, sectioned key. Eyeball PNIs first (the default view).
 const GROUP_ORDER = ['Eyeball PNI', 'PNI', 'IX', 'Transit', 'Inter-DC', 'Other'] as const;
 const groupOf = (s: PniHistorySeries): string => {
@@ -117,7 +125,7 @@ export function PniGraphs() {
         .pniHistory(minutes, viewEndMs ?? undefined)
         .then((res) => {
           if (!active) return;
-          setSeries(res.series);
+          setSeries(res.series.filter((s) => !isUnbundledPni(s)));
           setWin({ start: res.windowStartMs, end: res.windowEndMs });
           setUpdatedAt(Date.now());
           setError(null);

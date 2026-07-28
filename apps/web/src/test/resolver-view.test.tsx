@@ -7,7 +7,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 const openResolvers = async () => {
   renderAt('/network');
-  await userEvent.click(await screen.findByRole('button', { name: 'Resolvers' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'DNS Resolvers' }));
   await screen.findByText('Eir');
 };
 
