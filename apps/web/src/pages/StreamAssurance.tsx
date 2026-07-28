@@ -1,7 +1,7 @@
 // Stream Assurance — DASH/HLS/CMAF conformance + cross-CDN consistency. Read-only overview + a
 // per-profile CDN comparison and standards findings. A viewing engineer can trigger a diagnostic
 // run. Follows the existing RADAR visual language (cards, matrix tables, badges, notices).
-import { Fragment, useEffect, useState, type FormEvent } from 'react';
+import { Component, Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import type { SaAlert, SaChannel, SaDiscoveredManifest, SaEndpointInput, SaFinding, SaObservation, SaProfileInput, SaProfileSummary, SaRun } from '../api/types';
@@ -278,6 +278,16 @@ function InitInspector({ observations }: { observations: SaObservation[] }) {
   );
 }
 
+// Never let a malformed/older run snapshot blank the whole page — contain render errors to a notice.
+class ErrorBoundary extends Component<{ children: ReactNode; label?: string }, { error: Error | null }> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) { return { error }; }
+  render() {
+    if (this.state.error) return <div className="notice danger">Couldn’t render {this.props.label ?? 'this view'} — the data may be from an older format. Re-run to refresh. <span className="muted">({this.state.error.message})</span></div>;
+    return this.props.children;
+  }
+}
+
 const ok = <span className="badge ok badge-sm">✓</span>;
 const dash = <span className="muted">—</span>;
 const unreachable = (status: number | null) => <span><span className="badge danger badge-sm">unreachable</span>{status != null && <span className="muted"> · HTTP {status}</span>}</span>;
@@ -305,18 +315,21 @@ function MediaChecks({ observations }: { observations: SaObservation[] }) {
         <tbody>
           {withMedia.map((o) => {
             const m = o.media!;
+            const req = m.requested ?? { dash: false, hls: false, fragment: false }; // tolerate older run shapes
+            const st = m.status ?? { dash: null, hls: null, fragment: null };
+            const bands = m.dash?.bandwidths?.length ?? 0;
             return (
               <tr key={o.endpointId}>
                 <td>{o.endpointId}{o.role === 'reference' && <span className="badge neutral badge-sm" style={{ marginLeft: '0.3rem' }}>reference</span>}</td>
-                <td>{!m.requested.dash ? dash : m.dash
-                  ? <span>{ok} <span className="muted">{m.dash.presentation ?? 'static'}{m.dash.presentation === 'dynamic' && m.dash.publishTime ? ` · ${fmtAge(m.dash.publishTime)}` : ''} · {m.dash.bandwidths.length} rendition{m.dash.bandwidths.length === 1 ? '' : 's'}</span></span>
-                  : unreachable(m.status.dash)}</td>
-                <td>{!m.requested.fragment ? dash : m.fragment
+                <td>{!req.dash ? dash : m.dash
+                  ? <span>{ok} <span className="muted">{m.dash.presentation ?? 'static'}{m.dash.presentation === 'dynamic' && m.dash.publishTime ? ` · ${fmtAge(m.dash.publishTime)}` : ''} · {bands} rendition{bands === 1 ? '' : 's'}</span></span>
+                  : unreachable(st.dash)}</td>
+                <td>{!req.fragment ? dash : m.fragment
                   ? (m.fragment.hasTimeline
                     ? <span>{ok} <span className="muted mono">seq {m.fragment.sequenceNumber ?? '?'} · dts {m.fragment.baseMediaDecodeTime ?? '?'}</span></span>
                     : <span className="muted">fetched · no <code>moof</code> (not a media fragment)</span>)
-                  : unreachable(m.status.fragment)}</td>
-                <td>{!m.requested.hls ? dash : m.hls ? ok : unreachable(m.status.hls)}</td>
+                  : unreachable(st.fragment)}</td>
+                <td>{!req.hls ? dash : m.hls ? ok : unreachable(st.hls)}</td>
               </tr>
             );
           })}
@@ -504,14 +517,14 @@ export function StreamAssurance() {
             )}
 
             {run ? (
-              <>
+              <ErrorBoundary label="the run detail">
                 <ComparisonTable run={run} />
-                <MediaChecks observations={run.observations} />
-                <InitInspector observations={run.observations} />
-                <HeaderInspector observations={run.observations} />
+                <MediaChecks observations={run.observations ?? []} />
+                <InitInspector observations={run.observations ?? []} />
+                <HeaderInspector observations={run.observations ?? []} />
                 <h3 style={{ marginTop: '1.25rem' }}>Findings</h3>
-                <Findings findings={run.findings} />
-              </>
+                <Findings findings={run.findings ?? []} />
+              </ErrorBoundary>
             ) : (
               <div className="notice info">No run yet for this profile.{canRun ? ' Use “Run now” to check the endpoints.' : ''}</div>
             )}
