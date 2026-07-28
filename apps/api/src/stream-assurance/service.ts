@@ -11,6 +11,14 @@ import type { SsrfPolicy } from './ssrf.js';
 /** Stable alert identity across runs — the same finding class on the same endpoint. */
 const alertId = (profileId: string, f: sa.Finding): string => `${profileId}:${f.endpointId}:${f.ruleId}:${f.classification}`;
 
+/** Compact per-endpoint media-check summary persisted in the run for positive display. */
+interface MediaSummary {
+  requested: { dash: boolean; hls: boolean; fragment: boolean };
+  dash: { presentation: string | null; publishTime: string | null; defaultKid: string | null; bandwidths: number[] } | null;
+  hls: boolean;
+  fragment: { sequenceNumber: number | null; baseMediaDecodeTime: number | null; sampleCount: number | null } | null;
+}
+
 export interface StreamProfileConfig {
   endpoints: EndpointConfig[];
   authoritativeKid?: string | null;
@@ -57,6 +65,9 @@ export class StreamAssuranceService {
     // different CDN), so a stale/wrong manifest on one CDN is caught. Per-endpoint findings are
     // attributed to that endpoint; the parsed manifests then feed a cross-CDN consistency comparison
     // (KID / ladder / live-publishTime drift). Bounded; skipped when no manifest URLs are configured.
+    // Per-endpoint media-check summary, surfaced in the run even when everything passes (so the
+    // manifest/fragment checks are visibly "ran + green", not just an absence of findings).
+    const mediaByEndpoint = new Map<string, MediaSummary>();
     if (config.manifests && endpoints.length > 0) {
       const perEndpoint = await Promise.all(endpoints.map(async (ep) => {
         const obs = await observeManifests(config.manifests!, {
@@ -65,8 +76,15 @@ export class StreamAssuranceService {
         }, this.policy, this.now());
         return { ep, obs };
       }));
+      const requested = { dash: !!config.manifests.dashMpdUrl, hls: !!(config.manifests.hlsMasterUrl || config.manifests.hlsMediaUrl), fragment: !!config.manifests.mediaFragmentUrl };
       for (const { ep, obs } of perEndpoint) {
         for (const s of obs.findings) findings.push(sa.withEndpoint(s, ep.endpointId, ep.provider, 'packager'));
+        mediaByEndpoint.set(ep.endpointId, {
+          requested,
+          dash: obs.dash ? { presentation: obs.dash.presentation, publishTime: obs.dash.publishTime, defaultKid: obs.dash.drm.defaultKid, bandwidths: obs.dash.representationBandwidths } : null,
+          hls: !!obs.hlsMaster,
+          fragment: obs.fragment ? { sequenceNumber: obs.fragment.sequenceNumber, baseMediaDecodeTime: obs.fragment.baseMediaDecodeTime, sampleCount: obs.fragment.sampleCount } : null,
+        });
       }
       findings.push(...sa.compareManifestsAcrossCdns(perEndpoint.map(({ ep, obs }) => ({
         endpointId: ep.endpointId, provider: ep.provider, role: ep.role, dash: obs.dash, hlsMaster: obs.hlsMaster,
@@ -79,8 +97,8 @@ export class StreamAssuranceService {
     }
 
     // Bounded observations — parsed init metadata (brands/tracks/CENC/PSSH — identifiers only, no
-    // keys and no raw bytes) + evidence, never response bodies.
-    const observations = results.map((r) => ({ ...r.observation, error: r.error ?? null, init: r.init ?? null }));
+    // keys and no raw bytes) + a media-check summary + evidence, never response bodies.
+    const observations = results.map((r) => ({ ...r.observation, error: r.error ?? null, init: r.init ?? null, media: mediaByEndpoint.get(r.observation.endpointId) ?? null, headers: r.headers ?? null }));
     const hadError = results.some((r) => r.error);
     const status = findings.some((f) => f.severity === 'critical' || f.severity === 'error') ? 'findings' : hadError ? 'error' : 'ok';
 

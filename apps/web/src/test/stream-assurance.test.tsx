@@ -18,23 +18,35 @@ describe('Stream Tests page', () => {
     expect(screen.getByText(/live\.rte\.ie/)).toBeInTheDocument(); // Host mismatch surfaced in the run finding
     expect(screen.getByText(/Align the CDN forwarded Host header/)).toBeInTheDocument();
 
-    // Comparison table lists both endpoints and the from-origin cache evidence.
+    // Comparison table lists both endpoints and the from-origin cache evidence, with the FULL KID.
     const table = screen.getByRole('columnheader', { name: /Cache/ }).closest('table') as HTMLElement;
     expect(within(table).getByText('akamai-edge')).toBeInTheDocument();
     expect(within(table).getByText('fastly-edge')).toBeInTheDocument();
     expect(within(table).getByText(/from origin/)).toBeInTheDocument();
+    expect(within(table).getByText('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa')).toBeInTheDocument(); // full KID, not truncated
+
+    // Response-headers inspector surfaces the redacted headers each CDN returned.
+    fireEvent.click(await screen.findByRole('button', { name: /akamai-edge/ }));
+    expect(await screen.findByText('x-cache-remote')).toBeInTheDocument();
+    expect(screen.getByText(/TCP_MISS from a2.akamai/)).toBeInTheDocument();
 
     // Durable alerts with lifecycle state are surfaced.
     expect(await screen.findByRole('heading', { name: /Active alerts/ })).toBeInTheDocument();
     expect(screen.getByText('active')).toBeInTheDocument(); // alert state badge
 
+    // Media checks panel shows the manifest/fragment checks ran (positive display, not only findings).
+    expect(await screen.findByRole('heading', { name: /Media checks/ })).toBeInTheDocument();
+    expect(screen.getByText(/3 renditions/)).toBeInTheDocument(); // DASH ladder count
+    expect(screen.getByText(/seq 100/)).toBeInTheDocument(); // sampled fragment
+
     // CMAF/DRM inspector: parsed init metadata surfaces per endpoint; expanding reveals the CENC
-    // scheme + PSSH system (KID/scheme shown, never keys).
-    const inspector = screen.getByRole('button', { name: /fastly-edge/ });
+    // scheme + PSSH system (KID/scheme shown, never keys). Handler 4cc shows a friendly label.
+    const inspector = screen.getByRole('button', { name: /fastly-edge.*cenc/ }); // the CMAF-inspector card (vs the headers card)
     expect(inspector).toBeInTheDocument();
     inspector.click();
     expect(await screen.findByText(/Widevine/)).toBeInTheDocument();
     expect(screen.getByText('tenc')).toBeInTheDocument(); // the tenc box, KID/scheme shown (never keys)
+    expect(screen.getByText(/video · avc1/)).toBeInTheDocument(); // 'vide' shown as 'video'
 
     // NOC lacks dns.explain.read / connector.manage → no diagnostic or config actions.
     expect(screen.queryByRole('button', { name: /Run now/ })).toBeNull();

@@ -143,6 +143,8 @@ describe('Stream Assurance routes', () => {
     expect(refObs.init).toBeTruthy();
     expect(refObs.init.cenc.defaultKid).toBe(refObs.kid);
     expect(JSON.stringify(refObs.init)).not.toMatch(/"key"/i);
+    // Redacted response headers are captured for diagnosis (the reference served an edge HIT).
+    expect(refObs.headers['x-cache']).toBe('HIT');
     // Persisted + retrievable as the latest run.
     const latest = await ve.inject({ url: '/api/v1/stream-assurance/profiles/rte-test/latest' });
     expect(latest.json().run.findingCount).toBeGreaterThanOrEqual(1);
@@ -217,7 +219,14 @@ describe('Stream Assurance routes', () => {
     const ve = await app('VIEWING_ENGINEER');
     const res = await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/rte-xcdn/run' });
     expect(res.statusCode).toBe(200);
-    const findings = res.json().run.findings as { ruleId: string; endpointId: string; classification: string }[];
+    const runOut = res.json().run as { findings: { ruleId: string; endpointId: string; classification: string }[]; observations: { endpointId: string; media: { requested: { dash: boolean; fragment: boolean }; dash: { presentation: string } | null; fragment: { baseMediaDecodeTime: number } | null } | null }[] };
+    // Media checks are summarised on each observation (positive display, not only findings).
+    const cdn2 = runOut.observations.find((o) => o.endpointId === 'akamai')!;
+    expect(cdn2.media).toBeTruthy();
+    expect(cdn2.media!.requested).toMatchObject({ dash: true, fragment: true });
+    expect(cdn2.media!.dash?.presentation).toBe('dynamic');
+    expect(cdn2.media!.fragment?.baseMediaDecodeTime).toBe(891000);
+    const findings = runOut.findings;
     const xcdn = findings.find((f) => f.ruleId === 'SA-XCDN-001');
     expect(xcdn).toBeTruthy();
     expect(xcdn!.classification).toBe('DRM_KID_MISMATCH');

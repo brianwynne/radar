@@ -4,6 +4,7 @@
 // standards/DRM/classification decisions live in the engine, keeping RADAR's core/connector split.
 import { streamAssurance as sa } from '@radar/engine';
 import { probe } from './probe.js';
+import { providerRequestHeaders, redactResponseHeaders } from './headers.js';
 import { validateTarget, type SsrfPolicy } from './ssrf.js';
 
 export interface EndpointConfig {
@@ -32,6 +33,8 @@ export interface EndpointConfig {
 export interface EndpointResult {
   observation: sa.EndpointObservation;
   init?: sa.InitSegmentInfo;
+  /** Redacted response headers (identifiers/cache/origin evidence; credentials removed). */
+  headers?: Record<string, string>;
   error?: string;
 }
 
@@ -52,7 +55,7 @@ export async function observeInit(cfg: EndpointConfig, policy: SsrfPolicy): Prom
   try {
     const res = await probe({
       publicUrl: cfg.publicUrl, connectHost: cfg.connectHost, connectPort: cfg.connectPort,
-      hostHeader: cfg.hostHeader, sni: cfg.sni, headers: cfg.headers, timeoutMs: cfg.timeoutMs, maxBytes: cfg.maxBytes,
+      hostHeader: cfg.hostHeader, sni: cfg.sni, headers: { ...providerRequestHeaders(cfg.provider), ...cfg.headers }, timeoutMs: cfg.timeoutMs, maxBytes: cfg.maxBytes,
     });
     const cdn = sa.parseCdnHeaders(cfg.provider, res.headers, { originIdentityHeaders: cfg.identityHeaders });
     let init: sa.InitSegmentInfo | undefined;
@@ -64,6 +67,7 @@ export async function observeInit(cfg: EndpointConfig, policy: SsrfPolicy): Prom
     }
     return {
       init,
+      headers: redactResponseHeaders(res.headers),
       observation: {
         endpointId: cfg.endpointId, provider: cfg.provider, role: cfg.role,
         reachable: res.status >= 200 && res.status < 400,

@@ -1,7 +1,7 @@
 // Stream Assurance — DASH/HLS/CMAF conformance + cross-CDN consistency. Read-only overview + a
 // per-profile CDN comparison and standards findings. A viewing engineer can trigger a diagnostic
 // run. Follows the existing RADAR visual language (cards, matrix tables, badges, notices).
-import { useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import type { SaAlert, SaEndpointInput, SaFinding, SaObservation, SaProfileInput, SaProfileSummary, SaRun } from '../api/types';
@@ -114,6 +114,41 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   );
 }
 
+// Redacted response headers per endpoint — the ground truth for diagnosing cache/origin display
+// (e.g. which cache header a CDN actually emits). Credentials are already redacted server-side.
+function HeaderInspector({ observations }: { observations: SaObservation[] }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const withHeaders = observations.filter((o) => o.headers && Object.keys(o.headers).length > 0);
+  if (withHeaders.length === 0) return null;
+  const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  return (
+    <div className="sa-headers">
+      <h3 style={{ margin: '0 0 0.25rem' }}>Response headers <span className="muted">· redacted · what each CDN actually returned</span></h3>
+      {withHeaders.map((o) => {
+        const isOpen = open.has(o.endpointId);
+        const headers = o.headers!;
+        return (
+          <div key={o.endpointId} className={`pni-card${isOpen ? ' open' : ''}`}>
+            <button type="button" className="pni-card-head" onClick={() => toggle(o.endpointId)} aria-expanded={isOpen} style={{ cursor: 'pointer', background: 'transparent', border: 'none', width: '100%', textAlign: 'left', font: 'inherit', color: 'inherit', padding: 0 }}>
+              <span className="pni-card-name">{o.endpointId} <span className="muted">{o.provider}</span></span>
+              <span className="muted">{Object.keys(headers).length} headers</span>
+              <span className="pni-chip">{isOpen ? '▾' : '▸'}</span>
+            </button>
+            {isOpen && (
+              <dl className="sa-headers-detail">
+                {Object.entries(headers).map(([k, v]) => (<Fragment key={k}><dt>{k}</dt><dd>{v}</dd></Fragment>))}
+              </dl>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+const HANDLER_LABELS: Record<string, string> = { vide: 'video', soun: 'audio', subt: 'text', sbtl: 'text', text: 'text', clcp: 'captions', meta: 'metadata', hint: 'hint' };
+const handlerLabel = (h: string | null): string => (h ? HANDLER_LABELS[h] ?? h : '?');
+
 function InitInspector({ observations }: { observations: SaObservation[] }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const withInit = observations.filter((o) => o.init);
@@ -136,8 +171,9 @@ function InitInspector({ observations }: { observations: SaObservation[] }) {
               <div className="sa-inspector-detail">
                 <div><span className="muted">Brands</span> <span className="mono">{init.majorBrand ?? '—'}{init.compatibleBrands.length ? ` (${init.compatibleBrands.join(', ')})` : ''}</span></div>
                 {init.tracks.map((t, i) => (
-                  <div key={i}><span className="muted">Track {t.trackId ?? i}</span> <span className="mono">{t.handler ?? '?'} · {t.codec ?? '?'}{t.timescale ? ` · ${t.timescale}Hz` : ''}{t.width ? ` · ${t.width}×${t.height}` : ''}</span></div>
+                  <div key={i}><span className="muted">Track {t.trackId ?? i}</span> <span className="mono">{handlerLabel(t.handler)} · {t.codec ?? '?'}{t.timescale ? ` · timescale ${t.timescale}` : ''}{t.width ? ` · ${t.width}×${t.height}` : ''}</span></div>
                 ))}
+                <div className="muted" style={{ fontSize: '0.72rem' }}>CMAF init segments carry one track — this is the probed rendition. Audio and other bitrates are separate objects; the full ladder is under Media checks.</div>
                 <div><span className="muted">Protection</span> {init.cenc.isProtected
                   ? <span className="mono"><b>tenc</b> {init.cenc.scheme} · KID {init.cenc.defaultKid} · IV {init.cenc.perSampleIvSize}{init.cenc.hasConstantIv ? ' (constant)' : ''}</span>
                   : <span>clear (unencrypted)</span>}</div>
@@ -149,6 +185,52 @@ function InitInspector({ observations }: { observations: SaObservation[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const ok = <span className="badge ok badge-sm">✓</span>;
+const bad = <span className="badge danger badge-sm">unreachable</span>;
+const dash = <span className="muted">—</span>;
+
+function fmtAge(publishTime: string | null): string {
+  if (!publishTime) return '';
+  const t = Date.parse(publishTime);
+  if (!Number.isFinite(t)) return '';
+  const s = Math.round((Date.now() - t) / 1000);
+  return s < 90 ? `${s}s ago` : s < 5400 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
+}
+
+// Positive display of the manifest/fragment checks — so they read as "ran + green", not just an
+// absence of findings. Shown per endpoint (manifests are fetched via every CDN).
+function MediaChecks({ observations }: { observations: SaObservation[] }) {
+  const withMedia = observations.filter((o) => o.media);
+  if (withMedia.length === 0) {
+    return <div className="notice info" style={{ marginTop: '1rem' }}>No manifest or media-fragment URLs configured for this profile, so only the init-segment / cross-CDN object checks ran. Add a DASH MPD and/or a sample fragment URL to the profile to enable manifest freshness, ladder and fragment-timeline checks.</div>;
+  }
+  return (
+    <div className="matrix-wrap" style={{ marginTop: '1rem' }}>
+      <h3 style={{ margin: '0 0 0.5rem' }}>Media checks <span className="muted">· DASH / HLS / fragment, per CDN</span></h3>
+      <table className="matrix">
+        <thead><tr><th>Endpoint</th><th>DASH manifest</th><th>Media fragment</th><th>HLS</th></tr></thead>
+        <tbody>
+          {withMedia.map((o) => {
+            const m = o.media!;
+            return (
+              <tr key={o.endpointId}>
+                <td>{o.endpointId}{o.role === 'reference' && <span className="badge neutral badge-sm" style={{ marginLeft: '0.3rem' }}>reference</span>}</td>
+                <td>{!m.requested.dash ? dash : m.dash
+                  ? <span>{ok} <span className="muted">{m.dash.presentation ?? 'static'}{m.dash.presentation === 'dynamic' && m.dash.publishTime ? ` · ${fmtAge(m.dash.publishTime)}` : ''} · {m.dash.bandwidths.length} rendition{m.dash.bandwidths.length === 1 ? '' : 's'}</span></span>
+                  : bad}</td>
+                <td>{!m.requested.fragment ? dash : m.fragment
+                  ? <span>{ok} <span className="muted mono">seq {m.fragment.sequenceNumber ?? '?'} · dts {m.fragment.baseMediaDecodeTime ?? '?'}</span></span>
+                  : bad}</td>
+                <td>{!m.requested.hls ? dash : m.hls ? ok : bad}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -170,7 +252,7 @@ function ComparisonTable({ run }: { run: SaRun }) {
             <tr key={o.endpointId}>
               <td>{o.endpointId}{o.role === 'reference' && <span className="badge neutral badge-sm" style={{ marginLeft: '0.3rem' }}>reference</span>}</td>
               <td className="muted">{o.provider}</td>
-              <td className={kidDiffers(o) ? 'danger mono' : 'mono'} title={o.kid ?? ''}>{o.kid ? `${o.kid.slice(0, 8)}…` : '—'}</td>
+              <td className={kidDiffers(o) ? 'danger mono sa-kid' : 'mono sa-kid'} title={o.kid ?? ''}>{o.kid ?? '—'}</td>
               <td className="mono">{cacheLabel(o.cdn.edge)} / {cacheLabel(o.cdn.parent)}{o.cdn.fetchedFromOrigin && <span className="muted"> · from origin</span>}</td>
               <td className="muted">{o.cdn.originIdentity ?? '—'}</td>
               <td className="muted">{o.lastModified ?? '—'}</td>
@@ -333,7 +415,9 @@ export function StreamAssurance() {
             {run ? (
               <>
                 <ComparisonTable run={run} />
+                <MediaChecks observations={run.observations} />
                 <InitInspector observations={run.observations} />
+                <HeaderInspector observations={run.observations} />
                 <h3 style={{ marginTop: '1.25rem' }}>Findings</h3>
                 <Findings findings={run.findings} />
               </>
