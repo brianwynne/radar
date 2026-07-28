@@ -75,9 +75,18 @@ describe('Stream Tests page', () => {
     expect((screen.getByDisplayValue('t.sni.global.fastly.net') as HTMLInputElement)).toBeInTheDocument(); // Fastly
     expect((screen.getByDisplayValue('live.rte.ie.akamaized.net') as HTMLInputElement)).toBeInTheDocument(); // Akamai
 
+    // Discover from a manifest auto-fills the object URLs (top video rendition on the CDN origin).
+    fireEvent.change(screen.getByPlaceholderText(/DASH .mpd URL/), { target: { value: 'https://dai.google.com/x/manifest.mpd' } });
+    fireEvent.click(screen.getByRole('button', { name: /^Discover$/ }));
+    expect(await screen.findByText(/Found/)).toHaveTextContent(/2 video renditions/);
+    await vi.waitFor(() => {
+      const urls = screen.getAllByPlaceholderText(/public object URL/) as HTMLInputElement[];
+      expect(urls[0].value).toBe('https://live.rte.ie/live/b/vc11/vc11.isml/dash/vc11-video=6000000.dash');
+    });
+
     fireEvent.click(screen.getByRole('button', { name: /Create profile/ }));
 
-    // The POST fires with the prefilled RTÉ payload — three endpoints, Réalta as the reference.
+    // The POST fires with the discovered object URL across three endpoints, Réalta as the reference.
     await vi.waitFor(() => {
       const call = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/stream-assurance/profiles') && (c[1] as RequestInit)?.method === 'POST');
       expect(call).toBeTruthy();
@@ -86,7 +95,9 @@ describe('Stream Tests page', () => {
       expect(payload.config.endpoints).toHaveLength(3);
       expect(payload.config.endpoints[0]).toMatchObject({ endpointId: 'realta', provider: 'realta', role: 'reference', connectHost: 'liveedge.rte.ie', hostHeader: 'live.rte.ie' });
       expect(payload.config.endpoints.map((e: { connectHost: string }) => e.connectHost)).toEqual(['liveedge.rte.ie', 't.sni.global.fastly.net', 'live.rte.ie.akamaized.net']);
-      expect(payload.config.manifests.dashMpdUrl).toContain('channel4.isml/.mpd');
+      // Discover overwrote the object + manifest URLs with the derived ones (top video rendition).
+      expect(payload.config.endpoints[0].publicUrl).toBe('https://live.rte.ie/live/b/vc11/vc11.isml/dash/vc11-video=6000000.dash');
+      expect(payload.config.manifests.dashMpdUrl).toBe('https://dai.google.com/x/manifest.mpd');
     });
   });
 });

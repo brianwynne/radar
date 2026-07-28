@@ -28,6 +28,23 @@ export interface ManifestFetchContext {
   maxBytes?: number;
 }
 
+/** Fetch an MPD directly (its own host — it may be an ad-stitched wrapper on a third-party host) and
+ *  derive the per-representation init + current-fragment URLs from it. SSRF-guarded like any probe. */
+export async function discoverFromMpd(mpdUrl: string, policy: SsrfPolicy): Promise<{ manifest: sa.DiscoveredManifest | null; error: string | null; status: number | null }> {
+  let host: string;
+  try { host = new URL(mpdUrl).hostname; } catch { return { manifest: null, error: 'invalid MPD URL', status: null }; }
+  const decision = validateTarget({ connectHost: host }, policy);
+  if (!decision.ok) return { manifest: null, error: `blocked by SSRF policy (${decision.category})`, status: null };
+  try {
+    const res = await probe({ publicUrl: mpdUrl, connectHost: host, hostHeader: host, sni: host, maxBytes: 8 * 1024 * 1024 });
+    if (res.status < 200 || res.status >= 300) return { manifest: null, error: `HTTP ${res.status}`, status: res.status };
+    const text = Buffer.from(res.body).toString('utf8');
+    return { manifest: sa.discoverDashSegments(text, mpdUrl), error: null, status: res.status };
+  } catch (e) {
+    return { manifest: null, error: e instanceof Error ? e.message : String(e), status: null };
+  }
+}
+
 /** Outcome of one manifest/fragment fetch — status/error kept so the UI can explain "unreachable". */
 export interface FetchOutcome { status: number | null; error: string | null }
 

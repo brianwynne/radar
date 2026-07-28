@@ -192,6 +192,20 @@ describe('Stream Assurance routes', () => {
     await ve.close();
   });
 
+  it('discover: validates the URL, enforces RBAC, and maps an SSRF block to 502', async () => {
+    const noc = await app('NOC_VIEWER');
+    expect((await noc.inject({ method: 'POST', url: '/api/v1/stream-assurance/discover', payload: { mpdUrl: 'https://x/y.mpd' } })).statusCode).toBe(403);
+    await noc.close();
+
+    const ve = await app('VIEWING_ENGINEER');
+    expect((await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/discover', payload: { mpdUrl: 'not-a-url' } })).statusCode).toBe(400);
+    // A loopback manifest host is refused by the SSRF guard → 502 DISCOVER_FAILED (not a crash).
+    const blocked = await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/discover', payload: { mpdUrl: 'http://127.0.0.1:9/live.mpd' } });
+    expect(blocked.statusCode).toBe(502);
+    expect(blocked.json().message).toMatch(/SSRF/i);
+    await ve.close();
+  });
+
   it('a run with manifest URLs also validates DASH/HLS and cross-protocol', async () => {
     repo.runs = []; repo.alerts.clear();
     await repo.upsertProfile({ id: 'rte-manifests', name: 'M', config: {

@@ -6,6 +6,7 @@ export * from './isobmff.js';
 export * from './cenc.js';
 export * from './cdn-headers.js';
 export * from './dash.js';
+export * from './dash-discovery.js';
 export * from './rules.js';
 export * from './classify.js';
 export * from './alert.js';

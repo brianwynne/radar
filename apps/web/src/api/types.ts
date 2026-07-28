@@ -1530,6 +1530,9 @@ export interface SaRulesResponse { count: number; rules: SaRule[] }
 export interface SaEndpointInput { endpointId: string; provider: 'akamai' | 'fastly' | 'realta' | 'origin' | 'custom' | 'unknown'; role: 'reference' | 'candidate'; publicUrl: string; connectHost: string; connectPort?: number; hostHeader?: string; sni?: string; managedInternal?: boolean; originHost?: string | null }
 export interface SaManifestsInput { dashMpdUrl?: string; hlsMasterUrl?: string; hlsMediaUrl?: string; mediaFragmentUrl?: string }
 export interface SaProfileInput { id: string; name: string; config: { endpoints: SaEndpointInput[]; authoritativeKid?: string | null; manifests?: SaManifestsInput; tags?: string[] } }
+export interface SaDiscoveredRep { adaptationIndex: number; contentType: string | null; mimeType: string | null; lang: string | null; id: string; bandwidth: number | null; codecs: string | null; width: number | null; height: number | null; trickPlay: boolean; initUrl: string; latestMediaUrl: string | null }
+export interface SaDiscoveredManifest { manifestUrl: string; baseUrl: string; presentation: string | null; drm: { defaultKid: string | null; systems: { systemId: string; scheme: string | null }[] }; representations: SaDiscoveredRep[] }
+export interface SaDiscoverResponse { manifest: SaDiscoveredManifest }
 
 export interface RipeSnapshotResponse { snapshot: RouteVisibilitySnapshot | null; source: RipeSourceHealth }
 export interface RipeEventsResponse { count: number; items: RisEvent[] }

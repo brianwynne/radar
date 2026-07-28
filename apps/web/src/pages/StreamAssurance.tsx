@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import type { SaAlert, SaEndpointInput, SaFinding, SaObservation, SaProfileInput, SaProfileSummary, SaRun } from '../api/types';
+import type { SaAlert, SaDiscoveredManifest, SaEndpointInput, SaFinding, SaObservation, SaProfileInput, SaProfileSummary, SaRun } from '../api/types';
 
 const PROVIDERS: SaEndpointInput['provider'][] = ['fastly', 'akamai', 'realta', 'origin', 'custom', 'unknown'];
 const blankEndpoint = (role: SaEndpointInput['role']): SaEndpointInput => ({ endpointId: '', provider: 'fastly', role, publicUrl: '', connectHost: '', hostHeader: '', originHost: '' });
@@ -34,6 +34,31 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   const [mediaFragmentUrl, setFrag] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [mpdUrl, setMpdUrl] = useState('');
+  const [discovering, setDiscovering] = useState(false);
+  const [discovered, setDiscovered] = useState<SaDiscoveredManifest | null>(null);
+
+  // Discover: fetch the manifest, derive the object URLs, and auto-fill the form. Picks the top video
+  // rendition's init as the object to compare across CDNs, and its current fragment for the timeline.
+  const discover = async () => {
+    if (!mpdUrl.trim()) return;
+    setDiscovering(true); setErr(null);
+    try {
+      const { manifest } = await api.saDiscover(mpdUrl.trim());
+      setDiscovered(manifest);
+      const videos = manifest.representations.filter((r) => r.contentType === 'video' && !r.trickPlay && r.initUrl);
+      const top = videos.sort((a, b) => (b.bandwidth ?? 0) - (a.bandwidth ?? 0))[0];
+      if (top) {
+        setEndpoints((es) => es.map((e) => ({ ...e, publicUrl: top.initUrl })));
+        setFrag(top.latestMediaUrl ?? '');
+      }
+      setDash(mpdUrl.trim());
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Discovery failed — check the manifest URL is reachable.');
+    } finally {
+      setDiscovering(false);
+    }
+  };
 
   const setEp = (i: number, patch: Partial<SaEndpointInput>) => setEndpoints((es) => es.map((e, j) => (j === i ? { ...e, ...patch } : e)));
   const addEp = () => setEndpoints((es) => [...es, blankEndpoint('candidate')]);
@@ -70,6 +95,25 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
 
   return (
     <form className="sa-form" onSubmit={submit}>
+      <div className="sa-discover">
+        <h4 className="sa-form-h">Discover from a DASH manifest <span className="muted">· optional — auto-fills the objects to test</span></h4>
+        <div className="sa-form-row">
+          <input value={mpdUrl} onChange={(e) => setMpdUrl(e.target.value)} placeholder="DASH .mpd URL (e.g. the player's manifest — even an ad-stitched one)" />
+          <button type="button" className="btn" onClick={discover} disabled={discovering || !mpdUrl.trim()}>{discovering ? 'Discovering…' : 'Discover'}</button>
+        </div>
+        {discovered && (() => {
+          const vids = discovered.representations.filter((r) => r.contentType === 'video' && !r.trickPlay);
+          const auds = discovered.representations.filter((r) => r.contentType === 'audio');
+          return (
+            <div className="notice ok" style={{ fontSize: '0.78rem' }}>
+              Found <b>{vids.length}</b> video rendition{vids.length === 1 ? '' : 's'} ({vids.map((v) => v.height ? `${v.height}p` : v.id).join(', ')}), <b>{auds.length}</b> audio.
+              Media served from <span className="mono">{(() => { try { return new URL(discovered.baseUrl).host; } catch { return discovered.baseUrl; } })()}</span>.
+              {discovered.drm.defaultKid && <> KID <span className="mono">{discovered.drm.defaultKid}</span>.</>} Filled the top video rendition below — adjust and create.
+            </div>
+          );
+        })()}
+      </div>
+
       <div className="sa-form-row">
         <label>ID<input value={id} onChange={(e) => setId(e.target.value)} placeholder="rte-test" pattern="[a-z0-9][a-z0-9-]*" required /></label>
         <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="RTÉ delivery (test)" required /></label>

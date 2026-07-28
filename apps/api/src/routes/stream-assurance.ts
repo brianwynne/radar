@@ -103,6 +103,16 @@ export const streamAssuranceRoutes: FastifyPluginAsync<StreamAssuranceRouteOptio
     return reply.code(201).send({ id: p.id });
   });
 
+  // Discover objects (init + current fragment per rendition) from a DASH manifest URL.
+  app.post('/stream-assurance/discover', { preHandler: requirePermission('dns.explain.read'), schema: schema('Discover objects from a DASH manifest') }, async (req, reply) => {
+    if (!opts.service) return reply.code(503).send(unavailable(req.id));
+    const parsed = z.object({ mpdUrl: z.string().url().max(2048) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: 'mpdUrl must be a valid URL', correlationId: req.id });
+    const result = await opts.service.discover(parsed.data.mpdUrl);
+    if (!result.manifest) return reply.code(502).send({ code: 'DISCOVER_FAILED', message: result.error ?? 'could not fetch or parse the manifest', correlationId: req.id });
+    return { manifest: result.manifest };
+  });
+
   // Trigger a diagnostic run (viewing engineer) — audited.
   app.post('/stream-assurance/profiles/:id/run', { preHandler: requirePermission('dns.explain.read'), schema: schema('Run stream assurance for a profile now') }, async (req, reply) => {
     if (!opts.service) return reply.code(503).send(unavailable(req.id));

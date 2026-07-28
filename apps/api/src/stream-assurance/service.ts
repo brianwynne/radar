@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { streamAssurance as sa } from '@radar/engine';
 import type { NewStreamAssuranceRun, StreamAssuranceRepository, StreamAssuranceRunRow } from '@radar/data';
 import { observeAndClassify, type EndpointConfig } from './observe.js';
-import { observeManifests, type ManifestSources } from './manifests.js';
+import { observeManifests, discoverFromMpd, type ManifestSources } from './manifests.js';
 import type { SsrfPolicy } from './ssrf.js';
 
 /** Stable alert identity across runs — the same finding class on the same endpoint. */
@@ -48,6 +48,11 @@ export class StreamAssuranceService {
   ) {
     this.now = deps.now ?? (() => Date.now());
     this.genId = deps.genId ?? (() => randomUUID());
+  }
+
+  /** Fetch a DASH manifest and derive the per-representation init + current-fragment URLs. */
+  async discover(mpdUrl: string) {
+    return discoverFromMpd(mpdUrl, this.policy);
   }
 
   /** Run one profile now: probe every endpoint, classify, persist and return the run snapshot. */
