@@ -134,7 +134,8 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .sa-finding-explain { margin: 0.4rem 0 0.2rem; font-size: 0.86rem; }
 .sa-finding-fix { margin: 0; font-size: 0.8rem; }
 .sa-form { display: flex; flex-direction: column; gap: 0.6rem; max-width: 720px; }
-.sa-form input, .sa-form select { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%; }
+.sa-form input, .sa-form select { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); width: 100%; }
+.sa-form input::placeholder { color: var(--ink-soft); }
 .sa-form label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: var(--ink-soft); flex: 1; }
 .sa-form-row { display: flex; gap: 0.6rem; }
 .sa-form-h { margin: 0.5rem 0 0; font-size: 0.9rem; }
