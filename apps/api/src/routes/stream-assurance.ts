@@ -125,7 +125,7 @@ export const streamAssuranceRoutes: FastifyPluginAsync<StreamAssuranceRouteOptio
     try {
       return { channels: await opts.service.listChannels() };
     } catch (e) {
-      return reply.code(502).send({ code: 'CHANNELS_FAILED', message: e instanceof Error ? e.message : 'could not load channels', correlationId: req.id });
+      return reply.code(424).send({ code: 'CHANNELS_FAILED', message: e instanceof Error ? e.message : 'could not load channels', correlationId: req.id });
     }
   });
 
@@ -137,7 +137,7 @@ export const streamAssuranceRoutes: FastifyPluginAsync<StreamAssuranceRouteOptio
     try {
       return { resolved: await opts.service.resolveChannel(parsed.data.callSign) };
     } catch (e) {
-      return reply.code(502).send({ code: 'RESOLVE_FAILED', message: e instanceof Error ? e.message : 'could not resolve the channel', correlationId: req.id });
+      return reply.code(424).send({ code: 'RESOLVE_FAILED', message: e instanceof Error ? e.message : 'could not resolve the channel', correlationId: req.id });
     }
   });
 
@@ -147,7 +147,7 @@ export const streamAssuranceRoutes: FastifyPluginAsync<StreamAssuranceRouteOptio
     const parsed = z.object({ mpdUrl: z.string().url().max(2048) }).safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: 'mpdUrl must be a valid URL', correlationId: req.id });
     const result = await opts.service.discover(parsed.data.mpdUrl);
-    if (!result.manifest) return reply.code(502).send({ code: 'DISCOVER_FAILED', message: result.error ?? 'could not fetch or parse the manifest', correlationId: req.id });
+    if (!result.manifest) return reply.code(424).send({ code: 'DISCOVER_FAILED', message: result.error ?? 'could not fetch or parse the manifest', correlationId: req.id });
     return { manifest: result.manifest };
   });
 
