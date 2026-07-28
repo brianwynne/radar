@@ -28,6 +28,14 @@ describe('Stream Assurance page', () => {
     expect(await screen.findByRole('heading', { name: /Active alerts/ })).toBeInTheDocument();
     expect(screen.getByText('active')).toBeInTheDocument(); // alert state badge
 
+    // CMAF/DRM inspector: parsed init metadata surfaces per endpoint; expanding reveals the CENC
+    // scheme + PSSH system (KID/scheme shown, never keys).
+    const inspector = screen.getByRole('button', { name: /fastly-edge/ });
+    expect(inspector).toBeInTheDocument();
+    inspector.click();
+    expect(await screen.findByText(/Widevine/)).toBeInTheDocument();
+    expect(screen.getByText('tenc')).toBeInTheDocument(); // the tenc box, KID/scheme shown (never keys)
+
     // NOC lacks dns.explain.read → no diagnostic actions.
     expect(screen.queryByRole('button', { name: /Run now/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /acknowledge/ })).toBeNull();

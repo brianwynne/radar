@@ -64,8 +64,9 @@ export class StreamAssuranceService {
       for (const s of specs) findings.push(sa.withEndpoint(s, ref.endpointId, ref.provider, 'packager'));
     }
 
-    // Bounded observations — metadata + evidence only, never response bodies.
-    const observations = results.map((r) => ({ ...r.observation, error: r.error ?? null }));
+    // Bounded observations — parsed init metadata (brands/tracks/CENC/PSSH — identifiers only, no
+    // keys and no raw bytes) + evidence, never response bodies.
+    const observations = results.map((r) => ({ ...r.observation, error: r.error ?? null, init: r.init ?? null }));
     const hadError = results.some((r) => r.error);
     const status = findings.some((f) => f.severity === 'critical' || f.severity === 'error') ? 'findings' : hadError ? 'error' : 'ok';
 

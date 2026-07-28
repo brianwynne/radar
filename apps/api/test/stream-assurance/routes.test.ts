@@ -118,6 +118,11 @@ describe('Stream Assurance routes', () => {
     const f = run.findings.find((x: { endpointId: string }) => x.endpointId === 'akamai');
     expect(f.classification).toBe('ORIGIN_VARIANT_MISMATCH');
     expect(f.ruleId).toBe('SA-CDN-001');
+    // Observations carry the parsed init metadata for the CMAF/DRM inspector (KID, never keys).
+    const refObs = run.observations.find((o: { endpointId: string }) => o.endpointId === 'fastly');
+    expect(refObs.init).toBeTruthy();
+    expect(refObs.init.cenc.defaultKid).toBe(refObs.kid);
+    expect(JSON.stringify(refObs.init)).not.toMatch(/"key"/i);
     // Persisted + retrievable as the latest run.
     const latest = await ve.inject({ url: '/api/v1/stream-assurance/profiles/rte-test/latest' });
     expect(latest.json().run.findingCount).toBeGreaterThanOrEqual(1);

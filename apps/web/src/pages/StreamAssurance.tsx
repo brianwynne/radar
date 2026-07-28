@@ -6,6 +6,45 @@ import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import type { SaAlert, SaFinding, SaObservation, SaProfileSummary, SaRun } from '../api/types';
 
+function InitInspector({ observations }: { observations: SaObservation[] }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const withInit = observations.filter((o) => o.init);
+  if (withInit.length === 0) return null;
+  const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  return (
+    <div className="sa-inspector">
+      <h3 style={{ margin: '1.25rem 0 0.5rem' }}>Init segment / CMAF inspector <span className="muted">· parsed metadata (no keys)</span></h3>
+      {withInit.map((o) => {
+        const init = o.init!;
+        const isOpen = open.has(o.endpointId);
+        return (
+          <div key={o.endpointId} className={`pni-card${isOpen ? ' open' : ''}`}>
+            <button type="button" className="pni-card-head" onClick={() => toggle(o.endpointId)} aria-expanded={isOpen} style={{ cursor: 'pointer' }}>
+              <span className="pni-card-name">{o.endpointId} <span className="muted">{o.provider}</span></span>
+              <span className="mono" title={init.cenc.defaultKid ?? ''}>{init.cenc.isProtected ? `${init.cenc.scheme ?? 'enc'} · ${init.cenc.defaultKid?.slice(0, 8) ?? '?'}…` : 'clear'}</span>
+              <span className="pni-chip">{isOpen ? '▾' : '▸'}</span>
+            </button>
+            {isOpen && (
+              <div className="sa-inspector-detail">
+                <div><span className="muted">Brands</span> <span className="mono">{init.majorBrand ?? '—'}{init.compatibleBrands.length ? ` (${init.compatibleBrands.join(', ')})` : ''}</span></div>
+                {init.tracks.map((t, i) => (
+                  <div key={i}><span className="muted">Track {t.trackId ?? i}</span> <span className="mono">{t.handler ?? '?'} · {t.codec ?? '?'}{t.timescale ? ` · ${t.timescale}Hz` : ''}{t.width ? ` · ${t.width}×${t.height}` : ''}</span></div>
+                ))}
+                <div><span className="muted">Protection</span> {init.cenc.isProtected
+                  ? <span className="mono"><b>tenc</b> {init.cenc.scheme} · KID {init.cenc.defaultKid} · IV {init.cenc.perSampleIvSize}{init.cenc.hasConstantIv ? ' (constant)' : ''}</span>
+                  : <span>clear (unencrypted)</span>}</div>
+                {init.pssh.length > 0 && (
+                  <div><span className="muted">PSSH</span> {init.pssh.map((p, i) => <span key={i} className="mono">{p.systemName ?? p.systemId}{p.kids.length ? ` [${p.kids.length} KID]` : ''}{i < init.pssh.length - 1 ? ' · ' : ''}</span>)}</div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const sevBadge = (s: string): string => (s === 'critical' || s === 'error' ? 'danger' : s === 'warning' ? 'warn' : 'neutral');
 const stateBadge = (s: string): string => (s === 'active' ? 'danger' : s === 'acknowledged' ? 'neutral' : s === 'resolved' ? 'ok' : 'warn');
 const cacheLabel = (t: string): string => (t === 'hit' ? 'HIT' : t === 'miss' ? 'MISS' : '—');
@@ -163,6 +202,7 @@ export function StreamAssurance() {
             {run ? (
               <>
                 <ComparisonTable run={run} />
+                <InitInspector observations={run.observations} />
                 <h3 style={{ marginTop: '1.25rem' }}>Findings</h3>
                 <Findings findings={run.findings} />
               </>

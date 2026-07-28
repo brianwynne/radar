@@ -122,6 +122,21 @@ The Stage-5 validators now run inside a probe run:
 - Proven end-to-end: a mock CDN serving a stale dynamic MPD + a FairPlay HLS pair (vs Widevine DASH)
   yields `SA-DASH-001` + `SA-XDRM-001` in the run, through the real API.
 
+### Stage 7 — CMAF / DRM init-segment inspector (DONE, on branch `feature/stream-assurance`)
+
+The parsed init-segment metadata the engine already extracts is now captured per endpoint and
+surfaced in the console:
+
+- **`service.run`** attaches the bounded `InitSegmentInfo` (brands, tracks, CENC scheme +
+  `default_KID` + IV size, PSSH **system IDs/names** + KID count + data length) to each stored
+  observation. **Identifiers only — never keys, never raw bytes, never licence data.**
+- **Console** (`pages/StreamAssurance.tsx`): an *Init segment / CMAF inspector* — one collapsible
+  card per endpoint (protection scheme + KID prefix at a glance), expanding to brands, track
+  codecs/handlers, the `tenc` protection line (scheme · full KID · IV size) and PSSH systems
+  (Widevine/PlayReady/FairPlay etc. by system-ID), highlighting `tenc`/`pssh`. Collapsed by default.
+- Covered by the API route test (observation carries `init`; `init.cenc.defaultKid === kid`; no
+  `key` field) and the web page test (expanding reveals the CENC scheme + PSSH system).
+
 ### Later stages (scoped, not yet built)
 
 Defined interfaces exist or are trivial to add on top of the engine + probe + persistence:
@@ -132,9 +147,10 @@ Defined interfaces exist or are trivial to add on top of the engine + probe + pe
   change; optional self‑hosted DASH‑IF Conformance Tool adapter.
 - **REST API** (Fastify, existing RBAC + audit) — profiles/endpoints CRUD, trigger run, event
   mode, latest status, run/observation/comparison/finding reads, ack/resolve, rule catalogue.
-- **React UI** — a **Stream Assurance** nav area: Overview matrix, Service detail, CDN comparison,
-  Standards findings, MP4/CMAF inspector (box tree, highlighting `tenc`/`pssh`/`schm`/`tfdt`/
-  `senc`), History charts — in the existing RADAR visual language.
+- **React UI history** — History charts (finding/alert trend over time) in the existing RADAR
+  visual language. (Overview matrix, CDN comparison, standards findings and the CMAF/DRM
+  metadata inspector are built; a full **box-tree** viewer — raw box offsets/sizes with
+  `tfdt`/`senc` — remains.)
 - **HLS validator** — master/media playlist + LL‑HLS + `EXT‑X‑KEY` signalling (no key retrieval),
   and DASH↔HLS cross‑protocol comparison.
 - **External validator adapter** — optional, disabled by default, self‑hosted DASH‑IF

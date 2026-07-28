@@ -133,6 +133,11 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .sa-finding-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.9rem; }
 .sa-finding-explain { margin: 0.4rem 0 0.2rem; font-size: 0.86rem; }
 .sa-finding-fix { margin: 0; font-size: 0.8rem; }
+.sa-inspector { display: flex; flex-direction: column; gap: 0.4rem; }
+.sa-inspector .pni-card-head { background: transparent; border: none; width: 100%; text-align: left; padding: 0; font: inherit; color: inherit; }
+.sa-inspector-detail { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }
+.sa-inspector-detail .muted { display: inline-block; min-width: 5.5rem; }
+.sa-inspector-detail b { color: var(--brand); }
 
 /* Dashboard delivery pie */
 .delivery-pie-head { display: flex; flex-direction: column; gap: 0.1rem; margin-bottom: 0.75rem; }

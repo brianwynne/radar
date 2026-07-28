@@ -1511,7 +1511,11 @@ export interface DashboardDeliveryResponse {
 export interface SaRule { id: string; severity: 'info' | 'warning' | 'error' | 'critical'; standard: string; section: string | null; description: string; remediation: string }
 export interface SaProfileSummary { id: string; name: string; enabled: boolean; tags: string[]; endpointCount: number; updatedAt: string }
 export interface SaCdnObservation { cdn: string; edge: string; parent: string; fetchedFromOrigin: boolean; originIdentity: string | null; servedBy: string | null; age: number | null }
-export interface SaObservation { endpointId: string; provider: string; role: 'reference' | 'candidate'; reachable: boolean; httpStatus: number | null; kid: string | null; lastModified: string | null; cdn: SaCdnObservation; forwardedHost?: string | null; originHost?: string | null; error?: string | null }
+export interface SaInitTrack { trackId: number | null; handler: string | null; timescale: number | null; width: number | null; height: number | null; codec: string | null }
+export interface SaInitCenc { isProtected: boolean; scheme: string | null; defaultKid: string | null; perSampleIvSize: number | null; hasConstantIv: boolean }
+export interface SaInitPssh { systemId: string; systemName: string | null; version: number; kids: string[]; dataSize: number }
+export interface SaInitInfo { majorBrand: string | null; compatibleBrands: string[]; tracks: SaInitTrack[]; cenc: SaInitCenc; pssh: SaInitPssh[]; warnings: string[] }
+export interface SaObservation { endpointId: string; provider: string; role: 'reference' | 'candidate'; reachable: boolean; httpStatus: number | null; kid: string | null; lastModified: string | null; cdn: SaCdnObservation; forwardedHost?: string | null; originHost?: string | null; error?: string | null; init?: SaInitInfo | null }
 export interface SaFinding { ruleId: string; classification: string; severity: SaRule['severity']; endpointId: string; provider: string; protocol: string; likelyLayer: string; explanation: string; remediation: string; evidence: Record<string, unknown> }
 export interface SaRun { id: string; profileId: string; startedAt: string; finishedAt: string | null; mode: string; status: string; observations: SaObservation[]; findings: SaFinding[]; findingCount: number }
 export interface SaAlert { id: string; profileId: string; endpointId: string; ruleId: string; classification: string; severity: SaRule['severity']; state: string; occurrences: number; firstObserved: string; lastObserved: string; explanation: string | null; remediation: string | null }
