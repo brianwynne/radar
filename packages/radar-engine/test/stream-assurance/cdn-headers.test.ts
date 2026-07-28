@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAkamaiHeaders, parseFastlyHeaders, parseCdnHeaders } from '../../src/stream-assurance/index.js';
+import { parseAkamaiHeaders, parseFastlyHeaders, parseRealtaHeaders, parseCdnHeaders } from '../../src/stream-assurance/index.js';
 
 describe('CDN header adapters', () => {
   it('Akamai: edge + parent both MISS ⇒ fetchedFromOrigin', () => {
@@ -36,9 +36,30 @@ describe('CDN header adapters', () => {
     expect(o.fetchedFromOrigin).toBe(true);
   });
 
+  it('Réalta: reads X-Cache (Varnish/ATS style)', () => {
+    const o = parseRealtaHeaders({ 'X-Cache': 'HIT', Age: '3' });
+    expect(o.cdn).toBe('realta');
+    expect(o.edge).toBe('hit');
+    expect(o.age).toBe(3);
+  });
+
+  it('Réalta: reads nginx X-Cache-Status and RFC 9211 Cache-Status', () => {
+    expect(parseRealtaHeaders({ 'X-Cache-Status': 'MISS' }).edge).toBe('miss');
+    expect(parseRealtaHeaders({ 'Cache-Status': '"realta-edge-1"; hit' }).edge).toBe('hit');
+    expect(parseRealtaHeaders({ 'Cache-Status': '"realta-edge-1"; fwd=miss' }).edge).toBe('miss');
+  });
+
+  it('Réalta: edge MISS with no parent HIT ⇒ fetchedFromOrigin; no cache header ⇒ unknown', () => {
+    expect(parseRealtaHeaders({ 'X-Cache': 'MISS' }).fetchedFromOrigin).toBe(true);
+    const none = parseRealtaHeaders({ Server: 'realta' });
+    expect(none.edge).toBe('unknown');
+    expect(none.fetchedFromOrigin).toBe(false);
+  });
+
   it('parseCdnHeaders dispatches by provider', () => {
     expect(parseCdnHeaders('akamai', { 'X-Cache': 'TCP_HIT' }).cdn).toBe('akamai');
     expect(parseCdnHeaders('fastly', { 'X-Cache': 'HIT' }).cdn).toBe('fastly');
+    expect(parseCdnHeaders('realta', { 'X-Cache': 'HIT' }).cdn).toBe('realta');
     expect(parseCdnHeaders('origin', {}).fetchedFromOrigin).toBe(true);
   });
 });

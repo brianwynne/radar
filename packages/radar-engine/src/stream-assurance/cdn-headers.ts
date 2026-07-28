@@ -91,7 +91,24 @@ export function parseFastlyHeaders(h: Record<string, string>, cfg?: HeaderAdapte
   };
 }
 
-/** Generic origin/Réalta/custom: no CDN cache tiers; treat as served directly. */
+/** Réalta (RTÉ's own CDN): the exact edge stack isn't assumed — read the common cache-status headers
+ *  in priority order (Varnish/ATS `X-Cache`, nginx `X-Cache-Status`, the standard RFC 9211
+ *  `Cache-Status`), and a parent tier from `X-Cache-Remote` if present. Stays `unknown` when none is
+ *  emitted (so it's honest rather than fabricated). */
+export function parseRealtaHeaders(h: Record<string, string>, cfg?: HeaderAdapterConfig): CdnObservation {
+  const edgeRaw = get(h, 'x-cache') ?? get(h, 'x-cache-status') ?? get(h, 'cache-status');
+  const edge = tierOf(edgeRaw);
+  const parent = tierOf(get(h, 'x-cache-remote'));
+  return {
+    cdn: 'realta', edge, parent,
+    fetchedFromOrigin: edge === 'miss' && parent !== 'hit',
+    originIdentity: originIdentity(h, cfg),
+    servedBy: get(h, 'x-served-by') ?? get(h, 'x-cache-server') ?? get(h, 'server') ?? null,
+    age: ageOf(h),
+  };
+}
+
+/** Generic origin/custom: no CDN cache tiers; treat as served directly. */
 export function parseGenericHeaders(kind: CdnKind, h: Record<string, string>, cfg?: HeaderAdapterConfig): CdnObservation {
   return { cdn: kind, edge: 'unknown', parent: 'unknown', fetchedFromOrigin: kind === 'origin', originIdentity: originIdentity(h, cfg), servedBy: get(h, 'server') ?? null, age: ageOf(h) };
 }
@@ -99,5 +116,6 @@ export function parseGenericHeaders(kind: CdnKind, h: Record<string, string>, cf
 export function parseCdnHeaders(kind: CdnKind, h: Record<string, string>, cfg?: HeaderAdapterConfig): CdnObservation {
   if (kind === 'akamai') return parseAkamaiHeaders(h, cfg);
   if (kind === 'fastly') return parseFastlyHeaders(h, cfg);
+  if (kind === 'realta') return parseRealtaHeaders(h, cfg);
   return parseGenericHeaders(kind, h, cfg);
 }
