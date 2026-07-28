@@ -206,6 +206,22 @@ describe('Stream Assurance routes', () => {
     await ve.close();
   });
 
+  it('delete profile: Engineer only, audited, 404 for missing', async () => {
+    seedProfile(); audit.record.mockClear();
+    const ve = await app('VIEWING_ENGINEER');
+    expect((await ve.inject({ method: 'DELETE', url: '/api/v1/stream-assurance/profiles/rte-test' })).statusCode).toBe(403); // needs connector.manage
+    await ve.close();
+
+    const eng = await app('ENGINEER');
+    expect((await eng.inject({ method: 'DELETE', url: '/api/v1/stream-assurance/profiles/nope' })).statusCode).toBe(404);
+    const del = await eng.inject({ method: 'DELETE', url: '/api/v1/stream-assurance/profiles/rte-test' });
+    expect(del.statusCode).toBe(200);
+    expect(del.json()).toMatchObject({ id: 'rte-test', deleted: true });
+    expect(await repo.getProfile('rte-test')).toBeNull();
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({ action: 'stream-assurance.profile.delete', outcome: 'success' }));
+    await eng.close();
+  });
+
   it('channel routes: list + resolve (RBAC + validation), service stubbed', async () => {
     const svc = new StreamAssuranceService(repo, { allowManagedInternal: true }, { now: () => Date.parse('2026-07-27T00:00:00Z') });
     vi.spyOn(svc, 'listChannels').mockResolvedValue([

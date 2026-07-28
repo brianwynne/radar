@@ -635,6 +635,7 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
           { adaptationIndex: 1, contentType: 'audio', mimeType: 'audio/mp4', lang: 'ga', id: 'audio=128000', bandwidth: 128000, codecs: 'mp4a.40.2', width: null, height: null, trickPlay: false, initUrl: 'https://live.rte.ie/live/b/vc11/vc11.isml/dash/vc11-audio=128000.dash', latestMediaUrl: null },
         ],
       } };
+      else if (p.includes('/stream-assurance/profiles/') && init?.method === 'DELETE') body = { id: p.split('/').pop(), deleted: true };
       else if (p.endsWith('/stream-assurance/profiles') && init?.method === 'POST') { const b = JSON.parse(String(init?.body ?? '{}')) as { id?: string }; body = { id: b.id ?? 'new-profile' }; }
       else if (p.endsWith('/stream-assurance/profiles')) body = { count: 1, profiles: [{ id: 'rte-one', name: 'RTÉ One', enabled: true, tags: ['production'], endpointCount: 2, updatedAt: '2026-07-27T21:00:00Z' }] };
       else if (p.includes('/stream-assurance/profiles/') && p.endsWith('/latest')) body = { run: {

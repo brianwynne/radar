@@ -310,6 +310,7 @@ export const api = {
   saLatest: (id: string) => request<SaLatestResponse>(`/api/v1/stream-assurance/profiles/${enc(id)}/latest`),
   saRules: () => request<SaRulesResponse>('/api/v1/stream-assurance/rules'),
   saCreateProfile: (profile: SaProfileInput) => request<{ id: string }>('/api/v1/stream-assurance/profiles', { method: 'POST', body: JSON.stringify(profile) }),
+  saDeleteProfile: (id: string) => request<{ id: string; deleted: boolean }>(`/api/v1/stream-assurance/profiles/${enc(id)}`, { method: 'DELETE' }),
   saDiscover: (mpdUrl: string) => request<SaDiscoverResponse>('/api/v1/stream-assurance/discover', { method: 'POST', body: JSON.stringify({ mpdUrl }) }),
   saChannels: () => request<SaChannelsResponse>('/api/v1/stream-assurance/channels'),
   saResolveChannel: (callSign: string) => request<SaResolveChannelResponse>('/api/v1/stream-assurance/resolve-channel', { method: 'POST', body: JSON.stringify({ callSign }) }),

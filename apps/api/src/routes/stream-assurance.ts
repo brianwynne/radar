@@ -103,6 +103,22 @@ export const streamAssuranceRoutes: FastifyPluginAsync<StreamAssuranceRouteOptio
     return reply.code(201).send({ id: p.id });
   });
 
+  // Delete a stream profile (Engineer) — audited.
+  app.delete('/stream-assurance/profiles/:id', { preHandler: requirePermission('connector.manage'), schema: schema('Delete a stream profile') }, async (req, reply) => {
+    if (!opts.repo) return reply.code(503).send(unavailable(req.id));
+    const id = (req.params as { id: string }).id;
+    const existing = await opts.repo.getProfile(id);
+    if (!existing) return reply.code(404).send({ code: 'NOT_FOUND', message: `stream profile '${id}' not found`, correlationId: req.id });
+    await opts.repo.deleteProfile(id);
+    const principal = req.principal!;
+    await opts.audit?.record({
+      actorSubject: principal.subject, actorRoles: principal.roles, authenticationMethod: principal.authenticationMethod,
+      action: 'stream-assurance.profile.delete', resourceType: 'record', resourceKey: id, outcome: 'success',
+      correlationId: req.id, details: { name: existing.name },
+    });
+    return { id, deleted: true };
+  });
+
   // List the RTÉ live channels (mpx station feed) for channel-driven discovery.
   app.get('/stream-assurance/channels', { preHandler: requirePermission('dns.explain.read'), schema: schema('List live channels') }, async (req, reply) => {
     if (!opts.service) return reply.code(503).send(unavailable(req.id));

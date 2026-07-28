@@ -53,6 +53,20 @@ describe('Stream Tests page', () => {
     expect(screen.queryByRole('button', { name: /acknowledge/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Event mode/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /New profile/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Delete RTÉ One/ })).toBeNull(); // no delete for NOC
+  });
+
+  it('lets an engineer delete a profile', async () => {
+    const fetchMock = stubApi(ENGINEER);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    renderAt('/stream-assurance');
+    const del = await screen.findByRole('button', { name: /Delete RTÉ One/ });
+    fireEvent.click(del);
+    await vi.waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => /\/stream-assurance\/profiles\/rte-one$/.test(String(c[0])) && (c[1] as RequestInit)?.method === 'DELETE');
+      expect(call).toBeTruthy();
+    });
+    vi.mocked(window.confirm).mockRestore();
   });
 
   it('offers diagnostic actions (run, event mode, acknowledge) to a viewing engineer', async () => {

@@ -155,6 +155,7 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
             </div>
           );
         })()}
+        {err && <div className="notice danger" style={{ fontSize: '0.8rem' }}>{err}</div>}
       </div>
 
       <div className="sa-form-row">
@@ -428,6 +429,17 @@ export function StreamAssurance() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected]);
 
+  const deleteProfile = async (id: string, name: string) => {
+    if (!window.confirm(`Delete Stream Test profile “${name}”? This removes its config, runs and alerts.`)) return;
+    setError(null);
+    try {
+      await api.saDeleteProfile(id);
+      const r = await api.saProfiles();
+      setProfiles(r.profiles);
+      setSelected(r.profiles[0]?.id ?? null);
+    } catch (e) { setError(e instanceof ApiError ? e.message : 'Delete failed.'); }
+  };
+
   const runNow = async () => {
     if (!selected) return;
     setRunning(true); setError(null);
@@ -477,10 +489,13 @@ export function StreamAssurance() {
         <div className="sa-layout">
           <nav className="sa-profiles">
             {profiles.map((p) => (
-              <button key={p.id} className={`sa-profile${selected === p.id ? ' active' : ''}`} onClick={() => setSelected(p.id)}>
-                <span className="sa-profile-name">{p.name}</span>
-                <span className="muted">{p.endpointCount} endpoints{p.tags.length ? ` · ${p.tags.join(', ')}` : ''}</span>
-              </button>
+              <div key={p.id} className={`sa-profile-row${selected === p.id ? ' active' : ''}`}>
+                <button className="sa-profile" onClick={() => setSelected(p.id)}>
+                  <span className="sa-profile-name">{p.name}</span>
+                  <span className="muted">{p.endpointCount} endpoints{p.tags.length ? ` · ${p.tags.join(', ')}` : ''}</span>
+                </button>
+                {canManage && <button className="sa-profile-del" title="Delete profile" aria-label={`Delete ${p.name}`} onClick={() => deleteProfile(p.id, p.name)}>×</button>}
+              </div>
             ))}
           </nav>
 
