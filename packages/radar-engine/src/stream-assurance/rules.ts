@@ -5,6 +5,20 @@
 
 export type Severity = 'info' | 'warning' | 'error' | 'critical';
 
+export type Protocol = 'dash' | 'hls' | 'cmaf' | 'cenc' | 'crossproto';
+
+/** A standards/structural finding without endpoint context (manifest-level validation). Adapt to a
+ *  cross-CDN `Finding` with `withEndpoint()` when attaching to a specific endpoint's run. */
+export interface SpecFinding {
+  ruleId: string;
+  classification: Classification;
+  severity: Severity;
+  protocol: Protocol;
+  explanation: string;
+  remediation: string;
+  evidence: Record<string, unknown>;
+}
+
 export type Classification =
   | 'CDN_EDGE_STALE'
   | 'CDN_SHIELD_STALE'
@@ -91,10 +105,30 @@ export const RULES: Record<string, Rule> = {
     description: 'The HLS media playlist timeline regressed or stalled — the media sequence did not advance as expected for a live stream.',
     remediation: 'Verify the packager output and CDN playlist TTL; a live media playlist must advance monotonically.',
   },
+  'SA-HLS-002': {
+    id: 'SA-HLS-002', severity: 'error', standard: 'RFC 8216 (HLS)', section: 'EXT-X-STREAM-INF / EXT-X-MEDIA',
+    description: 'The HLS master playlist is non-conformant — missing #EXTM3U, a variant without BANDWIDTH/CODECS, a duplicate variant, or a rendition group referenced by a variant but not defined.',
+    remediation: 'Correct the master playlist so every variant declares BANDWIDTH and CODECS and every referenced AUDIO/SUBTITLES group exists.',
+  },
+  'SA-HLS-003': {
+    id: 'SA-HLS-003', severity: 'warning', standard: 'RFC 8216 (HLS)', section: 'EXT-X-TARGETDURATION / EXTINF',
+    description: 'A media playlist segment duration exceeds the declared EXT-X-TARGETDURATION, or a VOD playlist is missing EXT-X-ENDLIST, or PROGRAM-DATE-TIME is not monotonically increasing.',
+    remediation: 'Ensure EXTINF durations round within EXT-X-TARGETDURATION, VOD playlists end with EXT-X-ENDLIST, and PROGRAM-DATE-TIME advances monotonically.',
+  },
+  'SA-HLS-004': {
+    id: 'SA-HLS-004', severity: 'error', standard: 'RFC 8216 (HLS) + CMAF', section: 'EXT-X-KEY',
+    description: 'The HLS encryption signalling is inconsistent — an EXT-X-KEY without a URI, a missing KEYFORMAT for a DRM method, or an encryption method that disagrees with the CMAF content.',
+    remediation: 'Correct EXT-X-KEY so METHOD, KEYFORMAT and URI are present and consistent with the packaged CMAF protection scheme. (RADAR never retrieves the key.)',
+  },
   'SA-XDRM-001': {
     id: 'SA-XDRM-001', severity: 'critical', standard: 'DASH-IF / Apple HLS interop', section: null,
     description: 'DASH and HLS advertise different encryption identity (KID / DRM systems) for the same service.',
     remediation: 'Re-package so both protocols reference the same key identity; check that both are served from the same origin object set.',
+  },
+  'SA-XDRM-002': {
+    id: 'SA-XDRM-002', severity: 'error', standard: 'DASH-IF / Apple HLS interop', section: null,
+    description: 'DASH and HLS advertise a different codec set or presentation mode (live vs static) for the same service.',
+    remediation: 'Align the DASH and HLS packaging so both advertise the same codecs and the same live/VOD mode.',
   },
   'SA-OBJ-001': {
     id: 'SA-OBJ-001', severity: 'error', standard: 'RADAR delivery consistency', section: null,

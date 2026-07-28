@@ -9,3 +9,6 @@ export * from './dash.js';
 export * from './rules.js';
 export * from './classify.js';
 export * from './alert.js';
+export * from './hls.js';
+export * from './hls-validate.js';
+export * from './xproto.js';

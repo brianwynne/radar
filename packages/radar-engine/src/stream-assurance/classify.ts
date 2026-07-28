@@ -9,9 +9,8 @@
 //   2. configured reference endpoint
 //   3. semantic consensus — informational evidence only.
 import type { CdnKind, CdnObservation } from './cdn-headers.js';
-import { rule, type Classification, type Severity } from './rules.js';
+import { rule, type Classification, type Protocol, type Severity, type SpecFinding } from './rules.js';
 
-export type Protocol = 'dash' | 'hls' | 'cmaf' | 'cenc';
 export type Layer = 'edge' | 'shield' | 'origin' | 'packager' | 'config' | 'unknown';
 export type ExpectedSource = 'authoritative' | 'reference' | 'consensus' | 'none';
 
@@ -52,6 +51,11 @@ export interface ClassifyOptions {
 }
 
 const norm = (kid: string | null | undefined): string | null => (kid ? kid.toLowerCase() : null);
+
+/** Attach endpoint context to a manifest-level standards finding so it can join a run's findings. */
+export function withEndpoint(f: SpecFinding, endpointId: string, provider: CdnKind, likelyLayer: Layer = 'packager'): Finding {
+  return { ...f, endpointId, provider, likelyLayer };
+}
 
 /** Resolve the expected KID and where it came from, by the documented priority. */
 export function resolveExpectedKid(observations: EndpointObservation[], authoritativeKid?: string | null): { kid: string | null; source: ExpectedSource } {

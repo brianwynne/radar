@@ -88,10 +88,31 @@ Findings become durable, acknowledgeable, automatically‑monitored alerts:
   `POST /profiles/:id/event-mode`. **Console**: an *Active alerts* list with lifecycle‑state badges +
   acknowledge/resolve actions, and an *Event mode* toggle (viewing engineer).
 
+### Stage 5 — HLS validator + DASH↔HLS cross-protocol comparison (DONE, engine, on branch `feature/stream-assurance`)
+
+Pure, tested engine additions (like Stage 1):
+
+- **HLS parser** (`hls.ts`): master (variants, rendition groups, `INDEPENDENT-SEGMENTS`) and media
+  (media/discontinuity sequence, target duration, `EXTINF`, `PROGRAM-DATE-TIME`, `EXT-X-MAP`,
+  `EXT-X-KEY` signalling, `ENDLIST`) playlists, plus Low-Latency HLS tags (`PART-INF`,
+  `SERVER-CONTROL`, parts, preload hints). A quote-aware attribute parser.
+- **HLS validators** (`hls-validate.ts`): master conformance (missing `EXTM3U`, variant without
+  `BANDWIDTH`/`CODECS`, duplicate variants, undefined rendition group → `SA-HLS-002`); media
+  timeline + encryption signalling (segment over target duration, non-monotonic `PROGRAM-DATE-TIME`,
+  VOD without `ENDLIST` → `SA-HLS-003`; `EXT-X-KEY` without URI / missing `KEYFORMAT` → `SA-HLS-004`).
+  **Never retrieves a key** — only the signalling.
+- **Cross-protocol** (`xproto.ts`): `compareDashHls` checks DASH↔HLS agree on encryption identity
+  (KID via init segments, DRM systems via `KEYFORMAT`→system mapping → `SA-XDRM-001`), codec families
+  and live/VOD mode (`SA-XDRM-002`).
+- `withEndpoint()` adapts a manifest-level `SpecFinding` into a run `Finding`.
+
 ### Later stages (scoped, not yet built)
 
 Defined interfaces exist or are trivial to add on top of the engine + probe + persistence:
 
+- **Manifest-fetch integration** — extend the probe/service to fetch the MPD + HLS playlists per
+  profile, run the DASH/HLS validators + cross-protocol comparison, and merge the SpecFindings into
+  each run (via `withEndpoint`). Media-fragment timeline sampling.
 - **Full‑conformance mode** — deeper manifest/ladder/fragment validation, on demand + after config
   change; optional self‑hosted DASH‑IF Conformance Tool adapter.
 - **REST API** (Fastify, existing RBAC + audit) — profiles/endpoints CRUD, trigger run, event
