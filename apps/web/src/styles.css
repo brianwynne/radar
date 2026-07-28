@@ -507,6 +507,8 @@ ul.notes li { margin: 0.15rem 0; }
 .pni-tt-row { display: flex; align-items: center; gap: 0.4rem; }
 .pni-tt-label { flex: 1; white-space: nowrap; }
 .pni-tt-val { font-variant-numeric: tabular-nums; font-weight: 600; }
+.pni-outage { fill: color-mix(in srgb, var(--ink-soft) 14%, transparent); }
+.pni-outage-label { fill: var(--ink-soft); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.04em; }
 .pni-legend { display: flex; flex-direction: column; gap: 0.5rem; }
 .pni-legend-actions { display: flex; align-items: center; gap: 0.5rem; }
 .pni-group { display: flex; flex-direction: column; gap: 0.3rem; }

@@ -100,6 +100,7 @@ export function PniGraphs() {
   const [minutes, setMinutes] = useState<number>(60);
   const [dir, setDir] = useState<'out' | 'in'>('out');
   const [series, setSeries] = useState<PniHistorySeries[]>([]);
+  const [bucketSeconds, setBucketSeconds] = useState(15); // server-side downsample interval; drives gap detection
   // null = the default "eyeball-only" view (computed synchronously each render, so there is no
   // first-render flash of all links); a Set = the explicit shown/hidden state after the user filters.
   const [hidden, setHidden] = useState<Set<string> | null>(null);
@@ -126,6 +127,7 @@ export function PniGraphs() {
         .then((res) => {
           if (!active) return;
           setSeries(res.series.filter((s) => !isUnbundledPni(s)));
+          setBucketSeconds(res.bucketSeconds || 15);
           setWin({ start: res.windowStartMs, end: res.windowEndMs });
           setUpdatedAt(Date.now());
           setError(null);
@@ -182,6 +184,17 @@ export function PniGraphs() {
     for (const s of visible) for (const p of s.points) { const v = dir === 'out' ? p.outBps : p.inBps; if (v !== null && v > max) max = v; }
     return niceMax(max);
   }, [visible, dir]);
+
+  // "Server down" = a window where RADAR logged NOTHING at all (no sample on ANY interface), i.e. the
+  // recorder/server was down. Detected from the UNION of every series' sample times, so a single link
+  // going quiet never counts. A real gap is > 2.5 sample buckets (ignores ordinary jitter).
+  const gapMs = Math.max(bucketSeconds * 2.5, 45) * 1000;
+  const outages = useMemo(() => {
+    const times = [...new Set(series.flatMap((s) => s.points.map((p) => Date.parse(p.at))))].filter(Number.isFinite).sort((a, b) => a - b);
+    const gaps: { from: number; to: number }[] = [];
+    for (let i = 1; i < times.length; i++) if (times[i] - times[i - 1] > gapMs) gaps.push({ from: times[i - 1], to: times[i] });
+    return gaps;
+  }, [series, gapMs]);
 
   const x = (t: number) => PAD.l + ((t - tMin) / Math.max(1, tMax - tMin)) * PLOT_W;
   const y = (v: number) => PAD.t + (1 - v / yMax) * (H - PAD.t - PAD.b);
@@ -297,13 +310,38 @@ export function PniGraphs() {
               {xTicks.map((t, i) => (
                 <text key={i} x={x(t)} y={H - PAD.b + 16} textAnchor="middle" className="pni-axis">{hhmm(t)}</text>
               ))}
-              {/* Series (clipped to the plot, translated live while dragging for immediate feedback). */}
+              {/* Server-down windows: shade + label the periods RADAR logged nothing (no data). */}
+              <g clipPath="url(#pni-plot)" transform={drag ? `translate(${dragVx} 0)` : undefined}>
+                {outages.map((g, i) => {
+                  const x0 = Math.max(PAD.l, x(g.from));
+                  const x1 = Math.min(W - PAD.r, x(g.to));
+                  if (x1 - x0 < 1) return null;
+                  return (
+                    <g key={`out-${i}`}>
+                      <rect x={x0} y={PAD.t} width={x1 - x0} height={H - PAD.t - PAD.b} className="pni-outage" />
+                      {x1 - x0 > 60 && <text x={(x0 + x1) / 2} y={PAD.t + 13} textAnchor="middle" className="pni-outage-label">no data · server down</text>}
+                    </g>
+                  );
+                })}
+              </g>
+              {/* Series (clipped to the plot, translated live while dragging for immediate feedback).
+                  Lines BREAK across a gap (> gapMs) so an outage is never drawn as a flat line. */}
               <g clipPath="url(#pni-plot)" transform={drag ? `translate(${dragVx} 0)` : undefined}>
                 {visible.map((s) => {
                   const pts = s.points.map((p) => ({ t: Date.parse(p.at), v: val(p) })).filter((p) => p.v !== null) as { t: number; v: number }[];
                   if (pts.length === 0) return null;
-                  const d = pts.map((p) => `${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
-                  return <polyline key={keyOf(s)} points={d} fill="none" stroke={colorByKey.get(keyOf(s))} strokeWidth={1.75} />;
+                  // Split into contiguous segments wherever consecutive samples straddle a gap.
+                  const segs: { t: number; v: number }[][] = [];
+                  let cur: { t: number; v: number }[] = [];
+                  for (let i = 0; i < pts.length; i++) {
+                    if (i > 0 && pts[i].t - pts[i - 1].t > gapMs) { segs.push(cur); cur = []; }
+                    cur.push(pts[i]);
+                  }
+                  if (cur.length) segs.push(cur);
+                  const color = colorByKey.get(keyOf(s));
+                  return segs.map((seg, si) => (
+                    <polyline key={`${keyOf(s)}-${si}`} points={seg.map((p) => `${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ')} fill="none" stroke={color} strokeWidth={1.75} />
+                  ));
                 })}
               </g>
               {/* Crosshair */}

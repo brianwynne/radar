@@ -345,4 +345,15 @@ describe('Network Telemetry page', () => {
     fireEvent.click(screen.getByText('Eir CTW Po7'));
     expect(screen.getByText('Eir CTW Po7').closest('button')!.className).toContain('off');
   });
+
+  it('flags a server-down window (no data logged) on the PNI chart', async () => {
+    stubApi(NOC);
+    const { container } = renderAt('/network');
+    await screen.findByText('JPE00000001');
+    fireEvent.click(screen.getByRole('button', { name: 'PNI / Interface Graphs' }));
+    await screen.findByRole('button', { name: /Eyeball PNI/ });
+    // The fixture has a gap (11:40 → 11:59:50) where NO interface logged → a shaded outage band + label.
+    expect(container.querySelector('.pni-outage')).not.toBeNull();
+    expect(screen.getByText(/no data · server down/)).toBeInTheDocument();
+  });
 });
