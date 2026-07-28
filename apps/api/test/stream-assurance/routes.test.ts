@@ -9,7 +9,7 @@ import { loadConfig } from '../../src/config.js';
 import { StreamAssuranceService } from '../../src/stream-assurance/service.js';
 import { StreamAssuranceScheduler } from '../../src/stream-assurance/scheduler.js';
 import type { NewStreamAssuranceProfile, NewStreamAssuranceRun, StreamAlertRow, StreamAssuranceProfileRow, StreamAssuranceRepository, StreamAssuranceRunRow, UpsertStreamAlert } from '@radar/data';
-import { buildInit } from './init-fixture.js';
+import { buildFragment, buildInit } from './init-fixture.js';
 
 const CURRENT = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const OLD = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
@@ -67,6 +67,11 @@ beforeAll(async () => {
       res.writeHead(200, { 'content-type': 'application/dash+xml' }); res.end(body); return;
     }
     if (req.url?.endsWith('.m3u8')) { res.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl' }); res.end(req.url.includes('master') ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,CODECS="avc1.64001f"\nmedia.m3u8\n' : HLS_MEDIA_FAIRPLAY); return; }
+    if (req.url?.endsWith('.m4s')) {
+      // The lagging CDN (cdn2) serves an older fragment generation for the same URL.
+      const [seq, dts] = req.headers.host === 'live.rte.cdn2' ? [99, 891000] : [100, 900000];
+      res.writeHead(200, { 'content-type': 'video/mp4' }); res.end(buildFragment(seq, dts)); return;
+    }
     const host = req.headers.host;
     if (host === 'live.rte.host') { res.writeHead(200, { 'x-cache': 'HIT', 'last-modified': 'Sun, 26 Jul 2026 12:00:00 GMT' }); res.end(buildInit(CURRENT)); }
     else { res.writeHead(200, { 'x-cache': 'TCP_MISS from edge', 'x-cache-remote': 'TCP_MISS from parent', 'last-modified': 'Wed, 01 Jan 2026 00:00:00 GMT' }); res.end(buildInit(OLD)); }
@@ -207,7 +212,7 @@ describe('Stream Assurance routes', () => {
         { endpointId: 'fastly', provider: 'fastly', role: 'reference', publicUrl: 'http://live.rte.ie/init.mp4', connectHost: '127.0.0.1', connectPort: port, hostHeader: 'live.rte.cdn1', managedInternal: true },
         { endpointId: 'akamai', provider: 'akamai', role: 'candidate', publicUrl: 'http://live.rte.ie/init.mp4', connectHost: '127.0.0.1', connectPort: port, hostHeader: 'live.rte.cdn2', managedInternal: true },
       ],
-      manifests: { dashMpdUrl: 'http://live.rte.ie/live.mpd' },
+      manifests: { dashMpdUrl: 'http://live.rte.ie/live.mpd', mediaFragmentUrl: 'http://live.rte.ie/seg.m4s' },
     } });
     const ve = await app('VIEWING_ENGINEER');
     const res = await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/rte-xcdn/run' });
@@ -217,6 +222,11 @@ describe('Stream Assurance routes', () => {
     expect(xcdn).toBeTruthy();
     expect(xcdn!.classification).toBe('DRM_KID_MISMATCH');
     expect(xcdn!.endpointId).toBe('akamai'); // the drifted (candidate) CDN, not the reference
+    // The sampled media fragment also drifts on the lagging CDN → SA-FRAG-001.
+    const frag = findings.find((f) => f.ruleId === 'SA-FRAG-001');
+    expect(frag).toBeTruthy();
+    expect(frag!.classification).toBe('FRAGMENT_TIMELINE_DRIFT');
+    expect(frag!.endpointId).toBe('akamai');
     // Freshness rule stays quiet: both manifests were published at the run's `now`.
     expect(findings.find((f) => f.ruleId === 'SA-DASH-001')).toBeUndefined();
     await ve.close();

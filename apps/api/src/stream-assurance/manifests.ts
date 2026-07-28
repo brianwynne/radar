@@ -10,7 +10,13 @@ export interface ManifestSources {
   dashMpdUrl?: string;
   hlsMasterUrl?: string;
   hlsMediaUrl?: string;
+  /** A recent media fragment (CMAF segment) URL, sampled per-CDN for cross-CDN timeline drift. */
+  mediaFragmentUrl?: string;
 }
+
+// A media fragment's moof (mfhd/tfdt/trun) sits at the front, before mdat; a modest cap captures the
+// timeline signalling without downloading the whole (potentially multi-MB) segment.
+const FRAGMENT_MAX_BYTES = 512 * 1024;
 
 export interface ManifestFetchContext {
   connectHost: string;
@@ -32,17 +38,29 @@ const fetchText = async (url: string, ctx: ManifestFetchContext): Promise<string
   }
 };
 
+const fetchFragment = async (url: string, ctx: ManifestFetchContext): Promise<sa.FragmentInfo | null> => {
+  try {
+    const res = await probe({ publicUrl: url, connectHost: ctx.connectHost, connectPort: ctx.connectPort, hostHeader: ctx.hostHeader, sni: ctx.sni, timeoutMs: ctx.timeoutMs, maxBytes: FRAGMENT_MAX_BYTES });
+    if (res.status < 200 || res.status >= 300) return null;
+    const bytes = new Uint8Array(res.body);
+    return sa.analyseMediaFragment(bytes, sa.parseBoxes(bytes).boxes);
+  } catch {
+    return null;
+  }
+};
+
 /** Parsed manifest summary for one endpoint — fed to the cross-CDN consistency comparison. */
 export interface ManifestObservation {
   findings: sa.SpecFinding[];
   dash: sa.DashManifestInfo | null;
   hlsMaster: sa.HlsMaster | null;
+  fragment: sa.FragmentInfo | null;
 }
 
 /** Fetch + validate the configured manifests for ONE endpoint and cross-compare DASH vs HLS. Returns
  *  the per-endpoint SpecFindings plus the parsed manifests (for cross-CDN comparison by the caller). */
 export async function observeManifests(sources: ManifestSources, ctx: ManifestFetchContext, policy: SsrfPolicy, nowMs: number): Promise<ManifestObservation> {
-  if (!validateTarget({ connectHost: ctx.connectHost, managedInternal: ctx.managedInternal }, policy).ok) return { findings: [], dash: null, hlsMaster: null };
+  if (!validateTarget({ connectHost: ctx.connectHost, managedInternal: ctx.managedInternal }, policy).ok) return { findings: [], dash: null, hlsMaster: null, fragment: null };
   const findings: sa.SpecFinding[] = [];
 
   const dashText = sources.dashMpdUrl ? await fetchText(sources.dashMpdUrl, ctx) : null;
@@ -67,5 +85,6 @@ export async function observeManifests(sources: ManifestSources, ctx: ManifestFe
       hlsCodecs: (hlsMaster?.variants ?? []).flatMap((v) => v.codecs),
     }));
   }
-  return { findings, dash, hlsMaster };
+  const fragment = sources.mediaFragmentUrl ? await fetchFragment(sources.mediaFragmentUrl, ctx) : null;
+  return { findings, dash, hlsMaster, fragment };
 }

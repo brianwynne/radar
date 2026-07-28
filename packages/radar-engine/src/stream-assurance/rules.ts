@@ -30,6 +30,7 @@ export type Classification =
   | 'MANIFEST_STALE'
   | 'TIMELINE_GAP'
   | 'TIMELINE_OVERLAP'
+  | 'FRAGMENT_TIMELINE_DRIFT'
   | 'REPRESENTATION_DRIFT'
   | 'ORIGIN_IDENTITY_DRIFT'
   | 'CACHE_POLICY_DRIFT'
@@ -144,6 +145,11 @@ export const RULES: Record<string, Rule> = {
     id: 'SA-XCDN-003', severity: 'warning', standard: 'RADAR delivery consistency', section: null,
     description: 'A live manifest’s publish time is materially skewed between CDN endpoints — one CDN is serving an older manifest generation than the others.',
     remediation: 'Shorten the manifest TTL / verify live-manifest revalidation on the lagging CDN so every edge refreshes together.',
+  },
+  'SA-FRAG-001': {
+    id: 'SA-FRAG-001', severity: 'error', standard: 'ISO/IEC 14496-12 (movie fragments)', section: 'moof / tfdt',
+    description: 'The same media fragment URL returns a different decode time (tfdt baseMediaDecodeTime) or fragment sequence number across CDN endpoints — one CDN is serving a stale or different fragment for the same URL.',
+    remediation: 'Purge/refresh the drifted fragment on the lagging CDN and verify the cache key; a live edge must serve the same fragment generation for a given URL as its peers.',
   },
   'SA-OBJ-001': {
     id: 'SA-OBJ-001', severity: 'error', standard: 'RADAR delivery consistency', section: null,

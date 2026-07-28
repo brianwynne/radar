@@ -41,6 +41,7 @@ const profileSchema = z.object({
       dashMpdUrl: z.string().url().max(2048).optional(),
       hlsMasterUrl: z.string().url().max(2048).optional(),
       hlsMediaUrl: z.string().url().max(2048).optional(),
+      mediaFragmentUrl: z.string().url().max(2048).optional(),
     }).optional(),
     tags: z.array(z.string().max(64)).max(16).optional(),
   }),

@@ -156,12 +156,31 @@ parsed generations are cross-compared so a stale/wrong manifest on one CDN is ca
   `SA-XCDN-001` attributed to the lagging CDN, through the real API — with the freshness rule staying
   quiet (both published at `now`).
 
+### Stage 9 — media-fragment timeline sampling (DONE, on branch `feature/stream-assurance`)
+
+A recent media fragment can now be sampled through every CDN and its timeline cross-compared —
+catching a stale/wrong **fragment** cached beneath the manifest, below where manifest checks see:
+
+- **Engine** (`fragment.ts`, pure/bounded): `analyseMediaFragment` reads the movie-fragment timeline
+  signalling — `mfhd` sequence number, `tfdt` `baseMediaDecodeTime` (32- and 64-bit), `trun` sample
+  count + total duration (with `tfhd` defaults). It parses only the `moof` boxes at the front of the
+  segment; the encrypted `mdat` samples are never read (and the fetch is capped so the whole segment
+  isn't even downloaded). **No key is required or used** — decode times and counts are clear metadata.
+- **Engine** (`fragment-consistency.ts`, pure): `compareFragmentTimelines` flags `SA-FRAG-001`
+  (`FRAGMENT_TIMELINE_DRIFT`, error) when the same fragment URL resolves to a different decode time /
+  sequence number across CDNs — one CDN cached a stale/wrong fragment for that URL.
+- **Connector**: profile `manifests` gains optional `mediaFragmentUrl`; `observeManifests` fetches +
+  parses it per endpoint (512 KiB cap — the `moof` is at the front), and `service.run` runs the
+  cross-CDN fragment comparison alongside the manifest comparison.
+- Proven end-to-end: a two-CDN run where the lagging CDN serves an older fragment generation for the
+  same URL yields `SA-FRAG-001` attributed to that CDN, through the real API.
+
 ### Later stages (scoped, not yet built)
 
 Defined interfaces exist or are trivial to add on top of the engine + probe + persistence:
 
-- **Media-fragment timeline sampling** — sample a recent media fragment per rendition and compare
-  `tfdt`/`baseMediaDecodeTime` timelines across CDNs (gap/overlap detection).
+- **Within-CDN timeline gap/overlap** — sample consecutive fragments per rendition and check
+  `baseMediaDecodeTime[n+1] == baseMediaDecodeTime[n] + duration[n]` (`TIMELINE_GAP`/`_OVERLAP`).
 - **Full‑conformance mode** — deeper manifest/ladder/fragment validation, on demand + after config
   change; optional self‑hosted DASH‑IF Conformance Tool adapter.
 - **REST API** (Fastify, existing RBAC + audit) — profiles/endpoints CRUD, trigger run, event
@@ -178,7 +197,9 @@ Defined interfaces exist or are trivial to add on top of the engine + probe + pe
 ## Security controls (Stage 1)
 
 - **No key material** ever read, stored, logged or displayed. KIDs and PSSH **system IDs** are
-  identifiers and may be shown; `pssh` licence data is summarised by length only.
+  identifiers and may be shown; `pssh` licence data is summarised by length only. Media-fragment
+  analysis reads only the clear `moof` timeline boxes (`tfdt`/`trun`/`mfhd`) — never the encrypted
+  `mdat` samples — so **no decryption key is required or used**.
 - Bounded parsing (size/depth/count limits) — malformed or hostile files cannot exhaust memory.
 - SSRF controls are specified for the probe worker (later stage) and must gate any fetch.
 

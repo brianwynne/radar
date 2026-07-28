@@ -71,6 +71,35 @@ export function buildInitSegment(opts: InitOpts = {}): Uint8Array {
   return new Uint8Array([...ftyp, ...moov]);
 }
 
+export interface FragmentOpts {
+  sequenceNumber?: number;
+  baseMediaDecodeTime?: number;
+  trackId?: number;
+  sampleDurations?: number[]; // per-sample durations (trun); default two 1024-tick samples
+  version1?: boolean;         // use a 64-bit tfdt
+}
+
+/** Build a minimal but structurally-valid CMAF media fragment (styp + moof[+ empty mdat]). */
+export function buildMediaFragment(opts: FragmentOpts = {}): Uint8Array {
+  const seq = opts.sequenceNumber ?? 1;
+  const bmdt = opts.baseMediaDecodeTime ?? 0;
+  const trackId = opts.trackId ?? 1;
+  const durations = opts.sampleDurations ?? [1024, 1024];
+
+  const styp = box('styp', str('cmfs'), u32(0), str('cmfs'));
+  const mfhd = fullbox('mfhd', 0, 0, u32(seq));
+  const tfhd = fullbox('tfhd', 0, 0, u32(trackId)); // no optional fields
+  const tfdt = opts.version1
+    ? fullbox('tfdt', 1, 0, u32(Math.floor(bmdt / 0x1_0000_0000)), u32(bmdt >>> 0))
+    : fullbox('tfdt', 0, 0, u32(bmdt));
+  // trun with sample-duration present (flag 0x000100) and data-offset (0x000001).
+  const trun = fullbox('trun', 0, 0x000101, u32(durations.length), u32(0), ...durations.map((d) => u32(d)));
+  const traf = box('traf', tfhd, tfdt, trun);
+  const moof = box('moof', mfhd, traf);
+  const mdat = box('mdat', zeros(8));
+  return new Uint8Array([...styp, ...moof, ...mdat]);
+}
+
 /** A deliberately malformed segment: a box claiming a size far larger than the buffer. */
 export function oversizedBox(): Uint8Array {
   return new Uint8Array([...u32(0x0fff_ffff), ...str('moov'), 0, 0, 0, 0]);

@@ -13,3 +13,5 @@ export * from './hls.js';
 export * from './hls-validate.js';
 export * from './xproto.js';
 export * from './manifest-consistency.js';
+export * from './fragment.js';
+export * from './fragment-consistency.js';

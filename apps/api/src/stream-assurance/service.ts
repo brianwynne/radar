@@ -71,6 +71,11 @@ export class StreamAssuranceService {
       findings.push(...sa.compareManifestsAcrossCdns(perEndpoint.map(({ ep, obs }) => ({
         endpointId: ep.endpointId, provider: ep.provider, role: ep.role, dash: obs.dash, hlsMaster: obs.hlsMaster,
       }))));
+      // Cross-CDN media-fragment timeline: same segment via each CDN must resolve to the same
+      // decode time / sequence — a drift means one CDN cached a stale fragment beneath the manifest.
+      findings.push(...sa.compareFragmentTimelines(perEndpoint.map(({ ep, obs }) => ({
+        endpointId: ep.endpointId, provider: ep.provider, role: ep.role, fragment: obs.fragment,
+      }))));
     }
 
     // Bounded observations — parsed init metadata (brands/tracks/CENC/PSSH — identifiers only, no

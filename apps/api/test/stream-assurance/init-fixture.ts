@@ -36,3 +36,16 @@ export function buildInit(kid: string, scheme = 'cbcs'): Buffer {
   const moov = box('moov', trak, pssh);
   return Buffer.from([...ftyp, ...moov]);
 }
+
+/** Build a minimal CMAF media fragment (styp + moof + empty mdat) carrying a decode time + sequence. */
+export function buildFragment(sequenceNumber: number, baseMediaDecodeTime: number, trackId = 1): Buffer {
+  const styp = box('styp', str('cmfs'), u32(0), str('cmfs'));
+  const mfhd = fullbox('mfhd', 0, 0, u32(sequenceNumber));
+  const tfhd = fullbox('tfhd', 0, 0, u32(trackId));
+  const tfdt = fullbox('tfdt', 0, 0, u32(baseMediaDecodeTime));
+  const trun = fullbox('trun', 0, 0x000101, u32(2), u32(0), u32(1024), u32(1024));
+  const traf = box('traf', tfhd, tfdt, trun);
+  const moof = box('moof', mfhd, traf);
+  const mdat = box('mdat', zeros(8));
+  return Buffer.from([...styp, ...moof, ...mdat]);
+}
