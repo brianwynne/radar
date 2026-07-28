@@ -16,7 +16,9 @@ interface MediaSummary {
   requested: { dash: boolean; hls: boolean; fragment: boolean };
   dash: { presentation: string | null; publishTime: string | null; defaultKid: string | null; bandwidths: number[] } | null;
   hls: boolean;
-  fragment: { sequenceNumber: number | null; baseMediaDecodeTime: number | null; sampleCount: number | null } | null;
+  fragment: { sequenceNumber: number | null; baseMediaDecodeTime: number | null; sampleCount: number | null; hasTimeline: boolean } | null;
+  /** HTTP status (or null on a connection error) of each fetch, so the UI can explain "unreachable". */
+  status: { dash: number | null; hls: number | null; fragment: number | null };
 }
 
 export interface StreamProfileConfig {
@@ -83,7 +85,8 @@ export class StreamAssuranceService {
           requested,
           dash: obs.dash ? { presentation: obs.dash.presentation, publishTime: obs.dash.publishTime, defaultKid: obs.dash.drm.defaultKid, bandwidths: obs.dash.representationBandwidths } : null,
           hls: !!obs.hlsMaster,
-          fragment: obs.fragment ? { sequenceNumber: obs.fragment.sequenceNumber, baseMediaDecodeTime: obs.fragment.baseMediaDecodeTime, sampleCount: obs.fragment.sampleCount } : null,
+          fragment: obs.fragment ? { sequenceNumber: obs.fragment.sequenceNumber, baseMediaDecodeTime: obs.fragment.baseMediaDecodeTime, sampleCount: obs.fragment.sampleCount, hasTimeline: obs.fragment.baseMediaDecodeTime != null || obs.fragment.sequenceNumber != null } : null,
+          status: { dash: obs.fetch.dash?.status ?? null, hls: obs.fetch.hlsMaster?.status ?? null, fragment: obs.fetch.fragment?.status ?? null },
         });
       }
       findings.push(...sa.compareManifestsAcrossCdns(perEndpoint.map(({ ep, obs }) => ({

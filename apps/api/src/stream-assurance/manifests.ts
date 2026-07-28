@@ -28,24 +28,27 @@ export interface ManifestFetchContext {
   maxBytes?: number;
 }
 
-const fetchText = async (url: string, ctx: ManifestFetchContext): Promise<string | null> => {
+/** Outcome of one manifest/fragment fetch — status/error kept so the UI can explain "unreachable". */
+export interface FetchOutcome { status: number | null; error: string | null }
+
+const fetchText = async (url: string, ctx: ManifestFetchContext): Promise<{ text: string | null; outcome: FetchOutcome }> => {
   try {
     const res = await probe({ publicUrl: url, connectHost: ctx.connectHost, connectPort: ctx.connectPort, hostHeader: ctx.hostHeader, sni: ctx.sni, timeoutMs: ctx.timeoutMs, maxBytes: ctx.maxBytes ?? 4 * 1024 * 1024 });
-    if (res.status < 200 || res.status >= 300) return null;
-    return Buffer.from(res.body).toString('utf8');
-  } catch {
-    return null;
+    const text = res.status >= 200 && res.status < 300 ? Buffer.from(res.body).toString('utf8') : null;
+    return { text, outcome: { status: res.status, error: null } };
+  } catch (e) {
+    return { text: null, outcome: { status: null, error: e instanceof Error ? e.message : String(e) } };
   }
 };
 
-const fetchFragment = async (url: string, ctx: ManifestFetchContext): Promise<sa.FragmentInfo | null> => {
+const fetchFragment = async (url: string, ctx: ManifestFetchContext): Promise<{ fragment: sa.FragmentInfo | null; outcome: FetchOutcome }> => {
   try {
     const res = await probe({ publicUrl: url, connectHost: ctx.connectHost, connectPort: ctx.connectPort, hostHeader: ctx.hostHeader, sni: ctx.sni, timeoutMs: ctx.timeoutMs, maxBytes: FRAGMENT_MAX_BYTES });
-    if (res.status < 200 || res.status >= 300) return null;
+    if (res.status < 200 || res.status >= 300) return { fragment: null, outcome: { status: res.status, error: null } };
     const bytes = new Uint8Array(res.body);
-    return sa.analyseMediaFragment(bytes, sa.parseBoxes(bytes).boxes);
-  } catch {
-    return null;
+    return { fragment: sa.analyseMediaFragment(bytes, sa.parseBoxes(bytes).boxes), outcome: { status: res.status, error: null } };
+  } catch (e) {
+    return { fragment: null, outcome: { status: null, error: e instanceof Error ? e.message : String(e) } };
   }
 };
 
@@ -55,17 +58,24 @@ export interface ManifestObservation {
   dash: sa.DashManifestInfo | null;
   hlsMaster: sa.HlsMaster | null;
   fragment: sa.FragmentInfo | null;
+  /** Per-source fetch outcomes (status/error) so the UI can explain a failed check. */
+  fetch: { dash: FetchOutcome | null; hlsMaster: FetchOutcome | null; fragment: FetchOutcome | null };
 }
 
 /** Fetch + validate the configured manifests for ONE endpoint and cross-compare DASH vs HLS. Returns
  *  the per-endpoint SpecFindings plus the parsed manifests (for cross-CDN comparison by the caller). */
 export async function observeManifests(sources: ManifestSources, ctx: ManifestFetchContext, policy: SsrfPolicy, nowMs: number): Promise<ManifestObservation> {
-  if (!validateTarget({ connectHost: ctx.connectHost, managedInternal: ctx.managedInternal }, policy).ok) return { findings: [], dash: null, hlsMaster: null, fragment: null };
+  if (!validateTarget({ connectHost: ctx.connectHost, managedInternal: ctx.managedInternal }, policy).ok) {
+    return { findings: [], dash: null, hlsMaster: null, fragment: null, fetch: { dash: null, hlsMaster: null, fragment: null } };
+  }
   const findings: sa.SpecFinding[] = [];
 
-  const dashText = sources.dashMpdUrl ? await fetchText(sources.dashMpdUrl, ctx) : null;
-  const hlsMasterText = sources.hlsMasterUrl ? await fetchText(sources.hlsMasterUrl, ctx) : null;
-  const hlsMediaText = sources.hlsMediaUrl ? await fetchText(sources.hlsMediaUrl, ctx) : null;
+  const dashRes = sources.dashMpdUrl ? await fetchText(sources.dashMpdUrl, ctx) : null;
+  const hlsMasterRes = sources.hlsMasterUrl ? await fetchText(sources.hlsMasterUrl, ctx) : null;
+  const hlsMediaRes = sources.hlsMediaUrl ? await fetchText(sources.hlsMediaUrl, ctx) : null;
+  const dashText = dashRes?.text ?? null;
+  const hlsMasterText = hlsMasterRes?.text ?? null;
+  const hlsMediaText = hlsMediaRes?.text ?? null;
 
   const dash = dashText ? sa.extractDashManifest(dashText) : null;
   if (dash) findings.push(...sa.validateDashFreshness(dash, nowMs));
@@ -85,6 +95,9 @@ export async function observeManifests(sources: ManifestSources, ctx: ManifestFe
       hlsCodecs: (hlsMaster?.variants ?? []).flatMap((v) => v.codecs),
     }));
   }
-  const fragment = sources.mediaFragmentUrl ? await fetchFragment(sources.mediaFragmentUrl, ctx) : null;
-  return { findings, dash, hlsMaster, fragment };
+  const fragRes = sources.mediaFragmentUrl ? await fetchFragment(sources.mediaFragmentUrl, ctx) : null;
+  return {
+    findings, dash, hlsMaster, fragment: fragRes?.fragment ?? null,
+    fetch: { dash: dashRes?.outcome ?? null, hlsMaster: hlsMasterRes?.outcome ?? null, fragment: fragRes?.outcome ?? null },
+  };
 }

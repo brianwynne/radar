@@ -1516,8 +1516,8 @@ export interface SaInitCenc { isProtected: boolean; scheme: string | null; defau
 export interface SaInitPssh { systemId: string; systemName: string | null; version: number; kids: string[]; dataSize: number }
 export interface SaInitInfo { majorBrand: string | null; compatibleBrands: string[]; tracks: SaInitTrack[]; cenc: SaInitCenc; pssh: SaInitPssh[]; warnings: string[] }
 export interface SaMediaDash { presentation: string | null; publishTime: string | null; defaultKid: string | null; bandwidths: number[] }
-export interface SaMediaFragment { sequenceNumber: number | null; baseMediaDecodeTime: number | null; sampleCount: number | null }
-export interface SaMediaInfo { requested: { dash: boolean; hls: boolean; fragment: boolean }; dash: SaMediaDash | null; hls: boolean; fragment: SaMediaFragment | null }
+export interface SaMediaFragment { sequenceNumber: number | null; baseMediaDecodeTime: number | null; sampleCount: number | null; hasTimeline: boolean }
+export interface SaMediaInfo { requested: { dash: boolean; hls: boolean; fragment: boolean }; dash: SaMediaDash | null; hls: boolean; fragment: SaMediaFragment | null; status: { dash: number | null; hls: number | null; fragment: number | null } }
 export interface SaObservation { endpointId: string; provider: string; role: 'reference' | 'candidate'; reachable: boolean; httpStatus: number | null; kid: string | null; lastModified: string | null; cdn: SaCdnObservation; forwardedHost?: string | null; originHost?: string | null; error?: string | null; init?: SaInitInfo | null; media?: SaMediaInfo | null; headers?: Record<string, string> | null }
 export interface SaFinding { ruleId: string; classification: string; severity: SaRule['severity']; endpointId: string; provider: string; protocol: string; likelyLayer: string; explanation: string; remediation: string; evidence: Record<string, unknown> }
 export interface SaRun { id: string; profileId: string; startedAt: string; finishedAt: string | null; mode: string; status: string; observations: SaObservation[]; findings: SaFinding[]; findingCount: number }

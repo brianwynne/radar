@@ -29,7 +29,9 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   const [name, setName] = useState('Channel 4 (live.rte.ie)');
   const [endpoints, setEndpoints] = useState<SaEndpointInput[]>(RTE_ENDPOINTS.map((e) => ({ ...e })));
   const [dashMpdUrl, setDash] = useState(RTE_DASH_MPD);
-  const [mediaFragmentUrl, setFrag] = useState(RTE_OBJECT_URL);
+  // Left blank: the object URL above is an init segment (no moof), not a time-addressed media
+  // fragment, so prefilling it here would mis-report. Paste a real fragment URL to enable the check.
+  const [mediaFragmentUrl, setFrag] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -190,8 +192,8 @@ function InitInspector({ observations }: { observations: SaObservation[] }) {
 }
 
 const ok = <span className="badge ok badge-sm">✓</span>;
-const bad = <span className="badge danger badge-sm">unreachable</span>;
 const dash = <span className="muted">—</span>;
+const unreachable = (status: number | null) => <span><span className="badge danger badge-sm">unreachable</span>{status != null && <span className="muted"> · HTTP {status}</span>}</span>;
 
 function fmtAge(publishTime: string | null): string {
   if (!publishTime) return '';
@@ -221,11 +223,13 @@ function MediaChecks({ observations }: { observations: SaObservation[] }) {
                 <td>{o.endpointId}{o.role === 'reference' && <span className="badge neutral badge-sm" style={{ marginLeft: '0.3rem' }}>reference</span>}</td>
                 <td>{!m.requested.dash ? dash : m.dash
                   ? <span>{ok} <span className="muted">{m.dash.presentation ?? 'static'}{m.dash.presentation === 'dynamic' && m.dash.publishTime ? ` · ${fmtAge(m.dash.publishTime)}` : ''} · {m.dash.bandwidths.length} rendition{m.dash.bandwidths.length === 1 ? '' : 's'}</span></span>
-                  : bad}</td>
+                  : unreachable(m.status.dash)}</td>
                 <td>{!m.requested.fragment ? dash : m.fragment
-                  ? <span>{ok} <span className="muted mono">seq {m.fragment.sequenceNumber ?? '?'} · dts {m.fragment.baseMediaDecodeTime ?? '?'}</span></span>
-                  : bad}</td>
-                <td>{!m.requested.hls ? dash : m.hls ? ok : bad}</td>
+                  ? (m.fragment.hasTimeline
+                    ? <span>{ok} <span className="muted mono">seq {m.fragment.sequenceNumber ?? '?'} · dts {m.fragment.baseMediaDecodeTime ?? '?'}</span></span>
+                    : <span className="muted">fetched · no <code>moof</code> (not a media fragment)</span>)
+                  : unreachable(m.status.fragment)}</td>
+                <td>{!m.requested.hls ? dash : m.hls ? ok : unreachable(m.status.hls)}</td>
               </tr>
             );
           })}
