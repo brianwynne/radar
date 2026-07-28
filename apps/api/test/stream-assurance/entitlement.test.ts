@@ -16,7 +16,12 @@ const STATION_FEED = JSON.stringify({ entries: [
   { guid: 'RTEONE', description: 'RTÉ One', 'plstation$callSign': 'RTEONE', 'plstation$isVirtual': false, 'rte$google-ssai-dash': 'OzeyKEY' },
   { guid: 'RTENewsChannel', description: 'RTÉ News', 'plstation$callSign': 'RTENewsNow', 'plstation$isVirtual': false },
 ] });
-const LISTINGS = JSON.stringify({ entries: [{ 'rtelisting$mediaPid': 'be90cf629ee8f4a77e46959febb9e000' }] });
+// Schedules feed shape: a channel schedule whose listings carry start/end + mediaPid. The one
+// bracketing nowMs (1785240000000) is the live media.
+const SCHEDULES = JSON.stringify({ entries: [{ 'plchannelschedule$listings': [
+  { 'pllisting$startTime': 1785230000000, 'pllisting$endTime': 1785239000000, 'rtelisting$mediaPid': 'ended-programme' },
+  { 'pllisting$startTime': 1785239000000, 'pllisting$endTime': 1785241000000, 'rtelisting$mediaPid': 'be90cf629ee8f4a77e46959febb9e000' },
+] }] });
 const SMIL = `<smil><body><seq>
   <ref src="https://pubads.g.doubleclick.net/gampad/live/ads?x=1" tags="preroll"></ref>
   <video src="https://www.rte.ie/player-live/channel/live/a/vc11/vc11.isml/.mpd?ip=1.2.3.4&amp;token1=t"/>
@@ -42,7 +47,7 @@ describe('entitlement resolver', () => {
 
   it('resolves a channel through mediaPid → SMIL → redirect → discovered manifest', async () => {
     followMock
-      .mockResolvedValueOnce(resp(LISTINGS, 'listings'))              // listings byCallSign → mediaPid
+      .mockResolvedValueOnce(resp(SCHEDULES, 'schedules'))              // listings byCallSign → mediaPid
       .mockResolvedValueOnce(resp(SMIL, 'smil'))                     // SMIL resolve → entry URL
       .mockResolvedValueOnce(resp(MPD, FINAL_MANIFEST));            // entry URL follows redirects → final manifest
 

@@ -14,8 +14,8 @@ export interface RteFeedConfig {
   feedHost: string;   // e.g. feed.entertainment.tv.theplatform.eu
   smilHost: string;   // e.g. link.eu.theplatform.com
   account: string;    // mpx account PID, e.g. 1uC-gC
-  stationFeed: string;   // e.g. rte-prd-isl-all-stations
-  listingsFeed: string;  // e.g. rte-prd-prd-all-listings
+  stationFeed: string;    // e.g. rte-prd-isl-all-stations
+  schedulesFeed: string;  // e.g. rte-prd-prd-all-schedules (supports byCallSign; listings carry mediaPid)
 }
 
 export const DEFAULT_RTE_FEED_CONFIG: RteFeedConfig = {
@@ -23,7 +23,7 @@ export const DEFAULT_RTE_FEED_CONFIG: RteFeedConfig = {
   smilHost: 'link.eu.theplatform.com',
   account: '1uC-gC',
   stationFeed: 'rte-prd-isl-all-stations',
-  listingsFeed: 'rte-prd-prd-all-listings',
+  schedulesFeed: 'rte-prd-prd-all-schedules',
 };
 
 export interface RteChannel {
@@ -74,14 +74,21 @@ export async function listRteChannels(cfg: RteFeedConfig, policy: SsrfPolicy): P
   }).filter((c) => c.callSign);
 }
 
-/** The current programme's mediaPid for a channel, from the listings feed. */
+/** The currently-airing listing's mediaPid for a channel, from the schedules feed (the live media). */
 export async function resolveMediaPid(callSign: string, cfg: RteFeedConfig, policy: SsrfPolicy, nowMs: number): Promise<string | null> {
-  const url = `https://${cfg.feedHost}/f/${cfg.account}/${cfg.listingsFeed}?fields=rtelisting$mediaPid&byCallSign=${encodeURIComponent(callSign)}&byListingTime=${nowMs}~${nowMs}`;
+  // The schedules feed supports byCallSign; a zero-width time window still returns a small window of
+  // listings, so pick the one actually airing at `nowMs` (fall back to the first with a mediaPid).
+  const url = `https://${cfg.feedHost}/f/${cfg.account}/${cfg.schedulesFeed}?byCallSign=${encodeURIComponent(callSign)}&byListingTime=${nowMs}~${nowMs}`;
+  const listings: Record<string, unknown>[] = [];
   for (const e of getEntries(await getJson(url, policy))) {
-    const pid = str(e['rtelisting$mediaPid']);
-    if (pid) return pid;
+    const ls = e['plchannelschedule$listings'];
+    if (Array.isArray(ls)) listings.push(...(ls as Record<string, unknown>[]));
   }
-  return null;
+  const airingNow = listings.find((l) => {
+    const s = Number(l['pllisting$startTime']); const en = Number(l['pllisting$endTime']);
+    return Number.isFinite(s) && Number.isFinite(en) && s <= nowMs && nowMs < en;
+  });
+  return str(airingNow?.['rtelisting$mediaPid']) ?? str(listings.find((l) => str(l['rtelisting$mediaPid']))?.['rtelisting$mediaPid']);
 }
 
 /** Resolve a channel end-to-end: mediaPid → SMIL → follow redirects → discover the CDN objects. */
