@@ -4,7 +4,7 @@
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import type { SaAlert, SaDiscoveredManifest, SaEndpointInput, SaFinding, SaObservation, SaProfileInput, SaProfileSummary, SaRun } from '../api/types';
+import type { SaAlert, SaChannel, SaDiscoveredManifest, SaEndpointInput, SaFinding, SaObservation, SaProfileInput, SaProfileSummary, SaRun } from '../api/types';
 
 const PROVIDERS: SaEndpointInput['provider'][] = ['fastly', 'akamai', 'realta', 'origin', 'custom', 'unknown'];
 const blankEndpoint = (role: SaEndpointInput['role']): SaEndpointInput => ({ endpointId: '', provider: 'fastly', role, publicUrl: '', connectHost: '', hostHeader: '', originHost: '' });
@@ -38,25 +38,55 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   const [discovering, setDiscovering] = useState(false);
   const [discovered, setDiscovered] = useState<SaDiscoveredManifest | null>(null);
 
-  // Discover: fetch the manifest, derive the object URLs, and auto-fill the form. Picks the top video
-  // rendition's init as the object to compare across CDNs, and its current fragment for the timeline.
+  const [channels, setChannels] = useState<SaChannel[] | null>(null);
+  const [channel, setChannel] = useState('');
+  const [resolving, setResolving] = useState(false);
+
+  useEffect(() => {
+    api.saChannels().then((r) => setChannels(r.channels)).catch(() => setChannels(null));
+  }, []);
+
+  // Auto-fill the form from a discovered manifest: the top (non-trick) video rendition's init is the
+  // object to compare across CDNs, and its current fragment drives the timeline check.
+  const applyManifest = (manifest: SaDiscoveredManifest, dashUrl: string) => {
+    setDiscovered(manifest);
+    const videos = manifest.representations.filter((r) => r.contentType === 'video' && !r.trickPlay && r.initUrl);
+    const top = videos.sort((a, b) => (b.bandwidth ?? 0) - (a.bandwidth ?? 0))[0];
+    if (top) {
+      setEndpoints((es) => es.map((e) => ({ ...e, publicUrl: top.initUrl })));
+      setFrag(top.latestMediaUrl ?? '');
+    }
+    setDash(dashUrl);
+  };
+
   const discover = async () => {
     if (!mpdUrl.trim()) return;
     setDiscovering(true); setErr(null);
     try {
       const { manifest } = await api.saDiscover(mpdUrl.trim());
-      setDiscovered(manifest);
-      const videos = manifest.representations.filter((r) => r.contentType === 'video' && !r.trickPlay && r.initUrl);
-      const top = videos.sort((a, b) => (b.bandwidth ?? 0) - (a.bandwidth ?? 0))[0];
-      if (top) {
-        setEndpoints((es) => es.map((e) => ({ ...e, publicUrl: top.initUrl })));
-        setFrag(top.latestMediaUrl ?? '');
-      }
-      setDash(mpdUrl.trim());
+      applyManifest(manifest, mpdUrl.trim());
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Discovery failed — check the manifest URL is reachable.');
     } finally {
       setDiscovering(false);
+    }
+  };
+
+  // Resolve a whole channel (feed → SMIL → redirects → discover) and fill the form from RADAR's own IP.
+  const resolveChannel = async () => {
+    if (!channel) return;
+    setResolving(true); setErr(null);
+    try {
+      const { resolved } = await api.saResolveChannel(channel);
+      applyManifest(resolved.manifest, resolved.finalManifestUrl);
+      setMpdUrl(resolved.finalManifestUrl);
+      if (!id.trim() || id === 'channel4') { setId(channel.toLowerCase().replace(/[^a-z0-9-]+/g, '-')); }
+      const title = channels?.find((c) => c.callSign === channel)?.title;
+      if (title) setName(title);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Channel resolve failed.');
+    } finally {
+      setResolving(false);
     }
   };
 
@@ -96,6 +126,19 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
   return (
     <form className="sa-form" onSubmit={submit}>
       <div className="sa-discover">
+        {channels && channels.length > 0 && (
+          <>
+            <h4 className="sa-form-h">Pick a channel <span className="muted">· resolves the manifest from RADAR — no URLs needed</span></h4>
+            <div className="sa-form-row">
+              <select value={channel} onChange={(e) => setChannel(e.target.value)} aria-label="Channel">
+                <option value="">Select a channel…</option>
+                {channels.map((c) => <option key={c.callSign} value={c.callSign}>{c.title} ({c.delivery})</option>)}
+              </select>
+              <button type="button" className="btn" onClick={resolveChannel} disabled={resolving || !channel}>{resolving ? 'Resolving…' : 'Load channel'}</button>
+            </div>
+            <div className="muted" style={{ fontSize: '0.72rem' }}>Or resolve a DASH manifest URL directly:</div>
+          </>
+        )}
         <h4 className="sa-form-h">Discover from a DASH manifest <span className="muted">· optional — auto-fills the objects to test</span></h4>
         <div className="sa-form-row">
           <input value={mpdUrl} onChange={(e) => setMpdUrl(e.target.value)} placeholder="DASH .mpd URL (e.g. the player's manifest — even an ad-stitched one)" />

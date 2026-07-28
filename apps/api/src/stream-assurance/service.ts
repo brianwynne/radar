@@ -6,6 +6,7 @@ import { streamAssurance as sa } from '@radar/engine';
 import type { NewStreamAssuranceRun, StreamAssuranceRepository, StreamAssuranceRunRow } from '@radar/data';
 import { observeAndClassify, type EndpointConfig } from './observe.js';
 import { observeManifests, discoverFromMpd, type ManifestSources } from './manifests.js';
+import { listRteChannels, resolveChannel, DEFAULT_RTE_FEED_CONFIG, type RteFeedConfig } from './entitlement.js';
 import type { SsrfPolicy } from './ssrf.js';
 
 /** Stable alert identity across runs — the same finding class on the same endpoint. */
@@ -32,6 +33,8 @@ export interface StreamProfileConfig {
 export interface StreamAssuranceServiceDeps {
   now?: () => number;
   genId?: () => string;
+  /** RTÉ mpx feed/SMIL config for channel-driven discovery (defaults to the production feeds). */
+  feedConfig?: RteFeedConfig;
   logger?: { info: (o: unknown, m?: string) => void; warn: (o: unknown, m?: string) => void };
 }
 
@@ -40,6 +43,7 @@ export class ProfileNotFoundError extends Error {}
 export class StreamAssuranceService {
   private readonly now: () => number;
   private readonly genId: () => string;
+  private readonly feedConfig: RteFeedConfig;
 
   constructor(
     private readonly repo: StreamAssuranceRepository,
@@ -48,11 +52,22 @@ export class StreamAssuranceService {
   ) {
     this.now = deps.now ?? (() => Date.now());
     this.genId = deps.genId ?? (() => randomUUID());
+    this.feedConfig = deps.feedConfig ?? DEFAULT_RTE_FEED_CONFIG;
   }
 
   /** Fetch a DASH manifest and derive the per-representation init + current-fragment URLs. */
   async discover(mpdUrl: string) {
     return discoverFromMpd(mpdUrl, this.policy);
+  }
+
+  /** List the RTÉ live channels from the mpx station feed. */
+  async listChannels() {
+    return listRteChannels(this.feedConfig, this.policy);
+  }
+
+  /** Resolve a channel to its (IP-signed) manifest and the discovered CDN objects. */
+  async resolveChannel(callSign: string) {
+    return resolveChannel(callSign, this.feedConfig, this.policy, this.now());
   }
 
   /** Run one profile now: probe every endpoint, classify, persist and return the run snapshot. */

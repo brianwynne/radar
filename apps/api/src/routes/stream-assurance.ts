@@ -103,6 +103,28 @@ export const streamAssuranceRoutes: FastifyPluginAsync<StreamAssuranceRouteOptio
     return reply.code(201).send({ id: p.id });
   });
 
+  // List the RTÉ live channels (mpx station feed) for channel-driven discovery.
+  app.get('/stream-assurance/channels', { preHandler: requirePermission('dns.explain.read'), schema: schema('List live channels') }, async (req, reply) => {
+    if (!opts.service) return reply.code(503).send(unavailable(req.id));
+    try {
+      return { channels: await opts.service.listChannels() };
+    } catch (e) {
+      return reply.code(502).send({ code: 'CHANNELS_FAILED', message: e instanceof Error ? e.message : 'could not load channels', correlationId: req.id });
+    }
+  });
+
+  // Resolve a channel end-to-end (feed → SMIL → redirects → discover) to its manifest + CDN objects.
+  app.post('/stream-assurance/resolve-channel', { preHandler: requirePermission('dns.explain.read'), schema: schema('Resolve a channel to its manifest + objects') }, async (req, reply) => {
+    if (!opts.service) return reply.code(503).send(unavailable(req.id));
+    const parsed = z.object({ callSign: z.string().min(1).max(64) }).safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ code: 'INVALID_REQUEST', message: 'callSign is required', correlationId: req.id });
+    try {
+      return { resolved: await opts.service.resolveChannel(parsed.data.callSign) };
+    } catch (e) {
+      return reply.code(502).send({ code: 'RESOLVE_FAILED', message: e instanceof Error ? e.message : 'could not resolve the channel', correlationId: req.id });
+    }
+  });
+
   // Discover objects (init + current fragment per rendition) from a DASH manifest URL.
   app.post('/stream-assurance/discover', { preHandler: requirePermission('dns.explain.read'), schema: schema('Discover objects from a DASH manifest') }, async (req, reply) => {
     if (!opts.service) return reply.code(503).send(unavailable(req.id));

@@ -175,6 +175,29 @@ catching a stale/wrong **fragment** cached beneath the manifest, below where man
 - Proven end-to-end: a two-CDN run where the lagging CDN serves an older fragment generation for the
   same URL yields `SA-FRAG-001` attributed to that CDN, through the real API.
 
+### Stage 10 — channel-driven discovery (DONE, on branch `feature/stream-assurance`)
+
+Point Stream Tests at a **channel** instead of hand-typed URLs; RADAR resolves the whole entitlement
+chain itself, from its own egress IP (so the CDN token is minted for RADAR — no client IP-lock):
+
+- **SMIL parser** (`engine/smil.ts`, pure): thePlatform SMIL → the signed DASH/HLS manifest URL, ad
+  `<ref>`s (doubleclick VMAP) kept separate.
+- **Redirect-following fetch** (`api/follow.ts`): bounded, SSRF-checked **on every hop** — needed for
+  the DAI chain (tokenised `www.rte.ie` entry → 302 DAI-create → 302 DAI-session manifest).
+- **Entitlement resolver** (`api/entitlement.ts`): station feed → `mediaPid` (listings, `byCallSign`)
+  → SMIL resolve → follow redirects → `discoverDashSegments`. Feed/account config
+  (`DEFAULT_RTE_FEED_CONFIG`: mpx account `1uC-gC`, the two feed names, `link.eu.theplatform.com`),
+  overridable via the service `feedConfig` dep.
+- **API**: `GET /stream-assurance/channels` (list, with DAI/direct delivery), `POST
+  /stream-assurance/resolve-channel { callSign }` (resolve → discovered manifest). Both `dns.explain.read`.
+- **Console**: a **channel dropdown** in the New profile form — pick a channel → *Load channel* →
+  RADAR resolves + auto-fills the object/manifest URLs. Falls back to the manual manifest-URL discover.
+
+> **Deployment note.** Channel resolution fetches third-party hosts. If `SA_ALLOW_HOSTS` is set (an
+> SSRF allowlist), it must include: `feed.entertainment.tv.theplatform.eu`, `link.eu.theplatform.com`,
+> `www.rte.ie`, `dai.google.com`, `live.rte.ie`, and the CDN edges (`liveedge.rte.ie`,
+> `t.sni.global.fastly.net`, `live.rte.ie.akamaized.net`). Unset (default) allows all public hosts.
+
 ### Later stages (scoped, not yet built)
 
 Defined interfaces exist or are trivial to add on top of the engine + probe + persistence:

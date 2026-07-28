@@ -206,6 +206,35 @@ describe('Stream Assurance routes', () => {
     await ve.close();
   });
 
+  it('channel routes: list + resolve (RBAC + validation), service stubbed', async () => {
+    const svc = new StreamAssuranceService(repo, { allowManagedInternal: true }, { now: () => Date.parse('2026-07-27T00:00:00Z') });
+    vi.spyOn(svc, 'listChannels').mockResolvedValue([
+      { guid: 'RTEONE', title: 'RTÉ One', callSign: 'RTEONE', isVirtual: false, daiKey: 'K', delivery: 'dai' },
+      { guid: 'RTENewsChannel', title: 'RTÉ News', callSign: 'RTENewsNow', isVirtual: false, daiKey: null, delivery: 'direct' },
+    ]);
+    vi.spyOn(svc, 'resolveChannel').mockResolvedValue({
+      callSign: 'RTEONE', mediaPid: 'pid', entryUrl: 'https://www.rte.ie/x.mpd?token1=t', finalManifestUrl: 'https://dai.google.com/…/manifest.mpd', redirects: [], adTags: [],
+      manifest: { manifestUrl: 'f', baseUrl: 'https://live.rte.ie/live/b/vc11/vc11.isml/dash/', presentation: 'dynamic', drm: { defaultKid: null, systems: [] }, representations: [] },
+    });
+    const build = (role: string) => buildApp(loadConfig({ NODE_ENV: 'test', LOG_LEVEL: 'silent', RADAR_DEV_AUTH: 'true', RADAR_DEV_ROLE: role }), {
+      streamAssuranceRepository: repo, streamAssuranceService: svc, streamAssuranceScheduler: new StreamAssuranceScheduler(repo, svc, noopTimers), database: { audit } as never,
+    });
+
+    const noc = await build('NOC_VIEWER'); await noc.ready();
+    expect((await noc.inject({ url: '/api/v1/stream-assurance/channels' })).statusCode).toBe(403);
+    await noc.close();
+
+    const ve = await build('VIEWING_ENGINEER'); await ve.ready();
+    const list = await ve.inject({ url: '/api/v1/stream-assurance/channels' });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().channels.map((c: { delivery: string }) => c.delivery)).toEqual(['dai', 'direct']);
+    const res = await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/resolve-channel', payload: { callSign: 'RTEONE' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().resolved.manifest.baseUrl).toContain('live.rte.ie');
+    expect((await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/resolve-channel', payload: {} })).statusCode).toBe(400);
+    await ve.close();
+  });
+
   it('a run with manifest URLs also validates DASH/HLS and cross-protocol', async () => {
     repo.runs = []; repo.alerts.clear();
     await repo.upsertProfile({ id: 'rte-manifests', name: 'M', config: {

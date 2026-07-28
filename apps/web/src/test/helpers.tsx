@@ -616,6 +616,16 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       };
       else if (p.endsWith('/stream-assurance/rules')) body = { count: 1, rules: [{ id: 'SA-CDN-001', severity: 'critical', standard: 'RADAR delivery consistency', section: null, description: 'origin-variant / forwarded-Host mismatch', remediation: 'Align the forwarded Host with the origin hostname.' }] };
       else if (p.includes('/stream-assurance/alerts')) body = { count: 1, alerts: [{ id: 'rte-one:akamai-edge:SA-CDN-001:ORIGIN_VARIANT_MISMATCH', profileId: 'rte-one', endpointId: 'akamai-edge', ruleId: 'SA-CDN-001', classification: 'ORIGIN_VARIANT_MISMATCH', severity: 'critical', state: 'active', occurrences: 3, firstObserved: '2026-07-27T20:00:00Z', lastObserved: '2026-07-27T21:00:00Z', explanation: 'akamai fetched from origin due to a Host mismatch.', remediation: 'Align the forwarded Host with the origin hostname.' }], eventModeProfiles: [] };
+      else if (p.endsWith('/stream-assurance/channels')) body = { channels: [
+        { guid: 'RTEONE', title: 'RTÉ One', callSign: 'RTEONE', isVirtual: false, daiKey: 'OzeyKEY', delivery: 'dai' },
+        { guid: 'RTENewsChannel', title: 'RTÉ News', callSign: 'RTENewsNow', isVirtual: false, daiKey: null, delivery: 'direct' },
+      ] };
+      else if (p.endsWith('/stream-assurance/resolve-channel')) body = { resolved: {
+        callSign: 'RTEONE', mediaPid: 'be90cf62', entryUrl: 'https://www.rte.ie/x.mpd?token1=t', finalManifestUrl: 'https://dai.google.com/linear/dash/pa/event/OzeyKEY/stream/sess/manifest.mpd', redirects: ['https://www.rte.ie/x.mpd?token1=t'], adTags: ['https://pubads.g.doubleclick.net/gampad/live/ads?x=1'],
+        manifest: { manifestUrl: 'https://dai.google.com/linear/dash/pa/event/OzeyKEY/stream/sess/manifest.mpd', baseUrl: 'https://live.rte.ie/live/b/vc11/vc11.isml/dash/', presentation: 'dynamic', drm: { defaultKid: 'df163382-1ddd-fdd5-bec9-822c1ec0f052', systems: [] }, representations: [
+          { adaptationIndex: 0, contentType: 'video', mimeType: 'video/mp4', lang: null, id: 'video=6000000', bandwidth: 6000000, codecs: 'avc1.640028', width: 1920, height: 1080, trickPlay: false, initUrl: 'https://live.rte.ie/live/b/vc11/vc11.isml/dash/vc11-video=6000000.dash', latestMediaUrl: 'https://live.rte.ie/live/b/vc11/vc11.isml/dash/vc11-video=6000000-1071143210472.dash' },
+        ] },
+      } };
       else if (p.endsWith('/stream-assurance/discover')) body = { manifest: {
         manifestUrl: 'https://dai.google.com/…/manifest.mpd', baseUrl: 'https://live.rte.ie/live/b/vc11/vc11.isml/dash/', presentation: 'dynamic',
         drm: { defaultKid: 'df163382-1ddd-fdd5-bec9-822c1ec0f052', systems: [{ systemId: 'edef8ba9-79d6-4ace-a3c8-27dcd51d21ed', scheme: null }] },

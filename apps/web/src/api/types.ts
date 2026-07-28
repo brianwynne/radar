@@ -1533,6 +1533,10 @@ export interface SaProfileInput { id: string; name: string; config: { endpoints:
 export interface SaDiscoveredRep { adaptationIndex: number; contentType: string | null; mimeType: string | null; lang: string | null; id: string; bandwidth: number | null; codecs: string | null; width: number | null; height: number | null; trickPlay: boolean; initUrl: string; latestMediaUrl: string | null }
 export interface SaDiscoveredManifest { manifestUrl: string; baseUrl: string; presentation: string | null; drm: { defaultKid: string | null; systems: { systemId: string; scheme: string | null }[] }; representations: SaDiscoveredRep[] }
 export interface SaDiscoverResponse { manifest: SaDiscoveredManifest }
+export interface SaChannel { guid: string; title: string; callSign: string; isVirtual: boolean; daiKey: string | null; delivery: 'dai' | 'direct' }
+export interface SaChannelsResponse { channels: SaChannel[] }
+export interface SaResolvedChannel { callSign: string; mediaPid: string; entryUrl: string; finalManifestUrl: string; redirects: string[]; adTags: string[]; manifest: SaDiscoveredManifest }
+export interface SaResolveChannelResponse { resolved: SaResolvedChannel }
 
 export interface RipeSnapshotResponse { snapshot: RouteVisibilitySnapshot | null; source: RipeSourceHealth }
 export interface RipeEventsResponse { count: number; items: RisEvent[] }

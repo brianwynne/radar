@@ -75,7 +75,16 @@ describe('Stream Tests page', () => {
     expect((screen.getByDisplayValue('t.sni.global.fastly.net') as HTMLInputElement)).toBeInTheDocument(); // Fastly
     expect((screen.getByDisplayValue('live.rte.ie.akamaized.net') as HTMLInputElement)).toBeInTheDocument(); // Akamai
 
-    // Discover from a manifest auto-fills the object URLs (top video rendition on the CDN origin).
+    // Pick a channel → RADAR resolves the manifest (feed → SMIL → redirects) and fills the form.
+    fireEvent.change(await screen.findByRole('combobox', { name: /Channel/ }), { target: { value: 'RTEONE' } });
+    fireEvent.click(screen.getByRole('button', { name: /Load channel/ }));
+    await vi.waitFor(() => {
+      const urls = screen.getAllByPlaceholderText(/public object URL/) as HTMLInputElement[];
+      expect(urls[0].value).toBe('https://live.rte.ie/live/b/vc11/vc11.isml/dash/vc11-video=6000000.dash');
+    });
+    expect((screen.getByPlaceholderText('RTÉ delivery (test)') as HTMLInputElement).value).toBe('RTÉ One'); // name filled from channel
+
+    // Discover from a manifest URL directly also auto-fills the object URLs.
     fireEvent.change(screen.getByPlaceholderText(/DASH .mpd URL/), { target: { value: 'https://dai.google.com/x/manifest.mpd' } });
     fireEvent.click(screen.getByRole('button', { name: /^Discover$/ }));
     expect(await screen.findByText(/Found/)).toHaveTextContent(/2 video renditions/);
@@ -91,7 +100,7 @@ describe('Stream Tests page', () => {
       const call = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/stream-assurance/profiles') && (c[1] as RequestInit)?.method === 'POST');
       expect(call).toBeTruthy();
       const payload = JSON.parse(String((call![1] as RequestInit).body));
-      expect(payload.id).toBe('channel4');
+      expect(payload.id).toBe('rteone'); // set from the picked channel's callSign
       expect(payload.config.endpoints).toHaveLength(3);
       expect(payload.config.endpoints[0]).toMatchObject({ endpointId: 'realta', provider: 'realta', role: 'reference', connectHost: 'liveedge.rte.ie', hostHeader: 'live.rte.ie' });
       expect(payload.config.endpoints.map((e: { connectHost: string }) => e.connectHost)).toEqual(['liveedge.rte.ie', 't.sni.global.fastly.net', 'live.rte.ie.akamaized.net']);
