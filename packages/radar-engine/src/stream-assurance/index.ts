@@ -12,3 +12,4 @@ export * from './alert.js';
 export * from './hls.js';
 export * from './hls-validate.js';
 export * from './xproto.js';
+export * from './manifest-consistency.js';

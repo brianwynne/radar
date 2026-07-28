@@ -53,15 +53,24 @@ export class StreamAssuranceService {
       nowMs: this.now(),
     });
 
-    // Manifest validation + DASH↔HLS cross-protocol, fetched via the reference endpoint (or the
-    // first), attributed to that endpoint. Bounded; skipped when no manifest URLs are configured.
+    // Manifest validation + DASH↔HLS cross-protocol, fetched via EVERY endpoint (same public URL,
+    // different CDN), so a stale/wrong manifest on one CDN is caught. Per-endpoint findings are
+    // attributed to that endpoint; the parsed manifests then feed a cross-CDN consistency comparison
+    // (KID / ladder / live-publishTime drift). Bounded; skipped when no manifest URLs are configured.
     if (config.manifests && endpoints.length > 0) {
-      const ref = endpoints.find((e) => e.role === 'reference') ?? endpoints[0];
-      const specs = await observeManifests(config.manifests, {
-        connectHost: ref.connectHost, connectPort: ref.connectPort, hostHeader: ref.hostHeader, sni: ref.sni,
-        managedInternal: ref.managedInternal, timeoutMs: ref.timeoutMs, maxBytes: ref.maxBytes,
-      }, this.policy, this.now());
-      for (const s of specs) findings.push(sa.withEndpoint(s, ref.endpointId, ref.provider, 'packager'));
+      const perEndpoint = await Promise.all(endpoints.map(async (ep) => {
+        const obs = await observeManifests(config.manifests!, {
+          connectHost: ep.connectHost, connectPort: ep.connectPort, hostHeader: ep.hostHeader, sni: ep.sni,
+          managedInternal: ep.managedInternal, timeoutMs: ep.timeoutMs, maxBytes: ep.maxBytes,
+        }, this.policy, this.now());
+        return { ep, obs };
+      }));
+      for (const { ep, obs } of perEndpoint) {
+        for (const s of obs.findings) findings.push(sa.withEndpoint(s, ep.endpointId, ep.provider, 'packager'));
+      }
+      findings.push(...sa.compareManifestsAcrossCdns(perEndpoint.map(({ ep, obs }) => ({
+        endpointId: ep.endpointId, provider: ep.provider, role: ep.role, dash: obs.dash, hlsMaster: obs.hlsMaster,
+      }))));
     }
 
     // Bounded observations — parsed init metadata (brands/tracks/CENC/PSSH — identifiers only, no

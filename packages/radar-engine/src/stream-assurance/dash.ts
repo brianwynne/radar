@@ -14,6 +14,8 @@ export interface DashManifestInfo {
   minimumUpdatePeriodSeconds: number | null;
   profiles: string[];
   drm: { defaultKid: string | null; systems: DashDrmSystem[] };
+  /** Representation @bandwidth values across the MPD, ascending — the advertised bitrate ladder. */
+  representationBandwidths: number[];
 }
 
 const attr = (tag: string, name: string): string | null => {
@@ -74,11 +76,17 @@ export function extractDashManifest(xml: string): DashManifestInfo {
     if (systemId && systemId !== 'urn:mpeg:dash:mp4protection:2011') systems.push({ systemId, scheme });
   }
 
+  const representationBandwidths = (xml.match(/<Representation\b[^>]*>/gi) ?? [])
+    .map((t) => Number(attr(t, 'bandwidth')))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+
   return {
     presentation,
     publishTime: attr(mpdTag, 'publishTime'),
     minimumUpdatePeriodSeconds: parseIso8601Duration(attr(mpdTag, 'minimumUpdatePeriod')),
     profiles,
     drm: { defaultKid, systems },
+    representationBandwidths,
   };
 }

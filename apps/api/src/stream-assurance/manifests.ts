@@ -32,9 +32,17 @@ const fetchText = async (url: string, ctx: ManifestFetchContext): Promise<string
   }
 };
 
-/** Fetch + validate the configured manifests for one endpoint and cross-compare DASH vs HLS. */
-export async function observeManifests(sources: ManifestSources, ctx: ManifestFetchContext, policy: SsrfPolicy, nowMs: number): Promise<sa.SpecFinding[]> {
-  if (!validateTarget({ connectHost: ctx.connectHost, managedInternal: ctx.managedInternal }, policy).ok) return [];
+/** Parsed manifest summary for one endpoint — fed to the cross-CDN consistency comparison. */
+export interface ManifestObservation {
+  findings: sa.SpecFinding[];
+  dash: sa.DashManifestInfo | null;
+  hlsMaster: sa.HlsMaster | null;
+}
+
+/** Fetch + validate the configured manifests for ONE endpoint and cross-compare DASH vs HLS. Returns
+ *  the per-endpoint SpecFindings plus the parsed manifests (for cross-CDN comparison by the caller). */
+export async function observeManifests(sources: ManifestSources, ctx: ManifestFetchContext, policy: SsrfPolicy, nowMs: number): Promise<ManifestObservation> {
+  if (!validateTarget({ connectHost: ctx.connectHost, managedInternal: ctx.managedInternal }, policy).ok) return { findings: [], dash: null, hlsMaster: null };
   const findings: sa.SpecFinding[] = [];
 
   const dashText = sources.dashMpdUrl ? await fetchText(sources.dashMpdUrl, ctx) : null;
@@ -43,13 +51,13 @@ export async function observeManifests(sources: ManifestSources, ctx: ManifestFe
 
   const dash = dashText ? sa.extractDashManifest(dashText) : null;
   if (dash) findings.push(...sa.validateDashFreshness(dash, nowMs));
-  if (hlsMasterText) findings.push(...sa.validateMaster(sa.parseMasterPlaylist(hlsMasterText)));
+  const hlsMaster = hlsMasterText ? sa.parseMasterPlaylist(hlsMasterText) : null;
+  if (hlsMaster) findings.push(...sa.validateMaster(hlsMaster));
   const hlsMedia = hlsMediaText ? sa.parseMediaPlaylist(hlsMediaText) : null;
   if (hlsMedia) findings.push(...sa.validateMedia(hlsMedia));
 
   // Cross-protocol: only when both protocols are available.
-  if (dash && (hlsMedia || hlsMasterText)) {
-    const hlsMaster = hlsMasterText ? sa.parseMasterPlaylist(hlsMasterText) : null;
+  if (dash && (hlsMedia || hlsMaster)) {
     findings.push(...sa.compareDashHls({
       dashDefaultKid: dash.drm.defaultKid,
       dashSystems: dash.drm.systems.map((s) => s.systemId),
@@ -59,5 +67,5 @@ export async function observeManifests(sources: ManifestSources, ctx: ManifestFe
       hlsCodecs: (hlsMaster?.variants ?? []).flatMap((v) => v.codecs),
     }));
   }
-  return findings;
+  return { findings, dash, hlsMaster };
 }

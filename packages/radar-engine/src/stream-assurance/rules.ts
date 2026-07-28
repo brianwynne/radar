@@ -130,6 +130,21 @@ export const RULES: Record<string, Rule> = {
     description: 'DASH and HLS advertise a different codec set or presentation mode (live vs static) for the same service.',
     remediation: 'Align the DASH and HLS packaging so both advertise the same codecs and the same live/VOD mode.',
   },
+  'SA-XCDN-001': {
+    id: 'SA-XCDN-001', severity: 'critical', standard: 'RADAR delivery consistency', section: null,
+    description: 'The DRM default_KID advertised in the manifest differs between CDN endpoints for the same service — one CDN is serving a manifest from a different key generation.',
+    remediation: 'Purge/refresh the drifted CDN’s manifest and confirm every CDN pulls the current manifest generation from the same origin; a client pinned to that CDN will fail licence acquisition.',
+  },
+  'SA-XCDN-002': {
+    id: 'SA-XCDN-002', severity: 'warning', standard: 'RADAR delivery consistency', section: null,
+    description: 'The representation/variant ladder (advertised bitrate set) differs between CDN endpoints for the same manifest.',
+    remediation: 'Confirm all CDNs serve the same manifest version; a differing ladder usually means one CDN cached an older manifest or a different packaging profile.',
+  },
+  'SA-XCDN-003': {
+    id: 'SA-XCDN-003', severity: 'warning', standard: 'RADAR delivery consistency', section: null,
+    description: 'A live manifest’s publish time is materially skewed between CDN endpoints — one CDN is serving an older manifest generation than the others.',
+    remediation: 'Shorten the manifest TTL / verify live-manifest revalidation on the lagging CDN so every edge refreshes together.',
+  },
   'SA-OBJ-001': {
     id: 'SA-OBJ-001', severity: 'error', standard: 'RADAR delivery consistency', section: null,
     description: 'A selected initialisation or recent media object was unreachable within the configured timeout.',

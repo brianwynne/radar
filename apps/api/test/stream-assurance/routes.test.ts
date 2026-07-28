@@ -17,6 +17,18 @@ const STALE_MPD = `<?xml version="1.0"?>
 <MPD type="dynamic" publishTime="2020-01-01T00:00:00Z" minimumUpdatePeriod="PT6S">
   <Period><AdaptationSet><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/></AdaptationSet></Period>
 </MPD>`;
+// Two CDNs serving the SAME service but a drifted manifest generation (different default_KID) — the
+// current generation on cdn1, a stale one cached on cdn2. publishTime == the run's `now`, so neither
+// trips the freshness rule; only the cross-CDN KID drift (SA-XCDN-001) should fire.
+const mpdGen = (kid: string): string => `<?xml version="1.0"?>
+<MPD type="dynamic" publishTime="2026-07-27T00:00:00Z" minimumUpdatePeriod="PT6S">
+  <Period><AdaptationSet>
+    <ContentProtection schemeIdUri="urn:mpeg:dash:mp4protection:2011" value="cbcs" cenc:default_KID="${kid}"/>
+    <Representation id="v1" bandwidth="800000"/><Representation id="v2" bandwidth="2400000"/>
+  </AdaptationSet></Period>
+</MPD>`;
+const CURRENT_MPD = mpdGen('11111111-1111-1111-1111-111111111111');
+const DRIFT_MPD = mpdGen('22222222-2222-2222-2222-222222222222');
 const HLS_MEDIA_FAIRPLAY = `#EXTM3U
 #EXT-X-TARGETDURATION:6
 #EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://k",KEYFORMAT="com.apple.streamingkeydelivery"
@@ -50,7 +62,10 @@ const audit = { record: vi.fn(async () => ({} as never)) };
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
-    if (req.url?.includes('.mpd')) { res.writeHead(200, { 'content-type': 'application/dash+xml' }); res.end(STALE_MPD); return; }
+    if (req.url?.includes('.mpd')) {
+      const body = req.headers.host === 'live.rte.cdn1' ? CURRENT_MPD : req.headers.host === 'live.rte.cdn2' ? DRIFT_MPD : STALE_MPD;
+      res.writeHead(200, { 'content-type': 'application/dash+xml' }); res.end(body); return;
+    }
     if (req.url?.endsWith('.m3u8')) { res.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl' }); res.end(req.url.includes('master') ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,CODECS="avc1.64001f"\nmedia.m3u8\n' : HLS_MEDIA_FAIRPLAY); return; }
     const host = req.headers.host;
     if (host === 'live.rte.host') { res.writeHead(200, { 'x-cache': 'HIT', 'last-modified': 'Sun, 26 Jul 2026 12:00:00 GMT' }); res.end(buildInit(CURRENT)); }
@@ -182,6 +197,28 @@ describe('Stream Assurance routes', () => {
     const ids = res.json().run.findings.map((f: { ruleId: string }) => f.ruleId);
     expect(ids).toContain('SA-DASH-001'); // stale dynamic MPD
     expect(ids).toContain('SA-XDRM-001'); // DASH Widevine vs HLS FairPlay
+    await ve.close();
+  });
+
+  it('fetches the manifest via every CDN and flags cross-CDN manifest drift on the lagging CDN', async () => {
+    repo.runs = []; repo.alerts.clear();
+    await repo.upsertProfile({ id: 'rte-xcdn', name: 'X', config: {
+      endpoints: [
+        { endpointId: 'fastly', provider: 'fastly', role: 'reference', publicUrl: 'http://live.rte.ie/init.mp4', connectHost: '127.0.0.1', connectPort: port, hostHeader: 'live.rte.cdn1', managedInternal: true },
+        { endpointId: 'akamai', provider: 'akamai', role: 'candidate', publicUrl: 'http://live.rte.ie/init.mp4', connectHost: '127.0.0.1', connectPort: port, hostHeader: 'live.rte.cdn2', managedInternal: true },
+      ],
+      manifests: { dashMpdUrl: 'http://live.rte.ie/live.mpd' },
+    } });
+    const ve = await app('VIEWING_ENGINEER');
+    const res = await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/rte-xcdn/run' });
+    expect(res.statusCode).toBe(200);
+    const findings = res.json().run.findings as { ruleId: string; endpointId: string; classification: string }[];
+    const xcdn = findings.find((f) => f.ruleId === 'SA-XCDN-001');
+    expect(xcdn).toBeTruthy();
+    expect(xcdn!.classification).toBe('DRM_KID_MISMATCH');
+    expect(xcdn!.endpointId).toBe('akamai'); // the drifted (candidate) CDN, not the reference
+    // Freshness rule stays quiet: both manifests were published at the run's `now`.
+    expect(findings.find((f) => f.ruleId === 'SA-DASH-001')).toBeUndefined();
     await ve.close();
   });
 });

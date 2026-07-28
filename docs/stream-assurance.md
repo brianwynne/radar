@@ -137,12 +137,31 @@ surfaced in the console:
 - Covered by the API route test (observation carries `init`; `init.cenc.defaultKid === kid`; no
   `key` field) and the web page test (expanding reveals the CENC scheme + PSSH system).
 
+### Stage 8 — per-CDN manifest comparison (DONE, on branch `feature/stream-assurance`)
+
+Manifests are now fetched and validated through **every** endpoint, not just the reference, and the
+parsed generations are cross-compared so a stale/wrong manifest on one CDN is caught:
+
+- **Engine** (`manifest-consistency.ts`, pure): `compareManifestsAcrossCdns(manifests)` takes the same
+  manifest as parsed via each CDN and flags, against the reference, `SA-XCDN-001` (`DRM_KID_MISMATCH`,
+  critical — one CDN advertises a different `default_KID`, i.e. a different key generation),
+  `SA-XCDN-002` (`REPRESENTATION_DRIFT` — a differing DASH/HLS bitrate ladder) and `SA-XCDN-003`
+  (`MANIFEST_STALE` — a live MPD `publishTime` skewed beyond tolerance, one CDN out of step). DASH
+  extraction now also captures the `Representation@bandwidth` ladder.
+- **Connector** (`manifests.ts`): `observeManifests` returns the parsed `{ dash, hlsMaster }` alongside
+  its per-endpoint SpecFindings; **`service.run`** fetches via every endpoint (same public URL,
+  per-CDN connect-to), attributes each endpoint's validation findings to it, then runs the cross-CDN
+  comparison. The resulting `Finding`s join the run and drive the alert lifecycle like any other.
+- Proven end-to-end: a two-CDN run where one edge serves a drifted MPD generation yields
+  `SA-XCDN-001` attributed to the lagging CDN, through the real API — with the freshness rule staying
+  quiet (both published at `now`).
+
 ### Later stages (scoped, not yet built)
 
 Defined interfaces exist or are trivial to add on top of the engine + probe + persistence:
 
-- **Per-CDN manifest comparison** — fetch/validate manifests on every endpoint (not just the
-  reference) for cross-CDN manifest consistency. Media-fragment timeline sampling.
+- **Media-fragment timeline sampling** — sample a recent media fragment per rendition and compare
+  `tfdt`/`baseMediaDecodeTime` timelines across CDNs (gap/overlap detection).
 - **Full‑conformance mode** — deeper manifest/ladder/fragment validation, on demand + after config
   change; optional self‑hosted DASH‑IF Conformance Tool adapter.
 - **REST API** (Fastify, existing RBAC + audit) — profiles/endpoints CRUD, trigger run, event

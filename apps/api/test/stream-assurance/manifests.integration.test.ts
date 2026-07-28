@@ -39,7 +39,7 @@ afterAll(() => new Promise<void>((r) => server.close(() => r())));
 
 describe('observeManifests (fetch → parse → validate → cross-protocol)', () => {
   it('flags a stale MPD and a DASH/HLS DRM-system mismatch', async () => {
-    const findings = await observeManifests(
+    const { findings } = await observeManifests(
       { dashMpdUrl: `http://live.rte.ie/live.mpd`, hlsMasterUrl: `http://live.rte.ie/hls/master.m3u8`, hlsMediaUrl: `http://live.rte.ie/hls/media.m3u8` },
       { connectHost: '127.0.0.1', connectPort: port, hostHeader: 'live.rte.ie', managedInternal: true },
       { allowManagedInternal: true },
@@ -53,7 +53,7 @@ describe('observeManifests (fetch → parse → validate → cross-protocol)', (
   });
 
   it('returns nothing when the target is blocked by SSRF policy', async () => {
-    const findings = await observeManifests(
+    const { findings } = await observeManifests(
       { dashMpdUrl: `http://live.rte.ie/live.mpd` },
       { connectHost: '127.0.0.1', connectPort: port, hostHeader: 'live.rte.ie' }, // not managed-internal
       { allowManagedInternal: true },
