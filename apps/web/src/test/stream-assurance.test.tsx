@@ -53,36 +53,28 @@ describe('Stream Tests page', () => {
     expect(screen.queryByRole('button', { name: /New profile/ })).toBeNull();
   });
 
-  it('lets an engineer create a profile from the console form', async () => {
+  it('prefills the RTÉ CDN endpoints and lets an engineer create the profile', async () => {
     const fetchMock = stubApi(ENGINEER);
     renderAt('/stream-assurance');
-    // Open the create form.
+    // Open the create form — it comes prefilled with the three RTÉ CDNs from the steering record.
     fireEvent.click(await screen.findByRole('button', { name: /New profile/ }));
     expect(await screen.findByRole('heading', { name: /New Stream Test profile/ })).toBeInTheDocument();
-
-    // Fill the minimum required fields (id, name, and each endpoint's id/publicUrl/connectHost).
-    fireEvent.change(screen.getByPlaceholderText('rte-test'), { target: { value: 'my-test' } });
-    fireEvent.change(screen.getByPlaceholderText('RTÉ delivery (test)'), { target: { value: 'My Test' } });
-    const epIds = screen.getAllByPlaceholderText(/endpoint id/);
-    const urls = screen.getAllByPlaceholderText(/public object URL/);
-    const hosts = screen.getAllByPlaceholderText(/connect host/);
-    fireEvent.change(epIds[0], { target: { value: 'fastly' } });
-    fireEvent.change(urls[0], { target: { value: 'https://live.rte.ie/init.mp4' } });
-    fireEvent.change(hosts[0], { target: { value: '1.2.3.4' } });
-    fireEvent.change(epIds[1], { target: { value: 'akamai' } });
-    fireEvent.change(urls[1], { target: { value: 'https://live.rte.ie/init.mp4' } });
-    fireEvent.change(hosts[1], { target: { value: '5.6.7.8' } });
+    expect((screen.getByDisplayValue('liveedge.rte.ie') as HTMLInputElement)).toBeInTheDocument(); // Réalta
+    expect((screen.getByDisplayValue('t.sni.global.fastly.net') as HTMLInputElement)).toBeInTheDocument(); // Fastly
+    expect((screen.getByDisplayValue('live.rte.ie.akamaized.net') as HTMLInputElement)).toBeInTheDocument(); // Akamai
 
     fireEvent.click(screen.getByRole('button', { name: /Create profile/ }));
 
-    // The POST fired with the assembled profile payload.
+    // The POST fires with the prefilled RTÉ payload — three endpoints, Réalta as the reference.
     await vi.waitFor(() => {
       const call = fetchMock.mock.calls.find((c) => String(c[0]).endsWith('/stream-assurance/profiles') && (c[1] as RequestInit)?.method === 'POST');
       expect(call).toBeTruthy();
       const payload = JSON.parse(String((call![1] as RequestInit).body));
-      expect(payload.id).toBe('my-test');
-      expect(payload.config.endpoints).toHaveLength(2);
-      expect(payload.config.endpoints[0]).toMatchObject({ endpointId: 'fastly', role: 'reference', publicUrl: 'https://live.rte.ie/init.mp4', connectHost: '1.2.3.4' });
+      expect(payload.id).toBe('channel4');
+      expect(payload.config.endpoints).toHaveLength(3);
+      expect(payload.config.endpoints[0]).toMatchObject({ endpointId: 'realta', provider: 'realta', role: 'reference', connectHost: 'liveedge.rte.ie', hostHeader: 'live.rte.ie' });
+      expect(payload.config.endpoints.map((e: { connectHost: string }) => e.connectHost)).toEqual(['liveedge.rte.ie', 't.sni.global.fastly.net', 'live.rte.ie.akamaized.net']);
+      expect(payload.config.manifests.dashMpdUrl).toContain('channel4.isml/.mpd');
     });
   });
 });

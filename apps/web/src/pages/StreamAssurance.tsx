@@ -9,14 +9,27 @@ import type { SaAlert, SaEndpointInput, SaFinding, SaObservation, SaProfileInput
 const PROVIDERS: SaEndpointInput['provider'][] = ['fastly', 'akamai', 'realta', 'origin', 'custom', 'unknown'];
 const blankEndpoint = (role: SaEndpointInput['role']): SaEndpointInput => ({ endpointId: '', provider: 'fastly', role, publicUrl: '', connectHost: '', hostHeader: '', originHost: '' });
 
+// RTÉ delivery defaults — the connect-to targets for the three CDNs behind live.rte.ie, from the
+// steering record. Réalta (RTÉ's own CDN) is the reference; Fastly/Akamai are candidates. Object URLs
+// follow the Unified Streaming pattern (channel4.isml); change the channel/rendition as needed.
+const RTE_OBJECT_URL = 'https://live.rte.ie/live/a/channel4/channel4.isml/dash/channel4-video=6000000.dash';
+const RTE_DASH_MPD = 'https://live.rte.ie/live/a/channel4/channel4.isml/.mpd';
+const rteEndpoint = (endpointId: string, provider: SaEndpointInput['provider'], role: SaEndpointInput['role'], connectHost: string): SaEndpointInput =>
+  ({ endpointId, provider, role, publicUrl: RTE_OBJECT_URL, connectHost, hostHeader: 'live.rte.ie', originHost: 'live.rte.ie' });
+const RTE_ENDPOINTS: SaEndpointInput[] = [
+  rteEndpoint('realta', 'realta', 'reference', 'liveedge.rte.ie'),
+  rteEndpoint('fastly', 'fastly', 'candidate', 't.sni.global.fastly.net'),
+  rteEndpoint('akamai', 'akamai', 'candidate', 'live.rte.ie.akamaized.net'),
+];
+
 // Engineer-only form to create a Stream Test profile (channel + CDN endpoints). Mirrors the API zod
 // schema; empty optional fields are dropped before submit. No secrets or keys are ever entered here.
 function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => void; onCancel: () => void }) {
-  const [id, setId] = useState('');
-  const [name, setName] = useState('');
-  const [endpoints, setEndpoints] = useState<SaEndpointInput[]>([blankEndpoint('reference'), blankEndpoint('candidate')]);
-  const [dashMpdUrl, setDash] = useState('');
-  const [mediaFragmentUrl, setFrag] = useState('');
+  const [id, setId] = useState('channel4');
+  const [name, setName] = useState('Channel 4 (live.rte.ie)');
+  const [endpoints, setEndpoints] = useState<SaEndpointInput[]>(RTE_ENDPOINTS.map((e) => ({ ...e })));
+  const [dashMpdUrl, setDash] = useState(RTE_DASH_MPD);
+  const [mediaFragmentUrl, setFrag] = useState(RTE_OBJECT_URL);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -61,6 +74,7 @@ function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => vo
       </div>
 
       <h4 className="sa-form-h">CDN endpoints <span className="muted">· same object, different CDN</span></h4>
+      <p className="muted" style={{ fontSize: '0.76rem', margin: '-0.2rem 0 0.2rem' }}>Prefilled with the three RTÉ CDNs behind <code>live.rte.ie</code>. Each dials its own <em>connect host</em> for the same object URL; edit the channel/rendition as needed.</p>
       {endpoints.map((e, i) => (
         <div className="sa-ep" key={i}>
           <div className="sa-ep-head">
