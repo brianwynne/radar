@@ -13,6 +13,16 @@ import { buildInit } from './init-fixture.js';
 
 const CURRENT = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const OLD = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+const STALE_MPD = `<?xml version="1.0"?>
+<MPD type="dynamic" publishTime="2020-01-01T00:00:00Z" minimumUpdatePeriod="PT6S">
+  <Period><AdaptationSet><ContentProtection schemeIdUri="urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed"/></AdaptationSet></Period>
+</MPD>`;
+const HLS_MEDIA_FAIRPLAY = `#EXTM3U
+#EXT-X-TARGETDURATION:6
+#EXT-X-KEY:METHOD=SAMPLE-AES,URI="skd://k",KEYFORMAT="com.apple.streamingkeydelivery"
+#EXTINF:6.0,
+s1.m4s
+`;
 
 class FakeRepo implements StreamAssuranceRepository {
   profiles = new Map<string, StreamAssuranceProfileRow>();
@@ -40,6 +50,8 @@ const audit = { record: vi.fn(async () => ({} as never)) };
 
 beforeAll(async () => {
   server = http.createServer((req, res) => {
+    if (req.url?.includes('.mpd')) { res.writeHead(200, { 'content-type': 'application/dash+xml' }); res.end(STALE_MPD); return; }
+    if (req.url?.endsWith('.m3u8')) { res.writeHead(200, { 'content-type': 'application/vnd.apple.mpegurl' }); res.end(req.url.includes('master') ? '#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=3000000,CODECS="avc1.64001f"\nmedia.m3u8\n' : HLS_MEDIA_FAIRPLAY); return; }
     const host = req.headers.host;
     if (host === 'live.rte.host') { res.writeHead(200, { 'x-cache': 'HIT', 'last-modified': 'Sun, 26 Jul 2026 12:00:00 GMT' }); res.end(buildInit(CURRENT)); }
     else { res.writeHead(200, { 'x-cache': 'TCP_MISS from edge', 'x-cache-remote': 'TCP_MISS from parent', 'last-modified': 'Wed, 01 Jan 2026 00:00:00 GMT' }); res.end(buildInit(OLD)); }
@@ -150,6 +162,21 @@ describe('Stream Assurance routes', () => {
     const em = await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/rte-test/event-mode', payload: { enabled: true, durationMinutes: 5 } });
     expect(em.statusCode).toBe(200);
     expect((await ve.inject({ url: '/api/v1/stream-assurance/alerts' })).json().eventModeProfiles).toContain('rte-test');
+    await ve.close();
+  });
+
+  it('a run with manifest URLs also validates DASH/HLS and cross-protocol', async () => {
+    repo.runs = []; repo.alerts.clear();
+    await repo.upsertProfile({ id: 'rte-manifests', name: 'M', config: {
+      endpoints: [{ endpointId: 'ref', provider: 'fastly', role: 'reference', publicUrl: 'http://live.rte.ie/init.mp4', connectHost: '127.0.0.1', connectPort: port, hostHeader: 'live.rte.host', managedInternal: true }],
+      manifests: { dashMpdUrl: 'http://live.rte.ie/live.mpd', hlsMasterUrl: 'http://live.rte.ie/hls/master.m3u8', hlsMediaUrl: 'http://live.rte.ie/hls/media.m3u8' },
+    } });
+    const ve = await app('VIEWING_ENGINEER');
+    const res = await ve.inject({ method: 'POST', url: '/api/v1/stream-assurance/profiles/rte-manifests/run' });
+    expect(res.statusCode).toBe(200);
+    const ids = res.json().run.findings.map((f: { ruleId: string }) => f.ruleId);
+    expect(ids).toContain('SA-DASH-001'); // stale dynamic MPD
+    expect(ids).toContain('SA-XDRM-001'); // DASH Widevine vs HLS FairPlay
     await ve.close();
   });
 });

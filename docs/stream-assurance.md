@@ -106,13 +106,28 @@ Pure, tested engine additions (like Stage 1):
   and live/VOD mode (`SA-XDRM-002`).
 - `withEndpoint()` adapts a manifest-level `SpecFinding` into a run `Finding`.
 
+### Stage 6 — manifest-fetch integration (DONE, on branch `feature/stream-assurance`)
+
+The Stage-5 validators now run inside a probe run:
+
+- **`manifests.ts`**: fetches a profile's DASH MPD + HLS master/media via the SSRF-guarded connect-to
+  probe (through the reference endpoint), parses + validates with `@radar/engine`
+  (`validateDashFreshness`, `validateMaster`, `validateMedia`) and runs `compareDashHls`. Bounded
+  fetches; never retrieves a key.
+- **Profile config** gains optional `manifests: { dashMpdUrl, hlsMasterUrl, hlsMediaUrl }` (route
+  schema validates them as URLs).
+- **`service.run`** attaches the manifest SpecFindings to the reference endpoint (via `withEndpoint`),
+  so DASH staleness (`SA-DASH-001`), HLS conformance (`SA-HLS-*`) and DASH↔HLS mismatches
+  (`SA-XDRM-*`) join the run and drive the alert lifecycle — the same as the cross-CDN findings.
+- Proven end-to-end: a mock CDN serving a stale dynamic MPD + a FairPlay HLS pair (vs Widevine DASH)
+  yields `SA-DASH-001` + `SA-XDRM-001` in the run, through the real API.
+
 ### Later stages (scoped, not yet built)
 
 Defined interfaces exist or are trivial to add on top of the engine + probe + persistence:
 
-- **Manifest-fetch integration** — extend the probe/service to fetch the MPD + HLS playlists per
-  profile, run the DASH/HLS validators + cross-protocol comparison, and merge the SpecFindings into
-  each run (via `withEndpoint`). Media-fragment timeline sampling.
+- **Per-CDN manifest comparison** — fetch/validate manifests on every endpoint (not just the
+  reference) for cross-CDN manifest consistency. Media-fragment timeline sampling.
 - **Full‑conformance mode** — deeper manifest/ladder/fragment validation, on demand + after config
   change; optional self‑hosted DASH‑IF Conformance Tool adapter.
 - **REST API** (Fastify, existing RBAC + audit) — profiles/endpoints CRUD, trigger run, event

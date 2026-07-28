@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { streamAssurance as sa } from '@radar/engine';
 import type { NewStreamAssuranceRun, StreamAssuranceRepository, StreamAssuranceRunRow } from '@radar/data';
 import { observeAndClassify, type EndpointConfig } from './observe.js';
+import { observeManifests, type ManifestSources } from './manifests.js';
 import type { SsrfPolicy } from './ssrf.js';
 
 /** Stable alert identity across runs — the same finding class on the same endpoint. */
@@ -13,6 +14,8 @@ const alertId = (profileId: string, f: sa.Finding): string => `${profileId}:${f.
 export interface StreamProfileConfig {
   endpoints: EndpointConfig[];
   authoritativeKid?: string | null;
+  /** Optional DASH/HLS manifest URLs; validated + cross-protocol compared via the reference endpoint. */
+  manifests?: ManifestSources;
   tags?: string[];
 }
 
@@ -44,10 +47,22 @@ export class StreamAssuranceService {
     const config = (profile.config ?? {}) as StreamProfileConfig;
     const startedAt = new Date(this.now());
 
-    const { results, findings } = await observeAndClassify(config.endpoints ?? [], this.policy, {
+    const endpoints = config.endpoints ?? [];
+    const { results, findings } = await observeAndClassify(endpoints, this.policy, {
       authoritativeKid: config.authoritativeKid ?? null,
       nowMs: this.now(),
     });
+
+    // Manifest validation + DASH↔HLS cross-protocol, fetched via the reference endpoint (or the
+    // first), attributed to that endpoint. Bounded; skipped when no manifest URLs are configured.
+    if (config.manifests && endpoints.length > 0) {
+      const ref = endpoints.find((e) => e.role === 'reference') ?? endpoints[0];
+      const specs = await observeManifests(config.manifests, {
+        connectHost: ref.connectHost, connectPort: ref.connectPort, hostHeader: ref.hostHeader, sni: ref.sni,
+        managedInternal: ref.managedInternal, timeoutMs: ref.timeoutMs, maxBytes: ref.maxBytes,
+      }, this.policy, this.now());
+      for (const s of specs) findings.push(sa.withEndpoint(s, ref.endpointId, ref.provider, 'packager'));
+    }
 
     // Bounded observations — metadata + evidence only, never response bodies.
     const observations = results.map((r) => ({ ...r.observation, error: r.error ?? null }));

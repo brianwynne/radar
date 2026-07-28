@@ -30,6 +30,24 @@ export function parseIso8601Duration(d: string | null): number | null {
   return (Number(days) || 0) * 86400 + (Number(hours) || 0) * 3600 + (Number(mins) || 0) * 60 + (Number(secs) || 0);
 }
 
+/** Validate DASH manifest freshness: a dynamic (live) MPD must have refreshed recently. Returns a
+ *  SpecFinding (SA-DASH-001) when the manifest is stale relative to its minimumUpdatePeriod. */
+export function validateDashFreshness(info: DashManifestInfo, nowMs: number): import('./rules.js').SpecFinding[] {
+  if (info.presentation !== 'dynamic' || !info.publishTime) return [];
+  const t = Date.parse(info.publishTime);
+  if (!Number.isFinite(t)) return [];
+  const ageSec = (nowMs - t) / 1000;
+  const mup = info.minimumUpdatePeriodSeconds ?? 6;
+  const threshold = Math.max(120, mup * 4); // generous: 4× the update period, floor 2 minutes
+  if (ageSec <= threshold) return [];
+  return [{
+    ruleId: 'SA-DASH-001', classification: 'MANIFEST_STALE', severity: 'error', protocol: 'dash',
+    explanation: `The dynamic MPD was published ~${Math.round(ageSec)}s ago (minimumUpdatePeriod ${mup}s) — it has not refreshed within the expected window.`,
+    remediation: 'Check the packager and the CDN manifest TTL; a live MPD must refresh within minimumUpdatePeriod.',
+    evidence: { publishTime: info.publishTime, ageSeconds: Math.round(ageSec), minimumUpdatePeriodSeconds: mup },
+  }];
+}
+
 const normaliseSystemId = (schemeIdUri: string | null): string => {
   if (!schemeIdUri) return '';
   const u = schemeIdUri.trim();
