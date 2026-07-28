@@ -1524,6 +1524,9 @@ export interface SaProfilesResponse { count: number; profiles: SaProfileSummary[
 export interface SaLatestResponse { run: SaRun | null }
 export interface SaRunResponse { run: SaRun }
 export interface SaRulesResponse { count: number; rules: SaRule[] }
+export interface SaEndpointInput { endpointId: string; provider: 'akamai' | 'fastly' | 'realta' | 'origin' | 'custom' | 'unknown'; role: 'reference' | 'candidate'; publicUrl: string; connectHost: string; connectPort?: number; hostHeader?: string; sni?: string; managedInternal?: boolean; originHost?: string | null }
+export interface SaManifestsInput { dashMpdUrl?: string; hlsMasterUrl?: string; hlsMediaUrl?: string; mediaFragmentUrl?: string }
+export interface SaProfileInput { id: string; name: string; config: { endpoints: SaEndpointInput[]; authoritativeKid?: string | null; manifests?: SaManifestsInput; tags?: string[] } }
 
 export interface RipeSnapshotResponse { snapshot: RouteVisibilitySnapshot | null; source: RipeSourceHealth }
 export interface RipeEventsResponse { count: number; items: RisEvent[] }

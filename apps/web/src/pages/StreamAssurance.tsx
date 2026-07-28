@@ -1,10 +1,104 @@
 // Stream Assurance — DASH/HLS/CMAF conformance + cross-CDN consistency. Read-only overview + a
 // per-profile CDN comparison and standards findings. A viewing engineer can trigger a diagnostic
 // run. Follows the existing RADAR visual language (cards, matrix tables, badges, notices).
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
-import type { SaAlert, SaFinding, SaObservation, SaProfileSummary, SaRun } from '../api/types';
+import type { SaAlert, SaEndpointInput, SaFinding, SaObservation, SaProfileInput, SaProfileSummary, SaRun } from '../api/types';
+
+const PROVIDERS: SaEndpointInput['provider'][] = ['fastly', 'akamai', 'realta', 'origin', 'custom', 'unknown'];
+const blankEndpoint = (role: SaEndpointInput['role']): SaEndpointInput => ({ endpointId: '', provider: 'fastly', role, publicUrl: '', connectHost: '', hostHeader: '', originHost: '' });
+
+// Engineer-only form to create a Stream Test profile (channel + CDN endpoints). Mirrors the API zod
+// schema; empty optional fields are dropped before submit. No secrets or keys are ever entered here.
+function NewProfileForm({ onCreated, onCancel }: { onCreated: (id: string) => void; onCancel: () => void }) {
+  const [id, setId] = useState('');
+  const [name, setName] = useState('');
+  const [endpoints, setEndpoints] = useState<SaEndpointInput[]>([blankEndpoint('reference'), blankEndpoint('candidate')]);
+  const [dashMpdUrl, setDash] = useState('');
+  const [mediaFragmentUrl, setFrag] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const setEp = (i: number, patch: Partial<SaEndpointInput>) => setEndpoints((es) => es.map((e, j) => (j === i ? { ...e, ...patch } : e)));
+  const addEp = () => setEndpoints((es) => [...es, blankEndpoint('candidate')]);
+  const removeEp = (i: number) => setEndpoints((es) => es.filter((_, j) => j !== i));
+
+  const submit = async (ev: FormEvent) => {
+    ev.preventDefault();
+    setErr(null);
+    // Build a clean payload — drop empty optional strings so the API's URL/host validators don't reject blanks.
+    const eps: SaEndpointInput[] = endpoints.map((e) => {
+      const out: SaEndpointInput = { endpointId: e.endpointId.trim(), provider: e.provider, role: e.role, publicUrl: e.publicUrl.trim(), connectHost: e.connectHost.trim() };
+      if (e.connectPort) out.connectPort = e.connectPort;
+      if (e.hostHeader?.trim()) out.hostHeader = e.hostHeader.trim();
+      if (e.sni?.trim()) out.sni = e.sni.trim();
+      if (e.managedInternal) out.managedInternal = true;
+      if (e.originHost?.trim()) out.originHost = e.originHost.trim();
+      return out;
+    });
+    const manifests: SaProfileInput['config']['manifests'] = {};
+    if (dashMpdUrl.trim()) manifests.dashMpdUrl = dashMpdUrl.trim();
+    if (mediaFragmentUrl.trim()) manifests.mediaFragmentUrl = mediaFragmentUrl.trim();
+    const payload: SaProfileInput = { id: id.trim(), name: name.trim(), config: { endpoints: eps, ...(Object.keys(manifests).length ? { manifests } : {}) } };
+
+    setBusy(true);
+    try {
+      const res = await api.saCreateProfile(payload);
+      onCreated(res.id);
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Create failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="sa-form" onSubmit={submit}>
+      <div className="sa-form-row">
+        <label>ID<input value={id} onChange={(e) => setId(e.target.value)} placeholder="rte-test" pattern="[a-z0-9][a-z0-9-]*" required /></label>
+        <label>Name<input value={name} onChange={(e) => setName(e.target.value)} placeholder="RTÉ delivery (test)" required /></label>
+      </div>
+
+      <h4 className="sa-form-h">CDN endpoints <span className="muted">· same object, different CDN</span></h4>
+      {endpoints.map((e, i) => (
+        <div className="sa-ep" key={i}>
+          <div className="sa-ep-head">
+            <select value={e.role} onChange={(ev) => setEp(i, { role: ev.target.value as SaEndpointInput['role'] })} aria-label="Role">
+              <option value="reference">reference</option>
+              <option value="candidate">candidate</option>
+            </select>
+            <input className="sa-ep-id" value={e.endpointId} onChange={(ev) => setEp(i, { endpointId: ev.target.value })} placeholder="endpoint id (e.g. fastly)" required />
+            <select value={e.provider} onChange={(ev) => setEp(i, { provider: ev.target.value as SaEndpointInput['provider'] })} aria-label="Provider">
+              {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            {endpoints.length > 1 && <button type="button" className="linklike" onClick={() => removeEp(i)}>remove</button>}
+          </div>
+          <input value={e.publicUrl} onChange={(ev) => setEp(i, { publicUrl: ev.target.value })} placeholder="public object URL — https://host/path/init.mp4" required />
+          <div className="sa-form-row">
+            <input value={e.connectHost} onChange={(ev) => setEp(i, { connectHost: ev.target.value })} placeholder="connect host/IP (the CDN edge to dial)" required />
+            <input value={e.hostHeader ?? ''} onChange={(ev) => setEp(i, { hostHeader: ev.target.value })} placeholder="Host header to forward (optional)" />
+          </div>
+          <div className="sa-form-row">
+            <input value={e.originHost ?? ''} onChange={(ev) => setEp(i, { originHost: ev.target.value })} placeholder="expected origin host (optional)" />
+            <label className="sa-ep-mi"><input type="checkbox" checked={!!e.managedInternal} onChange={(ev) => setEp(i, { managedInternal: ev.target.checked })} /> managed-internal target</label>
+          </div>
+        </div>
+      ))}
+      <button type="button" className="btn" onClick={addEp}>+ endpoint</button>
+
+      <h4 className="sa-form-h">Manifests <span className="muted">· optional</span></h4>
+      <input value={dashMpdUrl} onChange={(e) => setDash(e.target.value)} placeholder="DASH MPD URL (optional)" />
+      <input value={mediaFragmentUrl} onChange={(e) => setFrag(e.target.value)} placeholder="sample media-fragment URL (optional)" />
+
+      {err && <div className="notice danger">{err}</div>}
+      <div className="sa-form-actions">
+        <button type="submit" className="btn active" disabled={busy}>{busy ? 'Creating…' : 'Create profile'}</button>
+        <button type="button" className="btn" onClick={onCancel} disabled={busy}>Cancel</button>
+      </div>
+    </form>
+  );
+}
 
 function InitInspector({ observations }: { observations: SaObservation[] }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
@@ -98,14 +192,21 @@ function Findings({ findings }: { findings: SaFinding[] }) {
 export function StreamAssurance() {
   const { hasPermission } = useAuth();
   const canRun = hasPermission('dns.explain.read');
+  const canManage = hasPermission('connector.manage');
   const [profiles, setProfiles] = useState<SaProfileSummary[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
   const [run, setRun] = useState<SaRun | null>(null);
   const [alerts, setAlerts] = useState<SaAlert[]>([]);
   const [eventOn, setEventOn] = useState(false);
   const [running, setRunning] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const onCreated = (id: string) => {
+    setCreating(false); setError(null);
+    api.saProfiles().then((r) => { setProfiles(r.profiles); setSelected(id); }).catch(() => {});
+  };
 
   const loadAlerts = (id: string) => api.saAlerts(id)
     .then((r) => { setAlerts(r.alerts); setEventOn(r.eventModeProfiles.includes(id)); })
@@ -149,14 +250,30 @@ export function StreamAssurance() {
   return (
     <section className="page">
       <header className="page-head">
-        <h1>Stream Assurance</h1>
-        <div className="head-meta"><span className="muted">DASH / HLS / CMAF conformance · cross-CDN consistency</span></div>
+        <h1>Stream Tests</h1>
+        <div className="head-meta">
+          <span className="muted">DASH / HLS / CMAF conformance · cross-CDN consistency</span>
+          {canManage && !creating && <button className="btn" onClick={() => setCreating(true)}>New profile</button>}
+        </div>
       </header>
 
       {error && <div className="notice danger">{error}</div>}
-      {profiles && profiles.length === 0 && <div className="notice info">No stream profiles configured yet. An Engineer can add one (channel + CDN endpoints) via the API.</div>}
 
-      {profiles && profiles.length > 0 && (
+      {creating && (
+        <div className="sa-detail" style={{ marginBottom: '1rem' }}>
+          <div className="sa-detail-head"><h2 style={{ margin: 0 }}>New Stream Test profile</h2></div>
+          <NewProfileForm onCreated={onCreated} onCancel={() => setCreating(false)} />
+        </div>
+      )}
+
+      {!creating && profiles && profiles.length === 0 && (
+        <div className="notice info">
+          No Stream Test profiles configured yet.{' '}
+          {canManage ? <button className="linklike" onClick={() => setCreating(true)}>Add one</button> : 'An Engineer can add one (channel + CDN endpoints).'}
+        </div>
+      )}
+
+      {!creating && profiles && profiles.length > 0 && (
         <div className="sa-layout">
           <nav className="sa-profiles">
             {profiles.map((p) => (

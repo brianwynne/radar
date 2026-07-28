@@ -133,6 +133,18 @@ code, .mono { font-family: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, mono
 .sa-finding-head { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; font-size: 0.9rem; }
 .sa-finding-explain { margin: 0.4rem 0 0.2rem; font-size: 0.86rem; }
 .sa-finding-fix { margin: 0; font-size: 0.8rem; }
+.sa-form { display: flex; flex-direction: column; gap: 0.6rem; max-width: 720px; }
+.sa-form input, .sa-form select { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--ink); width: 100%; }
+.sa-form label { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.78rem; color: var(--ink-soft); flex: 1; }
+.sa-form-row { display: flex; gap: 0.6rem; }
+.sa-form-h { margin: 0.5rem 0 0; font-size: 0.9rem; }
+.sa-ep { border: 1px solid var(--line); border-radius: 8px; padding: 0.6rem; display: flex; flex-direction: column; gap: 0.5rem; }
+.sa-ep-head { display: flex; align-items: center; gap: 0.5rem; }
+.sa-ep-head select { width: auto; }
+.sa-ep-id { flex: 1; }
+.sa-ep-mi { flex-direction: row; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.sa-ep-mi input { width: auto; }
+.sa-form-actions { display: flex; gap: 0.6rem; margin-top: 0.4rem; }
 .sa-inspector { display: flex; flex-direction: column; gap: 0.4rem; }
 .sa-inspector .pni-card-head { background: transparent; border: none; width: 100%; text-align: left; padding: 0; font: inherit; color: inherit; }
 .sa-inspector-detail { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }

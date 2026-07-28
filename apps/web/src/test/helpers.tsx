@@ -470,15 +470,13 @@ let akamaiConnectionState: Record<string, unknown> = { ...defaultAkamaiConnectio
 const defaultNs1Connection = { connector: 'ns1', mode: 'mock', apiBase: 'https://api.nsone.net/v1', keyConfigured: false, keySetAt: null, updatedBy: null, updatedAt: null, source: 'environment', live: false, masterKeyAvailable: true, degraded: null, writeEnabled: false, writeAllow: ['livetest.rte.ie', '*.livetest.rte.ie'], writeKeyConfigured: false, writeKeySetAt: null, writeLive: false };
 let ns1ConnectionState: Record<string, unknown> = { ...defaultNs1Connection };
 
-export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } = {}): void {
+export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } = {}) {
   connectionState = { ...defaultConnection };
   cloudflareConnectionState = { ...defaultCloudflareConnection };
   fastlyConnectionState = { ...defaultFastlyConnection };
   akamaiConnectionState = { ...defaultAkamaiConnection };
   ns1ConnectionState = { ...defaultNs1Connection };
-  vi.stubGlobal(
-    'fetch',
-    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const p = String(input).split('?')[0];
       let status = 200;
       let body: unknown = {};
@@ -618,6 +616,7 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       };
       else if (p.endsWith('/stream-assurance/rules')) body = { count: 1, rules: [{ id: 'SA-CDN-001', severity: 'critical', standard: 'RADAR delivery consistency', section: null, description: 'origin-variant / forwarded-Host mismatch', remediation: 'Align the forwarded Host with the origin hostname.' }] };
       else if (p.includes('/stream-assurance/alerts')) body = { count: 1, alerts: [{ id: 'rte-one:akamai-edge:SA-CDN-001:ORIGIN_VARIANT_MISMATCH', profileId: 'rte-one', endpointId: 'akamai-edge', ruleId: 'SA-CDN-001', classification: 'ORIGIN_VARIANT_MISMATCH', severity: 'critical', state: 'active', occurrences: 3, firstObserved: '2026-07-27T20:00:00Z', lastObserved: '2026-07-27T21:00:00Z', explanation: 'akamai fetched from origin due to a Host mismatch.', remediation: 'Align the forwarded Host with the origin hostname.' }], eventModeProfiles: [] };
+      else if (p.endsWith('/stream-assurance/profiles') && init?.method === 'POST') { const b = JSON.parse(String(init?.body ?? '{}')) as { id?: string }; body = { id: b.id ?? 'new-profile' }; }
       else if (p.endsWith('/stream-assurance/profiles')) body = { count: 1, profiles: [{ id: 'rte-one', name: 'RTÉ One', enabled: true, tags: ['production'], endpointCount: 2, updatedAt: '2026-07-27T21:00:00Z' }] };
       else if (p.includes('/stream-assurance/profiles/') && p.endsWith('/latest')) body = { run: {
         id: 'run-1', profileId: 'rte-one', startedAt: '2026-07-27T21:00:00Z', finishedAt: '2026-07-27T21:00:02Z', mode: 'normal', status: 'findings', findingCount: 1,
@@ -645,8 +644,9 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
       else if (p.endsWith('/ns1/zones')) body = { provenance: PROV, zones: [{ zone: 'rte.ie' }] };
       else status = 404;
       return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-    }),
-  );
+    });
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
 }
 
 export const renderAt = (path: string) =>
