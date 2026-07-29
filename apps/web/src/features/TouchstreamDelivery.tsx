@@ -1,152 +1,205 @@
-// Touchstream delivery matrix: channel × format rows against CDN columns, with per-probe drill-down.
+// Touchstream delivery matrix — a true matrix: ONE grid, so a CDN column is a scannable vertical
+// unit and every cell lines up across every channel. (The first cut made each row its own card, which
+// broke column alignment and reduced the "matrix" to a stack of cards.)
 //
-// Three things drive every design decision here, all of them properties of the real data:
+// Structure, in order of importance:
+//   * a dark instrument header, echoing RADAR's chrome, carrying the health read-outs and the one
+//     control that changes what the numbers MEAN (the speed basis);
+//   * a per-CDN column rail — each column's aggregate across all channels, so columns read as units;
+//   * VIDEO and AUDIO groups, split on Touchstream's own product label;
+//   * per-row detail that opens INSIDE the grid columns, so probe detail stays column-aligned and
+//     therefore comparable across CDNs.
 //
-//  1. AN EMPTY CELL IS NOT A HEALTHY CELL. Coverage is partial (RTE 1 HLS has no Fastly monitor at
-//     all), so "not monitored" gets its own hatched treatment and is never left to read as a pass.
+// Three properties of the real data drive the semantics:
+//   1. AN EMPTY CELL IS NOT A HEALTHY CELL — coverage is genuinely partial, so absence is hatched and
+//      labelled, never blank.
+//   2. SPEED IS ONLY COMPARABLE FROM THE SAME PLACE — the basis toggle re-bases every figure onto the
+//      probe locations a row's CDNs share.
+//   3. A CDN LABEL IS A CLAIM — where the observed edge contradicts it, the cell says so.
 //
-//  2. SPEED IS ONLY COMPARABLE FROM THE SAME PLACE. Some CDNs in a row are probed from Dublin and
-//     others from Paris/Frankfurt, so their headline averages measure geography as much as CDN. The
-//     BASIS TOGGLE is this page's signature control: switch to "like-for-like" and every figure
-//     re-bases onto the probe locations the whole row shares, with the excluded ones named. It turns
-//     RADAR's honesty rule into a working comparison instead of a disclaimer.
-//
-//  3. A CDN LABEL IS A CLAIM. Where the observed edge IP contradicts the label, the cell is flagged
-//     and the drill-down shows the edge that actually served.
-//
-// Inline SVG only — RADAR ships no charting library and keeps it that way.
+// Inline SVG only; RADAR ships no charting library.
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
-import { Donut } from '../components/Donut';
 import { colorFor } from '../steering/platforms';
-import type { TsCell, TsDeliveryResponse, TsMonitor, TsRow, TsSnapshot, TsVantage } from '../api/types';
+import type { TsCell, TsDeliveryResponse, TsMonitor, TsPlatform, TsRow, TsSnapshot, TsVantage } from '../api/types';
 
 const REFRESH_MS = 30_000;
 
-/** Speed basis. `headline` is what Touchstream reports per monitor (mixed geography where probe sets
- *  differ); `shared` restricts to the probe locations every CDN in the row has. */
 type Basis = 'headline' | 'shared';
 
 const speedOf = (cell: TsCell, basis: Basis): number | null =>
   basis === 'shared' ? cell.sharedSpeed : (cell.monitor?.avgSpeed ?? null);
 
-const fmtSpeed = (v: number | null): string => (v === null ? '—' : v.toFixed(v < 10 ? 1 : 0));
+const fmtSpeed = (v: number | null): string => (v === null ? '—' : v < 10 ? v.toFixed(1) : String(Math.round(v)));
 
 const fmtAge = (seconds: number | null): string => {
-  if (seconds === null) return 'unknown';
+  if (seconds === null) return 'age unknown';
   if (seconds < 90) return `${Math.round(seconds)}s ago`;
   if (seconds < 5400) return `${Math.round(seconds / 60)} min ago`;
   return `${(seconds / 3600).toFixed(1)} h ago`;
 };
 
-/** Discrete status ribbon from Touchstream's rolling window — one block per sample, oldest left. A
- *  line chart would imply a continuum; these are pass/fail checks, so they stay as blocks. */
-function StatusRibbon({ history, color }: { history: number[]; color: string }) {
-  if (history.length === 0) return <span className="muted ts-nodata">no history</span>;
-  const w = 6;
+/** Platform tint, with the two non-steering platforms given their own stable colours rather than
+ *  falling through to the same grey. */
+const tintFor = (p: TsPlatform): string =>
+  p === 'Triton' ? '#7b5ea7' : p === 'Unknown' ? '#6b7a90' : colorFor(p);
+
+// --- micro-graphics ---------------------------------------------------------------------------
+
+/** Discrete pass/fail ribbon. Blocks, not a line: these are checks, not a continuum. */
+function StatusRibbon({ history, color, height = 16 }: { history: number[]; color: string; height?: number }) {
+  if (history.length === 0) return <span className="ts-nodata">no history</span>;
+  const w = 5;
   const gap = 1.5;
-  const h = 14;
+  const total = history.length * (w + gap) - gap;
   return (
     <svg
       className="ts-ribbon"
-      width={history.length * (w + gap)}
-      height={h}
-      viewBox={`0 0 ${history.length * (w + gap)} ${h}`}
+      viewBox={`0 0 ${total} ${height}`}
+      preserveAspectRatio="none"
       role="img"
       aria-label={`${history.filter((v) => v === 1).length} of ${history.length} recent checks passed`}
     >
       {history.map((v, i) => (
-        <rect
-          key={i}
-          x={i * (w + gap)}
-          y={v === 1 ? 0 : 0}
-          width={w}
-          height={h}
-          rx={1}
-          fill={v === 1 ? color : 'var(--danger)'}
-          opacity={v === 1 ? 0.85 : 1}
-        />
+        <rect key={i} x={i * (w + gap)} y={0} width={w} height={height} rx={1} fill={v === 1 ? color : 'var(--danger)'} opacity={v === 1 ? 0.9 : 1} />
       ))}
     </svg>
   );
 }
 
-/** Relative speed bar — scaled to the row's slowest figure so the eye lands on the outlier without
- *  having to read numbers. Lower is better, so a longer bar is worse. */
-function SpeedBar({ value, rowMax, color }: { value: number | null; rowMax: number; color: string }) {
-  if (value === null) return null;
-  const frac = rowMax > 0 ? Math.min(1, value / rowMax) : 0;
+/** Coverage arc for the header. Lower is worse, so the unfilled remainder is the story. */
+function CoverageArc({ percent, size = 76 }: { percent: number; size?: number }) {
+  const r = size / 2 - 6;
+  const c = 2 * Math.PI * r;
+  const filled = Math.max(0, Math.min(100, percent)) / 100;
   return (
-    <svg className="ts-speedbar" width="100%" height="4" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true">
-      <rect x="0" y="1" width="100" height="2" rx="1" fill="var(--line)" />
-      <rect x="0" y="0" width={Math.max(1.5, frac * 100)} height="4" rx="1" fill={color} opacity={0.75} />
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${percent}% coverage`} className="ts-arc">
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="7" />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="7"
+        strokeLinecap="round"
+        strokeDasharray={`${filled * c} ${c}`}
+        transform={`rotate(-90 ${size / 2} ${size / 2})`}
+      />
+      <text x="50%" y="52%" textAnchor="middle" dominantBaseline="middle" className="ts-arc-text">
+        {Math.round(percent)}%
+      </text>
     </svg>
   );
 }
 
-/** Per-rendition strip: one block per ABR rendition checked in a probe. Dense on purpose — 14
- *  renditions per stream is a lot of detail that only matters when something is wrong. */
-function RenditionStrip({ vantage }: { vantage: TsVantage }) {
-  if (vantage.renditions.length === 0) return <span className="muted">no rendition detail</span>;
+// --- cells ------------------------------------------------------------------------------------
+
+function Cell({
+  cell,
+  basis,
+  rowMax,
+  selected,
+  onSelect,
+}: {
+  cell: TsCell;
+  basis: Basis;
+  rowMax: number;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const m = cell.monitor;
+  if (!m) {
+    return (
+      <div
+        className="ts-cell ts-cell-empty"
+        title="No Touchstream monitor exists for this channel, format and CDN — its delivery is unmeasured, not known good"
+      >
+        <span className="ts-empty-label">not monitored</span>
+      </div>
+    );
+  }
+  const tint = tintFor(cell.platform);
+  const speed = speedOf(cell, basis);
+  const unavailable = basis === 'shared' && speed === null;
+  const flag = m.warnings.find((w) => w.kind === 'attribution_mismatch' || w.kind === 'attribution_split');
+  const frac = rowMax > 0 && speed !== null ? Math.min(1, speed / rowMax) : 0;
   return (
-    <div className="ts-rends">
-      {vantage.renditions.map((r) => (
-        <span
-          key={`${r.sequence}-${r.name}`}
-          className={`ts-rend${r.ok ? '' : ' bad'}${r.stalled ? ' stalled' : ''}`}
-          title={[
-            r.label ? `${r.name} · ${r.label}` : r.name,
-            r.resolution ? r.resolution : null,
-            r.httpStatus ? `HTTP ${r.httpStatus}` : null,
-            r.statusText,
-            r.speed !== null ? `speed ${r.speed}` : null,
-            r.stalled ? 'STALLED BITRATE' : null,
-          ]
-            .filter(Boolean)
-            .join(' · ')}
-        >
-          {r.label ?? r.name}
+    <button
+      className={`ts-cell${m.ok ? '' : ' failing'}${m.plannedOutage ? ' outage' : ''}${selected ? ' selected' : ''}`}
+      style={{ ['--tint' as string]: tint }}
+      onClick={onSelect}
+      aria-expanded={selected}
+      title={`${m.cdnLabel} · ${m.vantages.length} probe${m.vantages.length === 1 ? '' : 's'} — click for probe detail`}
+    >
+      <span className="ts-cell-row">
+        <span className={`ts-dot ${m.ok ? 'ok' : 'bad'}`} aria-hidden="true" />
+        <span className="ts-cdn">{m.cdnLabel}</span>
+        {flag && (
+          <span className="ts-flag" title={flag.message}>
+            {flag.kind === 'attribution_split' ? 'edge ≠ label (partly)' : 'edge ≠ label'}
+          </span>
+        )}
+        {m.plannedOutage && <span className="ts-flag ts-flag-quiet">planned</span>}
+      </span>
+      <span className="ts-cell-ribbon">
+        <StatusRibbon history={m.history} color={m.ok ? tint : 'var(--danger)'} />
+      </span>
+      <span className="ts-cell-row ts-cell-figure">
+        <span className="ts-speed">{unavailable ? 'n/a' : fmtSpeed(speed)}</span>
+        <span className="ts-speed-note">
+          {basis === 'shared'
+            ? unavailable
+              ? 'no shared probe'
+              : `${cell.sharedLocationCount} shared probe${cell.sharedLocationCount === 1 ? '' : 's'}`
+            : `${m.vantages.length} probe${m.vantages.length === 1 ? '' : 's'}`}
         </span>
-      ))}
-    </div>
+      </span>
+      <span className="ts-meter" aria-hidden="true">
+        <span className="ts-meter-fill" style={{ width: `${Math.max(2, frac * 100)}%`, background: tint }} />
+      </span>
+      {basis === 'shared' && cell.unsharedLocations.length > 0 && (
+        <span className="ts-excluded" title={`Excluded from the like-for-like figure: ${cell.unsharedLocations.join(', ')}`}>
+          −{cell.unsharedLocations.length} not comparable
+        </span>
+      )}
+    </button>
   );
 }
 
-function VantageTable({ monitor, shared }: { monitor: TsMonitor; shared: string[] }) {
+function VantageDetail({ monitor, shared }: { monitor: TsMonitor; shared: string[] }) {
   return (
-    <div className="ts-vantages">
-      {monitor.vantages.map((v) => {
+    <div className="ts-detail-col">
+      <div className="ts-detail-head">{monitor.cdnLabel}</div>
+      {monitor.vantages.map((v: TsVantage) => {
         const inShared = shared.includes(v.location);
         return (
-          <div key={v.location} className={`ts-vantage${inShared ? '' : ' unshared'}`}>
-            <div className="ts-vantage-head">
+          <div key={v.location} className={`ts-probe${inShared ? '' : ' unshared'}`}>
+            <div className="ts-probe-top">
               <span className={`ts-dot ${v.ok ? 'ok' : 'bad'}`} aria-hidden="true" />
-              <span className="ts-loc mono">{v.location}</span>
-              <span className="muted">
-                {[v.region, v.country].filter(Boolean).join(', ') || 'location unknown'}
-                {v.supplier ? ` · ${v.supplier}` : ''}
-              </span>
-              {!inShared && shared.length > 0 && (
-                <span className="badge badge-sm" title="Not probed by every CDN in this row, so it cannot be used for a like-for-like comparison">
-                  not shared
-                </span>
-              )}
+              <span className="ts-probe-loc">{v.location}</span>
+              <span className="ts-probe-geo">{[v.region, v.country].filter(Boolean).join(', ') || 'location unknown'}</span>
             </div>
-            <div className="ts-vantage-meta">
-              <span>
-                edge <code>{v.edgeIp ?? 'unknown'}</code>
-                {v.edgeIsRteOwned === true && (
-                  <span className="badge ok badge-sm" title="This edge IP is inside an RTÉ-owned prefix">
-                    RTÉ-owned
-                  </span>
-                )}
-              </span>
-              <span className="muted">
-                from <code>{v.popIp ?? 'unknown'}</code>
-              </span>
-              <span className="muted">speed {v.avgSpeed ?? '—'}</span>
+            <div className="ts-probe-meta">
+              <code>{v.edgeIp ?? 'edge unknown'}</code>
+              {v.edgeIsRteOwned === true && <span className="ts-owned" title="Inside an RTÉ-owned prefix">RTÉ</span>}
+              <span className="ts-probe-speed">{v.avgSpeed ?? '—'}</span>
+              {!inShared && shared.length > 0 && <span className="ts-probe-tag" title="Not probed by every CDN in this row">not shared</span>}
             </div>
-            <RenditionStrip vantage={v} />
+            {v.renditions.length > 0 && (
+              <div className="ts-rends">
+                {v.renditions.map((r) => (
+                  <span
+                    key={`${r.sequence}-${r.name}`}
+                    className={`ts-rend${r.ok ? '' : ' bad'}${r.stalled ? ' stalled' : ''}`}
+                    title={[r.label ? `${r.name} · ${r.label}` : r.name, r.resolution, r.httpStatus ? `HTTP ${r.httpStatus}` : null, r.statusText, r.stalled ? 'STALLED' : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  />
+                ))}
+              </div>
+            )}
+            {v.supplier && <div className="ts-probe-supplier">{v.supplier}</div>}
           </div>
         );
       })}
@@ -154,156 +207,100 @@ function VantageTable({ monitor, shared }: { monitor: TsMonitor; shared: string[
   );
 }
 
-function CellBody({ cell, basis, rowMax, shared }: { cell: TsCell; basis: Basis; rowMax: number; shared: string[] }) {
-  const m = cell.monitor;
-  if (!m) {
-    // Deliberately loud: absence of measurement is a finding, not a blank.
-    return (
-      <div className="ts-cell empty" title="No Touchstream monitor exists for this channel, format and CDN — its delivery is unmeasured, not known good">
-        <span className="ts-empty-label">not monitored</span>
-      </div>
-    );
-  }
-  const color = colorFor(cell.platform === 'Unknown' || cell.platform === 'Triton' ? '' : cell.platform);
-  const speed = speedOf(cell, basis);
-  const mislabelled = m.warnings.find((w) => w.kind === 'attribution_mismatch' || w.kind === 'attribution_split');
-  const unavailable = basis === 'shared' && speed === null;
-  return (
-    <div className={`ts-cell${m.ok ? '' : ' failing'}${m.plannedOutage ? ' outage' : ''}`}>
-      <div className="ts-cell-top">
-        <span className={`ts-dot ${m.ok ? 'ok' : 'bad'}`} aria-hidden="true" />
-        <span className="ts-cdn mono" title={`Touchstream CDN label: ${m.cdnLabel}`}>
-          {m.cdnLabel}
-        </span>
-        {mislabelled && (
-          <span className="badge warn badge-sm" title={mislabelled.message}>
-            {mislabelled.kind === 'attribution_split' ? 'label ≠ some edges' : 'label ≠ edge'}
-          </span>
-        )}
-        {m.plannedOutage && (
-          <span className="badge badge-sm" title="A planned outage covers this monitor — a failure here is not a fault">
-            planned
-          </span>
-        )}
-      </div>
-      <StatusRibbon history={m.history} color={m.ok ? color : 'var(--danger)'} />
-      <div className="ts-cell-speed">
-        <span className="ts-speed mono">{unavailable ? 'n/a' : fmtSpeed(speed)}</span>
-        <span className="muted ts-speed-note">
-          {basis === 'shared'
-            ? unavailable
-              ? 'no shared probe'
-              : `at ${cell.sharedLocationCount} shared`
-            : `${m.vantages.length} probe${m.vantages.length === 1 ? '' : 's'}`}
-        </span>
-      </div>
-      <SpeedBar value={unavailable ? null : speed} rowMax={rowMax} color={color} />
-      {basis === 'shared' && cell.unsharedLocations.length > 0 && (
-        <div className="ts-cell-excluded muted" title={`Excluded from the like-for-like figure: ${cell.unsharedLocations.join(', ')}`}>
-          −{cell.unsharedLocations.length} excluded
-        </div>
-      )}
-      <VantageTable monitor={m} shared={shared} />
-    </div>
-  );
-}
+// --- grid -------------------------------------------------------------------------------------
 
-function Row({ row, basis, expanded, onToggle }: { row: TsRow; basis: Basis; expanded: boolean; onToggle: () => void }) {
+function MatrixRow({
+  row,
+  basis,
+  open,
+  onToggle,
+}: {
+  row: TsRow;
+  basis: Basis;
+  open: boolean;
+  onToggle: () => void;
+}) {
   const shared = row.comparability.sharedLocations;
   const rowMax = useMemo(() => {
     const values = row.cells.map((c) => speedOf(c, basis)).filter((n): n is number => n !== null);
     return values.length > 0 ? Math.max(...values) : 0;
   }, [row, basis]);
   const monitored = row.cells.filter((c) => c.monitor).length;
-  const failing = row.cells.filter((c) => c.monitor && !c.monitor.ok && !c.monitor.plannedOutage).length;
 
   return (
-    <div className={`ts-row${expanded ? ' open' : ''}`}>
-      <button className="ts-rowhead" onClick={onToggle} aria-expanded={expanded}>
-        <span className="ts-caret" aria-hidden="true">
-          {expanded ? '▾' : '▸'}
-        </span>
-        <span className="ts-channel">{row.channel}</span>
-        <span className="badge badge-sm ts-format">{row.format}</span>
-        <span className="muted ts-rowmeta">
-          {monitored}/{row.cells.length} CDNs monitored
-          {failing > 0 ? ` · ${failing} failing` : ''}
-        </span>
+    <>
+      <div className={`ts-rowlabel${open ? ' open' : ''}`}>
+        <span className="ts-rowchannel">{row.channel}</span>
+        <span className="ts-rowfmt">{row.format}</span>
+        <span className="ts-rowcount">{monitored}/{row.cells.length}</span>
         {!row.comparability.headlineComparable && (
-          <span
-            className={`badge ${row.comparability.comparable ? 'warn' : 'danger'} badge-sm`}
-            title={row.comparability.reason ?? undefined}
-          >
-            {row.comparability.comparable ? `compare at ${shared.join('/')}` : 'not comparable'}
+          <span className={`ts-rowwarn${row.comparability.comparable ? '' : ' hard'}`} title={row.comparability.reason ?? undefined}>
+            {row.comparability.comparable ? `≠ basis` : 'not comparable'}
           </span>
         )}
-      </button>
-      <div className="ts-cells" style={{ gridTemplateColumns: `repeat(${row.cells.length}, minmax(0, 1fr))` }}>
-        {row.cells.map((c) => (
-          <CellBody key={c.platform} cell={c} basis={basis} rowMax={rowMax} shared={shared} />
-        ))}
       </div>
-      {expanded && row.comparability.reason && (
-        <p className="ts-row-note">{row.comparability.reason}</p>
+      {row.cells.map((c) => (
+        <Cell key={c.platform} cell={c} basis={basis} rowMax={rowMax} selected={open} onSelect={onToggle} />
+      ))}
+      {open && (
+        <>
+          <div className="ts-detail-label">
+            probes
+            {shared.length > 0 && <span className="ts-detail-shared">shared: {shared.join(', ')}</span>}
+          </div>
+          {row.cells.map((c) => (
+            <div key={`d-${c.platform}`} className="ts-detail-cell">
+              {c.monitor ? <VantageDetail monitor={c.monitor} shared={shared} /> : <span className="ts-detail-none">—</span>}
+            </div>
+          ))}
+        </>
+      )}
+      {open && row.comparability.reason && (
+        <p className="ts-rownote" style={{ gridColumn: `1 / -1` }}>
+          {row.comparability.reason}
+        </p>
+      )}
+    </>
+  );
+}
+
+/** Aggregate for one CDN column across every channel — makes a column a unit, not just alignment. */
+function ColumnRail({ platform, rows }: { platform: TsPlatform; rows: TsRow[] }) {
+  const monitors = rows.map((r) => r.cells.find((c) => c.platform === platform)?.monitor).filter((m): m is TsMonitor => !!m);
+  const tint = tintFor(platform);
+  const ok = monitors.filter((m) => m.ok).length;
+  const flagged = monitors.filter((m) => m.warnings.some((w) => w.kind === 'attribution_mismatch' || w.kind === 'attribution_split')).length;
+  return (
+    <div className="ts-rail">
+      <span className="ts-rail-name" style={{ color: tint }}>
+        <span className="ts-swatch" style={{ background: tint }} aria-hidden="true" />
+        {platform}
+      </span>
+      {monitors.length === 0 ? (
+        <span className="ts-rail-empty">not monitored</span>
+      ) : (
+        <span className="ts-rail-meta">
+          {ok}/{monitors.length} passing
+          {flagged > 0 && <span className="ts-rail-flag" title="CDN label contradicted by the observed edge on this column"> · {flagged} flagged</span>}
+        </span>
       )}
     </div>
   );
 }
 
-function SummaryStrip({ snapshot }: { snapshot: TsSnapshot }) {
-  const s = snapshot.summary;
-  const coverage = [
-    { label: 'monitored', value: s.monitoredCells, color: 'var(--brand)' },
-    { label: 'unmonitored', value: Math.max(0, s.possibleCells - s.monitoredCells), color: 'var(--line)' },
-  ];
-  return (
-    <div className="ts-summary">
-      <div className="ts-kpi ts-kpi-donut">
-        <Donut data={coverage} size={72} ariaLabel="monitor coverage" />
-        <div>
-          <div className="ts-kpi-value">{s.coveragePercent}%</div>
-          <div className="ts-kpi-label">
-            coverage
-            <span className="muted"> · {s.monitoredCells} of {s.possibleCells} channel×CDN cells</span>
-          </div>
-        </div>
-      </div>
-      <div className="ts-kpi">
-        <div className={`ts-kpi-value${s.failingCount > 0 ? ' bad' : ' ok'}`}>
-          {s.okCount}/{s.monitorCount}
-        </div>
-        <div className="ts-kpi-label">
-          monitors passing
-          {s.plannedOutageCount > 0 && <span className="muted"> · {s.plannedOutageCount} planned</span>}
-        </div>
-      </div>
-      <div className="ts-kpi">
-        <div className="ts-kpi-value">{s.vantageCount}</div>
-        <div className="ts-kpi-label">probe locations</div>
-      </div>
-      <div className={`ts-kpi${s.attributionMismatchCount + s.attributionSplitCount > 0 ? ' flagged' : ''}`}>
-        <div className={`ts-kpi-value${s.attributionMismatchCount + s.attributionSplitCount > 0 ? ' warn' : ''}`}>
-          {s.attributionMismatchCount + s.attributionSplitCount}
-        </div>
-        <div className="ts-kpi-label">
-          CDN labels contradicted by the served edge
-          {s.attributionSplitCount > 0 && <span className="muted"> · {s.attributionSplitCount} partly</span>}
-        </div>
-      </div>
-      <div className={`ts-kpi${s.incomparableRowCount > 0 ? ' flagged' : ''}`}>
-        <div className={`ts-kpi-value${s.incomparableRowCount > 0 ? ' warn' : ''}`}>{s.incomparableRowCount}</div>
-        <div className="ts-kpi-label">rows with no like-for-like comparison</div>
-      </div>
-    </div>
-  );
-}
+// --- page -------------------------------------------------------------------------------------
+
+const GROUPS: { kind: 'video' | 'audio'; label: string; hint: string }[] = [
+  { kind: 'video', label: 'Video', hint: 'television channels' },
+  { kind: 'audio', label: 'Audio', hint: 'radio streams' },
+];
 
 export function TouchstreamDelivery() {
   const [data, setData] = useState<TsDeliveryResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [basis, setBasis] = useState<Basis>('headline');
-  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [open, setOpen] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -329,58 +326,95 @@ export function TouchstreamDelivery() {
     };
   }, []);
 
-  const snapshot = data?.snapshot ?? null;
-  const platforms = snapshot?.platforms ?? [];
-  const anyMixedBasis = snapshot?.rows.some((r) => !r.comparability.headlineComparable) ?? false;
-
-  const toggle = (key: string) =>
-    setOpen((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-
   if (loading) return <p className="muted">Loading Touchstream delivery monitoring…</p>;
   if (error) return <div className="notice warn">{error}</div>;
 
+  const snapshot: TsSnapshot | null = data?.snapshot ?? null;
   if (!snapshot) {
     return (
       <div className="notice info">
         <strong>No Touchstream delivery data.</strong>{' '}
         {data?.reason === 'connector disabled'
-          ? 'The connector is switched off. Set TOUCHSTREAM_ENABLED=true, then supply the endpoint plus BOTH credentials (the X-TS-ID app id and the bearer token) — either alone is refused.'
+          ? 'The connector is switched off. Enable it on the Integrations page and supply the API base plus BOTH credentials — the X-TS-ID app id and the bearer token. Either alone is refused.'
           : 'The connector has not captured a snapshot yet.'}
         {data?.lastError && <div className="mono ts-lasterror">{data.lastError}</div>}
       </div>
     );
   }
 
+  const s = snapshot.summary;
+  const platforms = snapshot.platforms;
+  const cols = `minmax(140px, 200px) repeat(${platforms.length}, minmax(0, 1fr))`;
+  const mixedBasis = snapshot.rows.some((r) => !r.comparability.headlineComparable);
+  const flags = s.attributionMismatchCount + s.attributionSplitCount;
+
   return (
     <section className="ts-page">
-      <header className="ts-head">
-        <div>
-          <h3 className="ts-title">Delivery matrix</h3>
-          <p className="ts-sub muted">
-            Every monitored channel against every CDN, as measured by Touchstream from{' '}
-            {snapshot.summary.vantageCount} cloud probe locations.
+      {/* Instrument header: the read-outs, and the one control that changes what the figures mean. */}
+      <div className="ts-console">
+        <div className="ts-console-id">
+          <span className="ts-eyebrow">Touchstream · delivery monitoring</span>
+          <h3 className="ts-console-title">
+            {s.channelCount} channels across {s.platformCount} CDNs
+          </h3>
+          <span className="ts-console-sub">
+            <span className={`ts-live ${snapshot.source === 'live' ? 'on' : ''}`}>{snapshot.source === 'live' ? 'LIVE' : 'MOCK'}</span>
+            sampled {fmtAge(s.oldestSampleAgeSeconds)} · {s.vantageCount} probe locations
+          </span>
+        </div>
+
+        <div className="ts-readouts">
+          <div className="ts-readout ts-readout-arc">
+            <CoverageArc percent={s.coveragePercent} />
+            <div>
+              <div className="ts-readout-label">coverage</div>
+              <div className="ts-readout-sub">
+                {s.monitoredCells} of {s.possibleCells} channel×CDN
+              </div>
+            </div>
+          </div>
+          <div className="ts-readout">
+            <div className={`ts-readout-value${s.failingCount > 0 ? ' bad' : ''}`}>
+              {s.okCount}<span className="ts-of">/{s.monitorCount}</span>
+            </div>
+            <div className="ts-readout-label">passing</div>
+          </div>
+          <div className="ts-readout">
+            <div className="ts-readout-value">
+              {s.videoMonitorCount}<span className="ts-of"> · {s.audioMonitorCount}</span>
+            </div>
+            <div className="ts-readout-label">video · audio</div>
+          </div>
+          <div className={`ts-readout${flags > 0 ? ' flagged' : ''}`}>
+            <div className={`ts-readout-value${flags > 0 ? ' warn' : ''}`}>{flags}</div>
+            <div className="ts-readout-label">edge ≠ label</div>
+          </div>
+        </div>
+
+        <div className="ts-basis">
+          <span className="ts-basis-label">speed basis</span>
+          <div className="ts-seg" role="group" aria-label="Speed basis">
+            <button className={basis === 'headline' ? 'on' : ''} onClick={() => setBasis('headline')}>
+              Headline
+            </button>
+            <button className={basis === 'shared' ? 'on' : ''} onClick={() => setBasis('shared')}>
+              Like-for-like
+            </button>
+          </div>
+          <p className="ts-basis-help">
+            {basis === 'headline'
+              ? mixedBasis
+                ? 'As Touchstream reports it. Rows marked ≠ basis are probed from different places, so those figures are not comparable.'
+                : 'As Touchstream reports it. Every row’s CDNs share the same probe locations, so these already compare.'
+              : 'Restricted to the probe locations every CDN in a row shares, so the comparison isolates the CDN rather than geography.'}
           </p>
         </div>
-        <div className="ts-head-meta">
-          <span className={`badge ${snapshot.source === 'live' ? 'ok' : ''} badge-sm`}>
-            {snapshot.source === 'live' ? 'LIVE' : 'MOCK'}
-          </span>
-          <span className="muted">sampled {fmtAge(snapshot.summary.oldestSampleAgeSeconds)}</span>
-        </div>
-      </header>
+      </div>
 
-      {/* The provenance rule, stated on the page and not only in the API envelope. */}
       <p className="ts-provenance">
-        Touchstream probes from cloud and datacentre locations, so this is <strong>measured synthetic delivery</strong> — it
-        is not viewer traffic, and it cannot show what a subscriber on any ISP received.
+        Touchstream probes from cloud and datacentre locations, so this is <strong>measured synthetic delivery</strong> — not viewer
+        traffic, and not what a subscriber on any ISP received.
       </p>
-
-      <SummaryStrip snapshot={snapshot} />
 
       {snapshot.warnings.length > 0 && (
         <div className="notice warn ts-warnings">
@@ -395,37 +429,32 @@ export function TouchstreamDelivery() {
         </div>
       )}
 
-      <div className="ts-controls">
-        <div className="ts-basis" role="group" aria-label="Speed basis">
-          <span className="muted ts-basis-label">Speed basis</span>
-          <button className={`subtab ${basis === 'headline' ? 'active' : ''}`} onClick={() => setBasis('headline')}>
-            Headline
-          </button>
-          <button className={`subtab ${basis === 'shared' ? 'active' : ''}`} onClick={() => setBasis('shared')}>
-            Like-for-like
-          </button>
+      <div className="ts-grid" style={{ gridTemplateColumns: cols }}>
+        <div className="ts-rail ts-rail-corner">
+          <span className="ts-rail-hint">channel · format</span>
         </div>
-        <p className="muted ts-basis-help">
-          {basis === 'headline'
-            ? anyMixedBasis
-              ? 'Averages as Touchstream reports them. Where a row’s CDNs are probed from different places these figures are not comparable — switch to like-for-like.'
-              : 'Averages as Touchstream reports them. Every row’s CDNs share the same probe locations, so these are already comparable.'
-            : 'Averages restricted to the probe locations every CDN in a row shares, so the comparison isolates the CDN rather than geography.'}
-        </p>
-      </div>
+        {platforms.map((p) => (
+          <ColumnRail key={p} platform={p} rows={snapshot.rows} />
+        ))}
 
-      <div className="ts-matrix">
-        <div className="ts-colhead" style={{ gridTemplateColumns: `repeat(${platforms.length}, minmax(0, 1fr))` }}>
-          {platforms.map((p) => (
-            <div key={p} className="ts-col">
-              <span className="ts-swatch" style={{ background: colorFor(p === 'Unknown' || p === 'Triton' ? '' : p) }} aria-hidden="true" />
-              {p}
-            </div>
-          ))}
-        </div>
-        {snapshot.rows.map((row) => {
-          const key = `${row.channel}·${row.format}`;
-          return <Row key={key} row={row} basis={basis} expanded={open.has(key)} onToggle={() => toggle(key)} />;
+        {/* Rows are emitted per group so the group band precedes its own rows. */}
+        {GROUPS.flatMap(({ kind, label, hint }) => {
+          const rows = snapshot.rows.filter((r) => r.mediaKind === kind);
+          if (rows.length === 0) return [];
+          const monitors = rows.reduce((n, r) => n + r.cells.filter((c) => c.monitor).length, 0);
+          return [
+            <div key={`band-${kind}`} className={`ts-group ts-group-${kind}`} style={{ gridColumn: '1 / -1' }}>
+              <span className="ts-group-name">{label}</span>
+              <span className="ts-group-hint">{hint}</span>
+              <span className="ts-group-count">
+                {rows.length} stream{rows.length === 1 ? '' : 's'} · {monitors} monitor{monitors === 1 ? '' : 's'}
+              </span>
+            </div>,
+            ...rows.map((row) => {
+              const key = `${row.channel}·${row.format}`;
+              return <MatrixRow key={key} row={row} basis={basis} open={open === key} onToggle={() => setOpen(open === key ? null : key)} />;
+            }),
+          ];
         })}
       </div>
     </section>

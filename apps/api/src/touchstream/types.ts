@@ -10,6 +10,10 @@
 /** Delivery platform, aligned with RADAR's steering vocabulary (engine PLATFORM_PATTERNS) plus the
  *  radio origin Touchstream labels GENERIC. `Unknown` is honest: an operator CDN label RADAR has no
  *  platform for (never guessed into a known one). */
+/** Video (television) or audio (radio) delivery. Derived from Touchstream's own `product` label, not
+ *  guessed from the channel name — see mediaKindOf(). */
+export type MediaKind = 'video' | 'audio';
+
 export type DeliveryPlatform = 'Réalta' | 'Fastly' | 'Akamai' | 'CloudFront' | 'Triton' | 'Unknown';
 
 /** One ABR rendition check within a single probe. `speed` is Touchstream's own figure, carried
@@ -53,6 +57,9 @@ export interface TouchstreamMonitor {
   channel: string;
   product: string;
   format: string;
+  /** Video or audio, derived from `product`. Kept alongside the raw product so the grouping is
+   *  auditable in the UI rather than being an opaque classification. */
+  mediaKind: MediaKind;
   /** The operator's own CDN label in Touchstream (e.g. `RTE CDN`, `GOOGLE`). Kept verbatim. */
   cdnLabel: string;
   /** What that label CLAIMS, mapped into RADAR's vocabulary. A claim, not an observation. */
@@ -122,6 +129,7 @@ export interface TouchstreamComparability {
 export interface TouchstreamRow {
   channel: string;
   format: string;
+  mediaKind: MediaKind;
   cells: TouchstreamCell[];
   comparability: TouchstreamComparability;
 }
@@ -138,6 +146,8 @@ export interface TouchstreamSummary {
   monitoredCells: number;
   possibleCells: number;
   vantageCount: number;
+  videoMonitorCount: number;
+  audioMonitorCount: number;
   attributionMismatchCount: number;
   attributionSplitCount: number;
   incomparableRowCount: number;

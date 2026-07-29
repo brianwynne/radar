@@ -1554,6 +1554,7 @@ export interface RisEventHistoryResponse { count: number; items: RisEventHistory
 // Probes run from cloud/datacentre vantage points. This is measured synthetic delivery, never
 // viewer traffic — the `tier` on the provenance envelope states it and the UI must keep saying it.
 
+export type TsMediaKind = 'video' | 'audio';
 export type TsPlatform = 'Réalta' | 'Fastly' | 'Akamai' | 'CloudFront' | 'Triton' | 'Unknown';
 export interface TsProvenance { source: 'touchstream'; mode: 'mock' | 'live' | 'disabled'; readOnly: boolean; observational: boolean; tier: 'observed-synthetic'; notice: string; retrievedAt: string }
 export interface TsRendition { name: string; sequence: number; label: string | null; resolution: string | null; ok: boolean; httpStatus: string | null; statusText: string | null; stalled: boolean; speed: number | null; contentSize: number | null; durationMs: number | null }
@@ -1561,18 +1562,18 @@ export interface TsVantage { location: string; country: string | null; region: s
 export interface TsWarning { kind: 'attribution_mismatch' | 'attribution_split' | 'no_vantages' | 'stalled_rendition' | 'planned_outage'; message: string }
 export interface TsMonitor {
   streamKey: string; channel: string; product: string; format: string; cdnLabel: string; platformClaimed: TsPlatform;
-  environment: string; manifestUrl: string; plannedOutage: boolean; lastMonitoredAt: string | null;
+  mediaKind: TsMediaKind; environment: string; manifestUrl: string; plannedOutage: boolean; lastMonitoredAt: string | null;
   ok: boolean; statusPct: number | null; history: number[]; historyPct: number | null;
   avgSpeed: number | null; maxSpeed: number | null; vantages: TsVantage[]; warnings: TsWarning[];
 }
 /** `monitor === null` means NOT MONITORED — it must never render as healthy. */
 export interface TsCell { platform: TsPlatform; cdnLabel: string | null; monitor: TsMonitor | null; sharedSpeed: number | null; sharedLocationCount: number; unsharedLocations: string[] }
 export interface TsComparability { comparable: boolean; headlineComparable: boolean; sharedLocations: string[]; reason: string | null }
-export interface TsRow { channel: string; format: string; cells: TsCell[]; comparability: TsComparability }
+export interface TsRow { channel: string; format: string; mediaKind: TsMediaKind; cells: TsCell[]; comparability: TsComparability }
 export interface TsSummary {
   monitorCount: number; channelCount: number; platformCount: number; okCount: number; failingCount: number;
   plannedOutageCount: number; coveragePercent: number; monitoredCells: number; possibleCells: number;
-  vantageCount: number; attributionMismatchCount: number; attributionSplitCount: number; incomparableRowCount: number; oldestSampleAgeSeconds: number | null;
+  vantageCount: number; videoMonitorCount: number; audioMonitorCount: number; attributionMismatchCount: number; attributionSplitCount: number; incomparableRowCount: number; oldestSampleAgeSeconds: number | null;
 }
 export interface TsSnapshot { capturedAt: string; source: 'mock' | 'live'; monitors: TsMonitor[]; platforms: TsPlatform[]; rows: TsRow[]; summary: TsSummary; warnings: TsWarning[] }
 export interface TsDeliveryResponse { provenance: TsProvenance; snapshot: TsSnapshot | null; reason?: string; lastError?: string | null }

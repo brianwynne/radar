@@ -17,6 +17,7 @@
 //     compares geography. Every row therefore carries an explicit comparability verdict.
 import type {
   DeliveryPlatform,
+  MediaKind,
   TouchstreamCell,
   TouchstreamComparability,
   TouchstreamErrorEntry,
@@ -53,6 +54,21 @@ export function platformForCdnLabel(label: string | null | undefined): DeliveryP
   // Touchstream labels the Triton/StreamTheWorld radio origin GENERIC.
   if (l.includes('GENERIC') || l.includes('TRITON')) return 'Triton';
   return 'Unknown';
+}
+
+/** Video or audio.
+ *
+ *  TRITON IS ALWAYS AUDIO — confirmed by RTÉ, so it is checked first and decides on its own. Triton
+ *  (Touchstream labels it GENERIC) is the radio origin and carries nothing else, so no product text
+ *  can override it.
+ *
+ *  Otherwise the verdict comes from Touchstream's OWN product label: `Live Triton HLS Radio` for
+ *  radio, plain `Live` for television. An unrecognised product is treated as video rather than
+ *  guessed at, and the raw product travels with the monitor so an operator can see why a stream
+ *  landed where it did instead of having to trust the classification. */
+export function mediaKindOf(product: string | null | undefined, platform: DeliveryPlatform): MediaKind {
+  if (platform === 'Triton') return 'audio'; // invariant, not a heuristic
+  return /\b(radio|audio)\b/i.test(product ?? '') ? 'audio' : 'video';
 }
 
 // --- IPv4 prefix containment (no dependency; IPv6 edges are reported as unknown) ---------------
@@ -270,6 +286,7 @@ export function buildMonitor(
     channel: toStr(raw.channel) ?? 'unknown',
     product: toStr(raw.product) ?? '',
     format: (toStr(raw.format) ?? 'UNKNOWN').toUpperCase(),
+    mediaKind: mediaKindOf(toStr(raw.product), platformClaimed),
     cdnLabel,
     platformClaimed,
     environment: toStr(raw.environment) ?? '',
@@ -373,9 +390,11 @@ export function buildRows(monitors: TouchstreamMonitor[], platforms: DeliveryPla
           }
         : c,
     );
-    rows.push({ channel, format, cells, comparability });
+    rows.push({ channel, format, mediaKind: group[0].mediaKind, cells, comparability });
   }
-  rows.sort((a, b) => a.channel.localeCompare(b.channel) || a.format.localeCompare(b.format));
+  // Video before audio, then alphabetical — the page groups on this order.
+  const kindRank = (k: MediaKind) => (k === 'video' ? 0 : 1);
+  rows.sort((a, b) => kindRank(a.mediaKind) - kindRank(b.mediaKind) || a.channel.localeCompare(b.channel) || a.format.localeCompare(b.format));
   return rows;
 }
 
@@ -423,6 +442,8 @@ export function buildSnapshot(input: BuildSnapshotInput): TouchstreamSnapshot {
     monitoredCells,
     possibleCells,
     vantageCount: new Set(monitors.flatMap((m) => m.vantages.map((v) => v.location))).size,
+    videoMonitorCount: monitors.filter((m) => m.mediaKind === 'video').length,
+    audioMonitorCount: monitors.filter((m) => m.mediaKind === 'audio').length,
     attributionMismatchCount: attributionMismatches.length,
     attributionSplitCount: attributionSplits.length,
     incomparableRowCount: incomparable.length,

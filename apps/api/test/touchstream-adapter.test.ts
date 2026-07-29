@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildHistory,
+  mediaKindOf,
   buildLocationIndex,
   buildSnapshot,
   comparabilityOf,
@@ -40,6 +41,30 @@ describe('platformForCdnLabel', () => {
     expect(platformForCdnLabel('GOOGLE')).toBe('Unknown');
     expect(platformForCdnLabel('')).toBe('Unknown');
     expect(platformForCdnLabel(null)).toBe('Unknown');
+  });
+});
+
+describe('mediaKindOf (video vs audio grouping)', () => {
+  it('reads Touchstream\'s own product label', () => {
+    // Live values: 'Live' for television, 'Live Triton HLS Radio' for the radio streams.
+    expect(mediaKindOf('Live', 'Réalta')).toBe('video');
+    expect(mediaKindOf('Live Triton HLS Radio', 'Akamai')).toBe('audio');
+  });
+
+  it('always classifies Triton as audio — it carries nothing else', () => {
+    // Confirmed by RTÉ: Triton (labelled GENERIC in Touchstream) is the radio origin only, so it
+    // decides on its own and no product text can override it.
+    expect(mediaKindOf('Live', 'Triton')).toBe('audio');
+    expect(mediaKindOf(null, 'Triton')).toBe('audio');
+    expect(mediaKindOf('Live Television Feed', 'Triton')).toBe('audio');
+  });
+
+  it('defaults an unrecognised product to video rather than inventing a kind', () => {
+    expect(mediaKindOf('Something New', 'Fastly')).toBe('video');
+    expect(mediaKindOf(null, 'Fastly')).toBe('video');
+    // 'audio' as a whole word counts; a substring inside another word does not.
+    expect(mediaKindOf('Live Audio Feed', 'Fastly')).toBe('audio');
+    expect(mediaKindOf('Audiobook Channel', 'Fastly')).toBe('video');
   });
 });
 
@@ -116,6 +141,15 @@ describe('buildSnapshot — matrix and coverage', () => {
       now: Date.parse('2026-07-29T20:00:00.000Z'),
     });
     expect(early.summary.oldestSampleAgeSeconds).toBe(0);
+  });
+
+  it('groups video rows before audio and counts each', () => {
+    const s = snap();
+    expect(s.rows.map((r) => r.mediaKind)).toEqual(['video', 'video', 'audio']);
+    expect(s.summary.videoMonitorCount).toBe(3);
+    expect(s.summary.audioMonitorCount).toBe(1);
+    // The raw product travels with the monitor so the grouping is auditable, not opaque.
+    expect(s.monitors.find((m) => m.mediaKind === 'audio')!.product).toContain('Radio');
   });
 
   it('carries the raw operator CDN label alongside the mapped platform', () => {

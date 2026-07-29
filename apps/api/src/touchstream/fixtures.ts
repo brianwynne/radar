@@ -63,13 +63,15 @@ const stream = (
   cdn: string,
   manifest: string,
   locations: ReturnType<typeof vantage>[],
-  opts: { ok?: boolean; plannedOutage?: boolean } = {},
+  opts: { ok?: boolean; plannedOutage?: boolean; product?: string } = {},
 ): TsStreamFull =>
   ({
     stream_key: streamKey,
     channel,
     channel_id: 0,
-    product: 'Live',
+    // Live values: 'Live' for television, 'Live Triton HLS Radio' for radio — the string the
+    // video/audio grouping is derived from.
+    product: opts.product ?? 'Live',
     format,
     cdn,
     environment: 'PROD',
@@ -129,9 +131,15 @@ export const STREAMS_NORMAL: TsStreamFull[] = [
   ]),
   stream('s-own-hls', 'Channel One', 'HLS', 'RTE CDN', `${M}/.m3u8`, HOME()),
   // Deliberate coverage hole: no Fastly monitor for HLS → the matrix must show NOT MONITORED.
-  stream('s-radio', 'Radio One', 'HLS', 'GENERIC', 'https://radio.example.net/live.m3u8', [
-    vantage('GB-LND-AWS', '203.0.113.2', '198.51.100.99', 2.5),
-  ]),
+  stream(
+    's-radio',
+    'Radio One',
+    'HLS',
+    'GENERIC',
+    'https://radio.example.net/live.m3u8',
+    [vantage('GB-LND-AWS', '203.0.113.2', '198.51.100.99', 2.5)],
+    { product: 'Live Triton HLS Radio' },
+  ),
 ];
 
 /** A monitor labelled AKAMAI whose every probe was served from an RTÉ-owned prefix. */

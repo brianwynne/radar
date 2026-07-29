@@ -368,8 +368,8 @@ export const TS_DELIVERY_BODY = {
     platforms: ['Réalta', 'Fastly', 'Akamai'],
     monitors: [],
     summary: {
-      monitorCount: 3, channelCount: 1, platformCount: 3, okCount: 3, failingCount: 0, plannedOutageCount: 0,
-      coveragePercent: 66.7, monitoredCells: 2, possibleCells: 3, vantageCount: 3,
+      monitorCount: 3, channelCount: 2, platformCount: 3, okCount: 3, failingCount: 0, plannedOutageCount: 0,
+      coveragePercent: 66.7, monitoredCells: 2, possibleCells: 3, vantageCount: 3, videoMonitorCount: 2, audioMonitorCount: 1,
       attributionMismatchCount: 1, incomparableRowCount: 0, oldestSampleAgeSeconds: 900,
     },
     // One row: Réalta measured from Dublin+London, Akamai only from Paris → a shared location exists
@@ -378,12 +378,13 @@ export const TS_DELIVERY_BODY = {
       {
         channel: 'Channel One',
         format: 'MPD',
+        mediaKind: 'video',
         comparability: { comparable: true, headlineComparable: false, sharedLocations: ['GB-LND-LND'], reason: 'These CDNs are probed from different places, so their headline averages are not like-for-like — compare them at GB-LND-LND instead (AKAMAI lacks IE-D-AWS).' },
         cells: [
           {
             platform: 'Réalta', cdnLabel: 'RTE CDN', sharedSpeed: 0.2, sharedLocationCount: 1, unsharedLocations: ['IE-D-AWS'],
             monitor: {
-              streamKey: 's1', channel: 'Channel One', product: 'Live', format: 'MPD', cdnLabel: 'RTE CDN', platformClaimed: 'Réalta',
+              streamKey: 's1', channel: 'Channel One', product: 'Live', format: 'MPD', cdnLabel: 'RTE CDN', platformClaimed: 'Réalta', mediaKind: 'video',
               environment: 'PROD', manifestUrl: 'https://stream.example.net/one.mpd', plannedOutage: false,
               lastMonitoredAt: '2026-07-29T21:05:00Z', ok: true, statusPct: 100, history: [1, 1, 1, 1, 1], historyPct: 100,
               avgSpeed: 0.3, maxSpeed: 0.9, warnings: [], // headline 0.3 vs shared 0.2 → re-basing is visible
@@ -397,7 +398,7 @@ export const TS_DELIVERY_BODY = {
           {
             platform: 'Akamai', cdnLabel: 'AKAMAI', sharedSpeed: 2.4, sharedLocationCount: 1, unsharedLocations: ['FR-IDF-AWS'],
             monitor: {
-              streamKey: 's2', channel: 'Channel One', product: 'Live', format: 'MPD', cdnLabel: 'AKAMAI', platformClaimed: 'Akamai',
+              streamKey: 's2', channel: 'Channel One', product: 'Live', format: 'MPD', cdnLabel: 'AKAMAI', platformClaimed: 'Akamai', mediaKind: 'video',
               environment: 'PROD', manifestUrl: 'https://stream.example.net/one.mpd', plannedOutage: false,
               lastMonitoredAt: '2026-07-29T21:05:00Z', ok: true, statusPct: 100, history: [1, 1, 0, 1, 1], historyPct: 80,
               avgSpeed: 3.7, maxSpeed: 8.0,
@@ -406,6 +407,26 @@ export const TS_DELIVERY_BODY = {
                 { location: 'GB-LND-LND', country: 'England', region: 'London', supplier: 'Linode', popIp: '203.0.113.2', edgeIp: '198.51.100.10', ok: true, statusPct: 100, avgSpeed: 2.4, edgeIsRteOwned: false, renditions: [] },
                 { location: 'FR-IDF-AWS', country: 'France', region: 'Paris', supplier: 'Amazon Web Services', popIp: '203.0.113.3', edgeIp: '198.51.100.11', ok: true, statusPct: 100, avgSpeed: 3.9, edgeIsRteOwned: false, renditions: [] },
               ],
+            },
+          },
+        ],
+      },
+      {
+        channel: 'Radio One',
+        format: 'HLS',
+        mediaKind: 'audio',
+        comparability: { comparable: true, headlineComparable: true, sharedLocations: ['GB-LND-LND'], reason: null },
+        cells: [
+          { platform: 'Réalta', cdnLabel: null, monitor: null, sharedSpeed: null, sharedLocationCount: 0, unsharedLocations: [] },
+          { platform: 'Fastly', cdnLabel: null, monitor: null, sharedSpeed: null, sharedLocationCount: 0, unsharedLocations: [] },
+          {
+            platform: 'Akamai', cdnLabel: 'GENERIC', sharedSpeed: 2.5, sharedLocationCount: 1, unsharedLocations: [],
+            monitor: {
+              streamKey: 's3', channel: 'Radio One', product: 'Live Triton HLS Radio', format: 'HLS', cdnLabel: 'GENERIC', platformClaimed: 'Akamai', mediaKind: 'audio',
+              environment: 'PROD', manifestUrl: 'https://radio.example.net/live.m3u8', plannedOutage: false,
+              lastMonitoredAt: '2026-07-29T21:05:00Z', ok: true, statusPct: 100, history: [1, 1, 1, 1, 1], historyPct: 100,
+              avgSpeed: 2.5, maxSpeed: 2.5, warnings: [],
+              vantages: [{ location: 'GB-LND-LND', country: 'England', region: 'London', supplier: 'Linode', popIp: '203.0.113.2', edgeIp: '198.51.100.90', ok: true, statusPct: 100, avgSpeed: 2.5, edgeIsRteOwned: false, renditions: [] }],
             },
           },
         ],

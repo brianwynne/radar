@@ -827,109 +827,186 @@ tr.dc-subtotal td { border-top: 1px solid var(--line); background: var(--panel-m
 .spark-line.spark-hot { stroke: var(--danger); }
 
 /* ---- Touchstream delivery matrix ----
-   Built on the existing tokens; the only new visual devices are the ones the data needs: a hatched
-   "not monitored" cell (absence must not read as a pass), a discrete pass/fail ribbon, and a
-   relative speed bar. */
-.ts-page { display: flex; flex-direction: column; gap: 1rem; }
-.ts-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-.ts-title { margin: 0; }
-.ts-sub { margin: 0.15rem 0 0; font-size: 0.85rem; }
-.ts-head-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+   ONE grid, so a CDN column is a scannable vertical unit. Weight comes from a dark instrument
+   console (echoing the app chrome) above a light, precise grid — not from decoration. The only new
+   visual devices are ones the data needs: hatched "not monitored" cells, a discrete pass/fail
+   ribbon, and per-cell speed meters. */
+.ts-page { display: flex; flex-direction: column; gap: 0.9rem; }
+
+/* Console */
+.ts-console {
+  background: linear-gradient(160deg, #16212e 0%, var(--bg) 62%);
+  color: #eaf0f7; border-radius: 10px; padding: 1rem 1.1rem;
+  display: grid; grid-template-columns: minmax(210px, 1fr) auto; gap: 1rem 1.5rem; align-items: start;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.16), 0 8px 24px -12px rgba(16, 24, 40, 0.5);
+}
+.ts-console-id { min-width: 0; }
+.ts-eyebrow {
+  display: block; font-size: 0.62rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.14em; color: #8fa6c0;
+}
+.ts-console-title { margin: 0.2rem 0 0.15rem; font-size: 1.18rem; color: #fff; letter-spacing: -0.01em; }
+.ts-console-sub { display: flex; align-items: center; gap: 0.45rem; font-size: 0.78rem; color: #a9bdd4; flex-wrap: wrap; }
+.ts-live {
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.1em; padding: 0.1rem 0.35rem; border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12); color: #cfe0f0;
+}
+.ts-live.on { background: rgba(56, 193, 114, 0.2); color: #7ee2a8; }
+
+.ts-readouts { display: flex; gap: 1.4rem; align-items: center; flex-wrap: wrap; }
+.ts-readout { min-width: 0; }
+.ts-readout-arc { display: flex; align-items: center; gap: 0.65rem; color: #6fd3a0; }
+.ts-arc { display: block; }
+.ts-arc-text { fill: #fff; font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ts-readout-value {
+  font-size: 1.65rem; font-weight: 700; line-height: 1; color: #fff; font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+.ts-readout-value.bad { color: #ff9e94; }
+.ts-readout-value.warn { color: #ffca7a; }
+.ts-of { font-size: 0.9rem; font-weight: 600; color: #8fa6c0; }
+.ts-readout-label {
+  font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #8fa6c0;
+  margin-top: 0.2rem;
+}
+.ts-readout-sub { font-size: 0.7rem; color: #a9bdd4; }
+.ts-readout.flagged .ts-readout-label { color: #ffca7a; }
+
+.ts-basis { grid-column: 1 / -1; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  border-top: 1px solid rgba(255, 255, 255, 0.1); padding-top: 0.75rem; }
+.ts-basis-label { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #8fa6c0; }
+.ts-seg { display: inline-flex; background: rgba(255, 255, 255, 0.09); border-radius: 6px; padding: 2px; }
+.ts-seg button {
+  background: none; border: none; color: #bed0e2; font: inherit; font-size: 0.78rem; font-weight: 600;
+  padding: 0.25rem 0.7rem; border-radius: 4px; cursor: pointer;
+}
+.ts-seg button:hover { color: #fff; }
+.ts-seg button.on { background: #fff; color: var(--bg); }
+.ts-basis-help { margin: 0; font-size: 0.75rem; color: #a9bdd4; flex: 1 1 300px; min-width: 220px; }
+
 .ts-provenance {
-  margin: 0; padding: 0.5rem 0.7rem; font-size: 0.8rem; color: var(--ink-soft);
+  margin: 0; padding: 0.45rem 0.7rem; font-size: 0.78rem; color: var(--ink-soft);
   background: var(--panel-muted); border-left: 3px solid var(--info); border-radius: 0 4px 4px 0;
 }
 .ts-lasterror { margin-top: 0.4rem; font-size: 0.75rem; word-break: break-word; }
-
-/* KPI strip */
-.ts-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0.6rem; }
-.ts-kpi {
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.8rem;
-  box-shadow: var(--shadow);
-}
-.ts-kpi.flagged { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: var(--warn-bg); }
-.ts-kpi-donut { display: flex; align-items: center; gap: 0.7rem; }
-.ts-kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.ts-kpi-value.ok { color: var(--ok); }
-.ts-kpi-value.bad { color: var(--danger); }
-.ts-kpi-value.warn { color: var(--warn); }
-.ts-kpi-label { font-size: 0.72rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.03em; }
 .ts-warnings ul { margin: 0.35rem 0 0; padding-left: 1.1rem; font-size: 0.82rem; }
 .ts-warnings li + li { margin-top: 0.2rem; }
 
-/* Basis toggle — the page's signature control */
-.ts-controls { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
-.ts-basis { display: flex; align-items: center; gap: 0.2rem; }
-.ts-basis-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; margin-right: 0.3rem; }
-.ts-basis .subtab { border: 1px solid var(--line); border-radius: 6px; padding: 0.28rem 0.65rem; font-size: 0.8rem; }
-.ts-basis .subtab.active { background: var(--info-bg); border-color: var(--brand); color: var(--brand-ink); }
-.ts-basis-help { margin: 0; font-size: 0.78rem; flex: 1 1 320px; min-width: 240px; }
-
-/* Matrix */
-.ts-matrix { display: flex; flex-direction: column; gap: 0.5rem; }
-.ts-colhead { display: grid; gap: 0.5rem; padding: 0 0.5rem 0 0.5rem; }
-.ts-col {
-  display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft);
+/* The grid */
+.ts-grid {
+  display: grid; gap: 4px; align-items: stretch;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px;
+  box-shadow: var(--shadow); overflow-x: auto;
 }
+.ts-rail { display: flex; flex-direction: column; justify-content: flex-end; gap: 0.1rem; padding: 0.4rem 0.5rem 0.5rem; }
+.ts-rail-corner { justify-content: flex-end; }
+.ts-rail-hint, .ts-rail-empty {
+  font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft);
+}
+.ts-rail-name { display: flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; font-weight: 700; }
 .ts-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
-.ts-row { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; }
-.ts-rowhead {
-  display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.55rem 0.7rem;
-  background: none; border: none; border-bottom: 1px solid var(--line); cursor: pointer; font: inherit; text-align: left;
+.ts-rail-meta { font-size: 0.68rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.ts-rail-flag { color: var(--warn); }
+
+/* Group bands: video / audio */
+.ts-group {
+  display: flex; align-items: baseline; gap: 0.5rem; margin-top: 0.2rem;
+  padding: 0.35rem 0.5rem; border-radius: 5px; background: var(--panel-muted);
+  border-left: 3px solid var(--ink-soft);
 }
-.ts-rowhead:hover { background: var(--panel-muted); }
-.ts-caret { color: var(--ink-soft); width: 0.8rem; flex: none; }
-.ts-channel { font-weight: 700; }
-.ts-format { flex: none; }
-.ts-rowmeta { font-size: 0.78rem; margin-left: auto; }
-.ts-cells { display: grid; gap: 0.5rem; padding: 0.6rem; align-items: start; }
-.ts-row-note { margin: 0; padding: 0 0.7rem 0.6rem; font-size: 0.78rem; color: var(--warn); }
+.ts-group-video { border-left-color: var(--brand); }
+.ts-group-audio { border-left-color: #7b5ea7; }
+.ts-group-name { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; }
+.ts-group-hint { font-size: 0.7rem; color: var(--ink-soft); }
+.ts-group-count { margin-left: auto; font-size: 0.7rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+
+/* Row label (the sticky left column) */
+.ts-rowlabel {
+  position: sticky; left: 0; z-index: 1; background: var(--panel);
+  display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.5rem; min-width: 0;
+  border-right: 1px solid var(--line);
+}
+.ts-rowlabel.open { background: var(--info-bg); }
+.ts-rowchannel { font-weight: 700; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-rowfmt {
+  font-size: 0.6rem; font-weight: 700; letter-spacing: 0.06em; color: var(--ink-soft);
+  background: var(--panel-muted); border-radius: 3px; padding: 0.05rem 0.28rem; flex: none;
+}
+.ts-rowcount { margin-left: auto; font-size: 0.68rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; flex: none; }
+.ts-rowwarn { font-size: 0.6rem; font-weight: 700; color: var(--warn); cursor: help; flex: none; }
+.ts-rowwarn.hard { color: var(--danger); }
+.ts-rownote { margin: 0.1rem 0 0.3rem; padding: 0 0.5rem; font-size: 0.75rem; color: var(--warn); }
 
 /* Cells */
-.ts-cell { border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
-.ts-cell.failing { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: var(--danger-bg); }
-.ts-cell.outage { border-style: dashed; }
-/* Hatched: unmistakably different from a pass. */
-.ts-cell.empty {
-  align-items: center; justify-content: center; min-height: 68px; border-style: dashed; color: var(--ink-soft);
+.ts-cell {
+  display: flex; flex-direction: column; gap: 0.28rem; align-items: stretch; text-align: left;
+  padding: 0.45rem 0.5rem; min-width: 0; font: inherit; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--tint, var(--line));
+  border-radius: 5px; transition: background 120ms ease, box-shadow 120ms ease;
+}
+.ts-cell:hover { background: var(--panel-muted); }
+.ts-cell.selected { background: var(--info-bg); box-shadow: inset 0 0 0 1px var(--brand); }
+.ts-cell.failing { background: var(--danger-bg); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+.ts-cell.outage { border-top-style: dashed; border-right-style: dashed; border-bottom-style: dashed; }
+.ts-cell-empty {
+  align-items: center; justify-content: center; min-height: 74px; cursor: default; border-left-color: var(--line);
+  border-style: dashed; color: var(--ink-soft);
   background: repeating-linear-gradient(45deg, transparent, transparent 5px, var(--panel-muted) 5px, var(--panel-muted) 10px);
 }
-.ts-empty-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.ts-cell-top { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
-.ts-cdn { font-size: 0.74rem; font-weight: 700; }
-.ts-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ts-cell-empty:hover { background: repeating-linear-gradient(45deg, transparent, transparent 5px, var(--panel-muted) 5px, var(--panel-muted) 10px); }
+.ts-empty-label { font-size: 0.63rem; text-transform: uppercase; letter-spacing: 0.07em; }
+.ts-cell-row { display: flex; align-items: center; gap: 0.3rem; min-width: 0; }
+.ts-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
 .ts-dot.ok { background: var(--ok); }
 .ts-dot.bad { background: var(--danger); }
-.ts-ribbon { display: block; max-width: 100%; }
-.ts-nodata { font-size: 0.72rem; }
-.ts-cell-speed { display: flex; align-items: baseline; gap: 0.35rem; }
-.ts-speed { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-.ts-speed-note { font-size: 0.68rem; }
-.ts-speedbar { display: block; width: 100%; }
-.ts-cell-excluded { font-size: 0.68rem; }
-
-/* Drill-down: probe locations + renditions */
-.ts-row:not(.open) .ts-vantages { display: none; }
-.ts-vantages { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.2rem; padding-top: 0.4rem; border-top: 1px dashed var(--line); }
-.ts-vantage { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; }
-.ts-vantage.unshared { opacity: 0.55; }
-.ts-vantage-head { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
-.ts-loc { font-weight: 700; font-size: 0.72rem; }
-.ts-vantage-meta { display: flex; gap: 0.6rem; flex-wrap: wrap; font-size: 0.72rem; }
-.ts-vantage-meta code { font-size: 0.7rem; }
-.ts-rends { display: flex; flex-wrap: wrap; gap: 2px; }
-.ts-rend {
-  font-size: 0.62rem; padding: 0.05rem 0.25rem; border-radius: 2px; background: var(--ok-bg); color: var(--ok);
-  border: 1px solid transparent; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+.ts-cdn { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-flag {
+  font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  background: var(--warn-bg); color: var(--warn); border-radius: 3px; padding: 0.05rem 0.22rem; flex: none; cursor: help;
 }
-.ts-rend.bad { background: var(--danger-bg); color: var(--danger); }
-.ts-rend.stalled { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+.ts-flag-quiet { background: var(--panel-muted); color: var(--ink-soft); }
+.ts-cell-ribbon { display: block; height: 16px; }
+.ts-ribbon { display: block; width: 100%; height: 100%; }
+.ts-nodata { font-size: 0.6rem; color: var(--ink-soft); }
+.ts-cell-figure { align-items: baseline; gap: 0.35rem; }
+.ts-speed { font-size: 1.25rem; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.ts-speed-note { font-size: 0.6rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-meter { display: block; height: 3px; border-radius: 2px; background: var(--line); overflow: hidden; }
+.ts-meter-fill { display: block; height: 100%; border-radius: 2px; opacity: 0.8; }
+.ts-excluded { font-size: 0.6rem; color: var(--ink-soft); cursor: help; }
 
-@media (max-width: 900px) {
-  .ts-cells, .ts-colhead { grid-template-columns: 1fr !important; }
-  .ts-colhead { display: none; }
+/* Row detail: opens INSIDE the columns so probes stay comparable across CDNs */
+.ts-detail-label {
+  position: sticky; left: 0; background: var(--panel); border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 0.15rem; padding: 0.5rem;
+  font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink-soft);
+}
+.ts-detail-shared { text-transform: none; letter-spacing: 0; font-size: 0.65rem; }
+.ts-detail-cell { padding: 0.3rem 0.35rem 0.5rem; min-width: 0; border-left: 1px dashed var(--line); }
+.ts-detail-none { color: var(--ink-soft); font-size: 0.7rem; }
+.ts-detail-col { display: flex; flex-direction: column; gap: 0.3rem; }
+.ts-detail-head { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+.ts-probe { display: flex; flex-direction: column; gap: 0.1rem; padding-bottom: 0.25rem; border-bottom: 1px dotted var(--line); }
+.ts-probe.unshared { opacity: 0.5; }
+.ts-probe-top { display: flex; align-items: center; gap: 0.3rem; min-width: 0; }
+.ts-probe-loc { font-size: 0.68rem; font-weight: 700; font-family: ui-monospace, Menlo, monospace; }
+.ts-probe-geo { font-size: 0.63rem; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ts-probe-meta { display: flex; align-items: center; gap: 0.3rem; font-size: 0.63rem; flex-wrap: wrap; }
+.ts-probe-meta code { font-size: 0.62rem; }
+.ts-owned { font-size: 0.53rem; font-weight: 700; background: var(--ok-bg); color: var(--ok); border-radius: 2px; padding: 0 0.2rem; }
+.ts-probe-speed { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--ink-soft); }
+.ts-probe-tag { font-size: 0.53rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.05em; }
+.ts-probe-supplier { font-size: 0.6rem; color: var(--ink-soft); }
+/* Renditions as a dense tick strip — 14 per probe; the detail lives in the tooltip. */
+.ts-rends { display: flex; gap: 1.5px; flex-wrap: wrap; }
+.ts-rend { width: 7px; height: 7px; border-radius: 1px; background: var(--ok); opacity: 0.75; cursor: help; }
+.ts-rend.bad { background: var(--danger); opacity: 1; }
+.ts-rend.stalled { background: var(--warn); opacity: 1; }
+
+@media (max-width: 1000px) {
+  .ts-console { grid-template-columns: 1fr; }
+  .ts-grid { grid-template-columns: minmax(120px, 160px) repeat(auto-fit, minmax(150px, 1fr)) !important; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .ts-rowhead { transition: none; }
+  .ts-cell { transition: none; }
 }
