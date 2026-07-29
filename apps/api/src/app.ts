@@ -24,6 +24,7 @@ import { cacheTelemetryRoutes } from './routes/telemetry-cache.js';
 import { dnsObservationRoutes } from './routes/dns-observation.js';
 import { validationRoutes } from './routes/validation.js';
 import { cloudVisionRoutes } from './routes/cloudvision.js';
+import { touchstreamRoutes } from './routes/touchstream.js';
 import { cloudflareRoutes } from './routes/cloudflare.js';
 import { cloudflareConnectionRoutes } from './routes/cloudflare-connection.js';
 import { fastlyRoutes } from './routes/fastly.js';
@@ -65,6 +66,8 @@ import type { StreamAssuranceService } from './stream-assurance/service.js';
 import type { StreamAssuranceScheduler } from './stream-assurance/scheduler.js';
 import type { ValidationService } from './validation/index.js';
 import type { CloudVisionPoller } from './cloudvision/poller.js';
+import type { TouchstreamPoller } from './touchstream/poller.js';
+import type { TouchstreamClient } from './touchstream/client.js';
 import type { CloudVisionSource } from './cloudvision/types.js';
 import { createNs1Client } from './ns1/index.js';
 import { ns1WriteRoutes } from './routes/ns1-write.js';
@@ -99,6 +102,10 @@ export interface BuildDeps extends AuthDeps {
   validationRepository?: ValidationResultRepository;
   cloudVisionPoller?: CloudVisionPoller;
   cloudVisionMode?: CloudVisionSource;
+  /** Touchstream delivery monitoring (read-only, observed-synthetic tier). */
+  touchstreamPoller?: TouchstreamPoller;
+  touchstreamClient?: TouchstreamClient;
+  touchstreamEnvironment?: 'PROD' | 'NPROD';
   pniBandwidthRepository?: PniBandwidthRepository;
   cloudflarePoller?: CloudflarePoller;
   cloudflareManager?: CloudflareConnectorManager;
@@ -207,6 +214,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
         { name: 'audit', description: 'RADAR audit history (read-only)' },
         { name: 'change-detection', description: 'NS1 change-detection service status (read-only)' },
         { name: 'network-telemetry', description: 'CloudVision network telemetry (read-only)' },
+        { name: 'touchstream-delivery', description: 'Touchstream delivery monitoring (read-only, observed-synthetic — not viewer traffic)' },
         { name: 'routing-intelligence', description: 'bgp.tools external routing intelligence (read-only)' },
         { name: 'bgp-intelligence', description: 'RIPE BGP intelligence — external route visibility (read-only)' },
       ],
@@ -262,6 +270,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(dnsObservationRoutes, { prefix: '/api/v1', service: deps.dnsObservationService, repository: deps.dnsObservationRepository, staleAfterSeconds: deps.dnsObservationStaleAfterSeconds });
   await app.register(validationRoutes, { prefix: '/api/v1', service: deps.validationService, repository: deps.validationRepository });
   await app.register(cloudVisionRoutes, { prefix: '/api/v1', poller: deps.cloudVisionPoller, mode: deps.cloudVisionMode, pniHistory: deps.pniBandwidthRepository });
+  await app.register(touchstreamRoutes, { prefix: '/api/v1', poller: deps.touchstreamPoller, client: deps.touchstreamClient, environment: deps.touchstreamEnvironment });
   await app.register(cloudflareRoutes, { prefix: '/api/v1', poller: deps.cloudflarePoller });
   await app.register(cloudflareConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudflareManager });
   await app.register(fastlyRoutes, { prefix: '/api/v1', poller: deps.fastlyPoller, realtimeStreamer: deps.fastlyRealtimeStreamer });

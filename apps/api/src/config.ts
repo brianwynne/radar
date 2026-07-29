@@ -7,6 +7,7 @@ import { loadNs1Config, type Ns1Config } from './ns1/config.js';
 import { loadTelemetryConfig, type TelemetryConfig } from './telemetry/config.js';
 import { loadCacheTelemetryConfig, type CacheTelemetryConfig } from './telemetry/cache-config.js';
 import { loadCloudVisionConfig, type CloudVisionConfig } from './cloudvision/config.js';
+import { loadTouchstreamConfig, type TouchstreamConfig } from './touchstream/config.js';
 import { loadBgpToolsConfig, type BgpToolsConfig } from './bgptools/config.js';
 import { loadRipeConfig, type RipeConfig } from './ripe/config.js';
 import { loadCloudflareConfig, type CloudflareConfig } from './cloudflare/config.js';
@@ -130,6 +131,8 @@ export interface Config {
   cacheTelemetry: CacheTelemetryConfig;
   /** CloudVision network telemetry (disabled by default; mock or read-only live). */
   cloudVision: CloudVisionConfig;
+  /** Touchstream delivery monitoring (disabled by default; mock or read-only live). */
+  touchstream: TouchstreamConfig;
   cloudflare: CloudflareConfig;
   /** Fastly CDN observability (disabled by default; mock or read-only live). */
   fastly: FastlyConfig;
@@ -235,6 +238,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
 
   // CloudVision network telemetry: disabled by default; mock needs no creds, live fails fast.
   const cloudVision = loadCloudVisionConfig(env);
+  // Touchstream delivery monitoring: disabled by default; live needs BOTH credentials.
+  const touchstream = loadTouchstreamConfig(env);
   const bgpTools = loadBgpToolsConfig(env);
   const ripe = loadRipeConfig(env);
   const cloudflare = loadCloudflareConfig(env);
@@ -265,6 +270,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     telemetry,
     cacheTelemetry,
     cloudVision,
+    touchstream,
     bgpTools,
     ripe,
     cloudflare,

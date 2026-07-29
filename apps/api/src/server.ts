@@ -25,6 +25,10 @@ import { BgpToolsConnectorManager } from './bgptools/manager.js';
 import { RipeService } from './ripe/service.js';
 import { PostgresBgpToolsObservationRepository, PostgresBgpToolsIncidentRepository, PostgresBgpToolsMonitoredPrefixRepository, PostgresPniBandwidthRepository, PostgresRisEventRepository, PostgresDeliverySampleRepository, PostgresStreamAssuranceRepository } from '@radar/data';
 import { PniBandwidthRecorder } from './cloudvision/pni-recorder.js';
+import { TouchstreamPoller } from './touchstream/poller.js';
+import { MockTouchstreamClient } from './touchstream/mock-client.js';
+import { HttpTouchstreamReadClient } from './touchstream/http-client.js';
+import type { TouchstreamClient } from './touchstream/client.js';
 import { RisEventRecorder } from './ripe/ris-event-recorder.js';
 import { DeliveryRecorder } from './dashboard/delivery-recorder.js';
 import { StreamAssuranceService } from './stream-assurance/service.js';
@@ -96,6 +100,21 @@ async function main(): Promise<void> {
   });
   await cloudVisionManager.init();
   const cloudVisionPoller = cloudVisionManager.getPoller();
+
+  // Touchstream delivery monitoring: read-only, disabled by default. Mock needs no credentials; live
+  // requires BOTH the X-TS-ID app id and the bearer token (either alone is refused with 403).
+  const touchstreamClient: TouchstreamClient =
+    config.touchstream.mode === 'live'
+      ? new HttpTouchstreamReadClient({ config: config.touchstream })
+      : new MockTouchstreamClient();
+  const touchstreamPoller = new TouchstreamPoller({
+    client: touchstreamClient,
+    source: config.touchstream.mode,
+    enabled: config.touchstream.enabled,
+    intervalMs: config.touchstream.pollIntervalSeconds * 1000,
+    ownedPrefixes: config.touchstream.ownedPrefixes,
+    maxSampleAgeSeconds: config.touchstream.maxSampleAgeSeconds,
+  });
 
   // bgp.tools external routing intelligence: read-only connector. Non-secret settings come from
   // Postgres (Engineer-managed) when present, else the env base config; the Prometheus monitoring
@@ -208,6 +227,9 @@ async function main(): Promise<void> {
     validationRepository,
     cloudVisionPoller,
     cloudVisionMode: cloudVisionPoller.status().source,
+    touchstreamPoller,
+    touchstreamClient,
+    touchstreamEnvironment: config.touchstream.environment,
     pniBandwidthRepository,
     cloudVisionManager,
     cloudflarePoller,
@@ -237,6 +259,7 @@ async function main(): Promise<void> {
     await changeDetection?.stop();
     dnsObservationService.stop();
     cloudVisionManager.stop();
+    touchstreamPoller.stop();
     cloudflareManager.stop();
     fastlyManager.stop();
     akamaiManager.stop();
@@ -264,6 +287,7 @@ async function main(): Promise<void> {
       app.log.info({ intervalSeconds: config.dnsObservation.periodic.minIntervalSeconds }, 'periodic DNS observation started');
     }
     cloudVisionManager.start(); // self-guards: only polls when the effective config is enabled
+    touchstreamPoller.start(); // self-guards: start() is a no-op when the connector is disabled
     cloudflareManager.start();
     fastlyManager.start(); // self-guards: only polls when the effective config is enabled
     akamaiManager.start(); // self-guards: only polls S3 when enabled with credentials
