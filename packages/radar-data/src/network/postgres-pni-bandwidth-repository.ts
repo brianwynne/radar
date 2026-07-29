@@ -1,5 +1,7 @@
 import type {
   NewPniBandwidthSample,
+  PniBandwidthGap,
+  PniBandwidthGapQuery,
   PniBandwidthPoint,
   PniBandwidthRangeQuery,
   PniBandwidthRepository,
@@ -70,6 +72,30 @@ export class PostgresPniBandwidthRepository implements PniBandwidthRepository {
       inBps: numOrNull(r.in_bps),
       outBps: numOrNull(r.out_bps),
     }));
+  }
+
+  /** Gaps are derived from the DISTINCT capture times (one per poll, shared by every interface in
+   *  that poll), so a single link going quiet never counts — only a window where the recorder wrote
+   *  nothing at all. Deliberately at native resolution: the display bucket must not decide whether
+   *  an outage exists, or the same gap appears at one zoom level and vanishes at another. DISTINCT
+   *  keeps the transferred set to one row per poll (not one per interface per poll), and the
+   *  observed_at index bounds the scan to the window. */
+  async gaps(query: PniBandwidthGapQuery): Promise<PniBandwidthGap[]> {
+    const minGapMs = Math.max(1, query.minGapSeconds) * 1000;
+    const until = query.until ?? new Date();
+    const { rows } = await this.db.query<{ observed_at: unknown }>(
+      `SELECT DISTINCT observed_at
+         FROM pni_bandwidth_samples
+        WHERE observed_at >= $1 AND observed_at <= $2
+        ORDER BY observed_at`,
+      [query.since, until],
+    );
+    const times = rows.map((r) => toDate(r.observed_at).getTime()).filter(Number.isFinite);
+    const gaps: PniBandwidthGap[] = [];
+    for (let i = 1; i < times.length; i++) {
+      if (times[i] - times[i - 1] > minGapMs) gaps.push({ from: new Date(times[i - 1]), to: new Date(times[i]) });
+    }
+    return gaps;
   }
 
   async prune(olderThan: Date): Promise<number> {

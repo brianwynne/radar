@@ -7,7 +7,7 @@
 // Filter by PNI (legend chips), pick a direction, and a window width (default 1h). Read-only.
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api/client';
-import type { PniHistoryPoint, PniHistorySeries } from '../api/types';
+import type { PniHistoryOutage, PniHistoryPoint, PniHistorySeries } from '../api/types';
 import { EYEBALL } from '../network/peering';
 import { formatBps } from '../telemetry/format';
 
@@ -100,7 +100,10 @@ export function PniGraphs() {
   const [minutes, setMinutes] = useState<number>(60);
   const [dir, setDir] = useState<'out' | 'in'>('out');
   const [series, setSeries] = useState<PniHistorySeries[]>([]);
-  const [bucketSeconds, setBucketSeconds] = useState(15); // server-side downsample interval; drives gap detection
+  const [bucketSeconds, setBucketSeconds] = useState(15); // server-side downsample interval (display only)
+  // Recording gaps, detected server-side at native sample resolution (see the note by `breakMs`).
+  const [outages, setOutages] = useState<PniHistoryOutage[]>([]);
+  const [gapSeconds, setGapSeconds] = useState(0);
   // null = the default "eyeball-only" view (computed synchronously each render, so there is no
   // first-render flash of all links); a Set = the explicit shown/hidden state after the user filters.
   const [hidden, setHidden] = useState<Set<string> | null>(null);
@@ -128,6 +131,8 @@ export function PniGraphs() {
           if (!active) return;
           setSeries(res.series.filter((s) => !isUnbundledPni(s)));
           setBucketSeconds(res.bucketSeconds || 15);
+          setOutages(res.outages ?? []);
+          setGapSeconds(res.gapSeconds ?? 0);
           setWin({ start: res.windowStartMs, end: res.windowEndMs });
           setUpdatedAt(Date.now());
           setError(null);
@@ -185,16 +190,24 @@ export function PniGraphs() {
     return niceMax(max);
   }, [visible, dir]);
 
-  // "Server down" = a window where RADAR logged NOTHING at all (no sample on ANY interface), i.e. the
-  // recorder/server was down. Detected from the UNION of every series' sample times, so a single link
-  // going quiet never counts. A real gap is > 2.5 sample buckets (ignores ordinary jitter).
-  const gapMs = Math.max(bucketSeconds * 2.5, 45) * 1000;
-  const outages = useMemo(() => {
-    const times = [...new Set(series.flatMap((s) => s.points.map((p) => Date.parse(p.at))))].filter(Number.isFinite).sort((a, b) => a - b);
-    const gaps: { from: number; to: number }[] = [];
-    for (let i = 1; i < times.length; i++) if (times[i] - times[i - 1] > gapMs) gaps.push({ from: times[i - 1], to: times[i] });
-    return gaps;
-  }, [series, gapMs]);
+  // NOTE `outages` comes from the SERVER, detected at native sample resolution — deliberately not
+  // re-derived from the points drawn here, because those are bucketed by range: a 5-minute gap
+  // survives the 1-minute buckets of the 6h view but is absorbed by the 4-minute buckets of 24h, so
+  // the same outage used to appear at one zoom level and vanish at another.
+  //
+  // `breakMs` is purely a RENDERING threshold: how far apart two plotted points may be before the line is broken
+  // rather than interpolated. Bucket-relative is correct here (it is about the drawn points), and it
+  // still breaks a single link's own quiet period, which is not a recorder outage.
+  const breakMs = Math.max(bucketSeconds * 2.5, 45) * 1000;
+  // Break where a gap BEGINS. Gap bounds are native sample times while these points are bucket
+  // starts, so a gap seldom sits neatly between two plotted points: requiring the whole gap to fall
+  // between them draws the line straight through the shaded band, while breaking on any overlap
+  // breaks twice (the bucket holding the first sample after the gap starts before the gap ends).
+  // "Starts in this interval" is true for exactly one interval per gap.
+  const brokenAt = useMemo(
+    () => (a: number, b: number) => b - a > breakMs || outages.some((g) => g.fromMs >= a && g.fromMs < b),
+    [breakMs, outages],
+  );
 
   const x = (t: number) => PAD.l + ((t - tMin) / Math.max(1, tMax - tMin)) * PLOT_W;
   const y = (v: number) => PAD.t + (1 - v / yMax) * (H - PAD.t - PAD.b);
@@ -274,7 +287,17 @@ export function PniGraphs() {
         ) : (
           <button className="btn btn-sm" onClick={() => setViewEndMs(null)} title="Return to the live (most recent) window">◀ Live · viewing {hhmm(tMin)}–{hhmm(tMax)}</button>
         )}
-        <div className="pni-meta muted">{loading ? 'loading…' : 'drag to pan · hover for values'}</div>
+        <div className="pni-meta muted">
+          {loading ? 'loading…' : 'drag to pan · hover for values'}
+          {!loading && outages.length > 0 && (
+            <span
+              className="pni-gap-note"
+              title={`A gap is more than ${gapSeconds}s with no sample stored on any link — measured against the recorder's poll cadence, so the same gaps show at every range.`}
+            >
+              {' · '}{outages.length} recording gap{outages.length === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
       </div>
 
       {error && <div className="notice warn">{error}</div>}
@@ -310,22 +333,27 @@ export function PniGraphs() {
               {xTicks.map((t, i) => (
                 <text key={i} x={x(t)} y={H - PAD.b + 16} textAnchor="middle" className="pni-axis">{hhmm(t)}</text>
               ))}
-              {/* Server-down windows: shade + label the periods RADAR logged nothing (no data). */}
+              {/* Recording gaps: shade + label the windows RADAR stored no samples at all. The label
+                  claims only what RADAR can know — that nothing was recorded, not that a link or the
+                  server was down; the tooltip names the possible causes. */}
               <g clipPath="url(#pni-plot)" transform={drag ? `translate(${dragVx} 0)` : undefined}>
                 {outages.map((g, i) => {
-                  const x0 = Math.max(PAD.l, x(g.from));
-                  const x1 = Math.min(W - PAD.r, x(g.to));
+                  const x0 = Math.max(PAD.l, x(g.fromMs));
+                  const x1 = Math.min(W - PAD.r, x(g.toMs));
                   if (x1 - x0 < 1) return null;
+                  const mins = Math.max(1, Math.round((g.toMs - g.fromMs) / 60_000));
                   return (
                     <g key={`out-${i}`}>
-                      <rect x={x0} y={PAD.t} width={x1 - x0} height={H - PAD.t - PAD.b} className="pni-outage" />
-                      {x1 - x0 > 60 && <text x={(x0 + x1) / 2} y={PAD.t + 13} textAnchor="middle" className="pni-outage-label">no data · server down</text>}
+                      <rect x={x0} y={PAD.t} width={Math.max(2, x1 - x0)} height={H - PAD.t - PAD.b} className="pni-outage">
+                        <title>{`No telemetry recorded for ~${mins} min (${hhmm(g.fromMs)}–${hhmm(g.toMs)}). RADAR stored no samples on any link: the API was down or restarting, the CloudVision poll failed, or the write failed. Traffic itself is not known to have stopped.`}</title>
+                      </rect>
+                      {x1 - x0 > 60 && <text x={(x0 + x1) / 2} y={PAD.t + 13} textAnchor="middle" className="pni-outage-label">no telemetry recorded</text>}
                     </g>
                   );
                 })}
               </g>
               {/* Series (clipped to the plot, translated live while dragging for immediate feedback).
-                  Lines BREAK across a gap (> gapMs) so an outage is never drawn as a flat line. */}
+                  Lines BREAK across a recording gap so an outage is never drawn as a flat line. */}
               <g clipPath="url(#pni-plot)" transform={drag ? `translate(${dragVx} 0)` : undefined}>
                 {visible.map((s) => {
                   const pts = s.points.map((p) => ({ t: Date.parse(p.at), v: val(p) })).filter((p) => p.v !== null) as { t: number; v: number }[];
@@ -334,7 +362,7 @@ export function PniGraphs() {
                   const segs: { t: number; v: number }[][] = [];
                   let cur: { t: number; v: number }[] = [];
                   for (let i = 0; i < pts.length; i++) {
-                    if (i > 0 && pts[i].t - pts[i - 1].t > gapMs) { segs.push(cur); cur = []; }
+                    if (i > 0 && brokenAt(pts[i - 1].t, pts[i].t)) { segs.push(cur); cur = []; }
                     cur.push(pts[i]);
                   }
                   if (cur.length) segs.push(cur);

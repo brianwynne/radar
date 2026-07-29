@@ -346,14 +346,26 @@ describe('Network Telemetry page', () => {
     expect(screen.getByText('Eir CTW Po7').closest('button')!.className).toContain('off');
   });
 
-  it('flags a server-down window (no data logged) on the PNI chart', async () => {
+  it('renders the recording gaps the SERVER reports, and claims only that nothing was recorded', async () => {
     stubApi(NOC);
     const { container } = renderAt('/network');
     await screen.findByText('JPE00000001');
     fireEvent.click(screen.getByRole('button', { name: 'PNI / Interface Graphs' }));
     await screen.findByRole('button', { name: /Eyeball PNI/ });
-    // The fixture has a gap (11:40 → 11:59:50) where NO interface logged → a shaded outage band + label.
+    // The band comes from the response's `outages` (11:40 → 11:59:50), not from re-inspecting the
+    // bucketed points — that re-derivation is what made a gap appear at 6h and vanish at 24h.
     expect(container.querySelector('.pni-outage')).not.toBeNull();
-    expect(screen.getByText(/no data · server down/)).toBeInTheDocument();
+    expect(screen.getByText(/no telemetry recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/1 recording gap$/)).toBeInTheDocument();
+    // The label must not assert a cause RADAR cannot know (a link down, or the server being down).
+    const tip = container.querySelector('.pni-outage title')!.textContent!;
+    expect(tip).toContain('No telemetry recorded');
+    expect(tip).toContain('Traffic itself is not known to have stopped');
+    // …and the lines BREAK across it. The fixture's gap falls between bucket starts and is shorter
+    // than the bucket-relative break distance, so a straight line here would mean the band is drawn
+    // over an unbroken series — an outage rendered as if traffic had been measured through it.
+    // Three eyeball series are shown: Port-Channel7 and Port-Channel4 span the gap and split in two;
+    // Port-Channel9's samples both land after it, so it stays a single unbroken line.
+    expect(container.querySelectorAll('polyline')).toHaveLength(2 + 2 + 1);
   });
 });

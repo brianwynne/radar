@@ -407,6 +407,27 @@ describe('PostgresPniBandwidthRepository (pg-mem)', () => {
     expect(await new PostgresPniBandwidthRepository(db).insertBatch(new Date(), [])).toBe(0);
     expect(await count()).toBe(0);
   });
+
+  it('finds recording gaps at native resolution, and ignores one link going quiet', async () => {
+    const repo = new PostgresPniBandwidthRepository(db);
+    const t = (s: number) => new Date(Date.parse('2026-07-26T12:00:00.000Z') + s * 1000);
+    const link = (name: string) => ({ deviceId: 'JPN1', interfaceName: name, provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 1, outBps: 2 });
+    await repo.insertBatch(t(0), [link('Ethernet1'), link('Ethernet2')]);
+    // Ethernet2 stops reporting here — NOT a recording gap, because Ethernet1 still logged.
+    await repo.insertBatch(t(10), [link('Ethernet1')]);
+    await repo.insertBatch(t(20), [link('Ethernet1')]);
+    // Nothing at all for 5 minutes → the recorder logged nothing.
+    await repo.insertBatch(t(320), [link('Ethernet1'), link('Ethernet2')]);
+    await repo.insertBatch(t(330), [link('Ethernet1'), link('Ethernet2')]);
+
+    const gaps = await repo.gaps({ since: t(-60), until: t(600), minGapSeconds: 90 });
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0].from.toISOString()).toBe(t(20).toISOString());
+    expect(gaps[0].to.toISOString()).toBe(t(320).toISOString());
+    // A threshold above the gap's width finds nothing — the verdict follows the threshold, and the
+    // threshold follows the poll cadence, never a display bucket.
+    expect(await repo.gaps({ since: t(-60), until: t(600), minGapSeconds: 600 })).toEqual([]);
+  });
 });
 
 describe('PostgresRisEventRepository (pg-mem)', () => {

@@ -9,14 +9,19 @@ import { MockCloudVisionClient } from '../src/cloudvision/mock-client.js';
 import { CloudVisionPoller } from '../src/cloudvision/poller.js';
 import { DEFAULT_CLASSIFICATION_RULES, DEFAULT_PROVIDER_FOR_ASN } from '../src/cloudvision/classification-rules.js';
 import { MOCK_EDGE_DEVICE_IDS, type ScenarioName } from '../src/cloudvision/fixtures.js';
-import type { PniBandwidthPoint, PniBandwidthRepository } from '@radar/data';
+import type { PniBandwidthGap, PniBandwidthPoint, PniBandwidthRepository } from '@radar/data';
 
 const NOW = Date.parse('2026-07-15T12:00:00Z');
 
 // A stub PNI history store: `range` returns fixed points so we can assert the endpoint's grouping
 // and bucket-scaling without a database.
-function fakePniRepo(points: PniBandwidthPoint[]): PniBandwidthRepository {
-  return { insertBatch: async () => 0, prune: async () => 0, range: async () => points };
+function fakePniRepo(points: PniBandwidthPoint[], gaps: PniBandwidthGap[] = [], seen?: { minGapSeconds?: number }): PniBandwidthRepository {
+  return {
+    insertBatch: async () => 0,
+    prune: async () => 0,
+    range: async () => points,
+    gaps: async (q) => { if (seen) seen.minGapSeconds = q.minGapSeconds; return gaps; },
+  };
 }
 
 async function poller(scenario: ScenarioName = 'normal'): Promise<CloudVisionPoller> {
@@ -188,6 +193,38 @@ describe('CloudVision network-telemetry routes', () => {
       const s = (await a.inject({ url: '/api/v1/network/pni-history?minutes=60' })).json().series[0];
       expect(s.linkType).toBe('PRIVATE_PEERING');
       expect(s.datacentre).toBe('Citywest');
+      await a.close();
+    });
+
+    it('reports the SAME recording gaps at every range (they are not derived from the display bucket)', async () => {
+      // The regression: gap detection used to run on the bucketed points with a threshold of 2.5
+      // buckets, so a ~5-minute outage showed at 6h (60s buckets) and vanished at 24h (240s buckets).
+      const from = new Date('2026-07-15T12:30:00Z');
+      const to = new Date('2026-07-15T12:35:00Z'); // 5 min — under the old 24h threshold of 10 min
+      const a = await app('NOC_VIEWER', { pniHistory: fakePniRepo(points, [{ from, to }]) });
+      const six = (await a.inject({ url: '/api/v1/network/pni-history?minutes=360' })).json();
+      const day = (await a.inject({ url: '/api/v1/network/pni-history?minutes=1440' })).json();
+      const expected = [{ fromMs: from.getTime(), toMs: to.getTime() }];
+      expect(six.outages).toEqual(expected);
+      expect(day.outages).toEqual(expected);
+      expect(six.bucketSeconds).not.toBe(day.bucketSeconds); // buckets differ; the verdict does not
+      await a.close();
+    });
+
+    it('derives the gap threshold from the poll cadence, with a floor', async () => {
+      const seen: { minGapSeconds?: number } = {};
+      const a = await app('NOC_VIEWER', { pniHistory: fakePniRepo([], [], seen), poller: await poller() });
+      const res = (await a.inject({ url: '/api/v1/network/pni-history?minutes=60' })).json();
+      expect(seen.minGapSeconds).toBe(90); // 10s poll × 6 → below the 90s floor, so the floor wins
+      expect(res.gapSeconds).toBe(90);
+      await a.close();
+    });
+
+    it('reports no gaps and a zero threshold when no history store is configured', async () => {
+      const a = await app('NOC_VIEWER'); // no pniHistory
+      const res = (await a.inject({ url: '/api/v1/network/pni-history?minutes=60' })).json();
+      expect(res.outages).toEqual([]);
+      expect(res.gapSeconds).toBe(0);
       await a.close();
     });
 

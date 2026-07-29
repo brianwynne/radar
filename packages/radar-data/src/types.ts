@@ -278,6 +278,24 @@ export interface PniBandwidthRangeQuery {
   bucketSeconds: number;
 }
 
+/** A window in which NO sample was recorded on ANY interface — i.e. the recorder logged nothing.
+ *  Bounded by the last sample before the gap and the first sample after it. */
+export interface PniBandwidthGap {
+  from: Date;
+  to: Date;
+}
+
+export interface PniBandwidthGapQuery {
+  /** Inclusive lower bound. */
+  since: Date;
+  /** Inclusive upper bound (default: now). */
+  until?: Date;
+  /** Minimum spacing between consecutive samples to count as a gap, in seconds. Set from the
+   *  recorder's poll cadence, NOT from any display bucket — a gap is a fact about the recorded
+   *  data, so the same windows must be reported at every zoom level. */
+  minGapSeconds: number;
+}
+
 /** Append-only, bounded per-PNI bandwidth history. Writes come from the CloudVision poll;
  *  reads drive the PNI Graphs time-series. Old rows are pruned past the retention horizon. */
 export interface PniBandwidthRepository {
@@ -285,6 +303,9 @@ export interface PniBandwidthRepository {
   insertBatch(at: Date, samples: NewPniBandwidthSample[]): Promise<number>;
   /** Bucketed range, ordered by interface then time ascending. */
   range(query: PniBandwidthRangeQuery): Promise<PniBandwidthPoint[]>;
+  /** Windows with no recorded samples at all, at NATIVE sample resolution (independent of any
+   *  display bucketing), ordered ascending. */
+  gaps(query: PniBandwidthGapQuery): Promise<PniBandwidthGap[]>;
   /** Delete samples older than the cutoff. Returns rows removed. */
   prune(olderThan: Date): Promise<number>;
 }

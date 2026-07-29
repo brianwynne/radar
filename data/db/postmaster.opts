@@ -1,0 +1,1 @@
+/home/tighmaceoghan/radar/node_modules/@embedded-postgres/linux-arm64/native/bin/postgres "-D" "/home/tighmaceoghan/radar/data/db" "-p" "55432"

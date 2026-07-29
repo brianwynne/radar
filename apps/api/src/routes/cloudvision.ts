@@ -46,6 +46,12 @@ const pniHistoryQuery = z.object({
   endMs: z.coerce.number().int().positive().optional(),
 });
 const TARGET_POINTS = 360; // ~one point every 10s at 1h; ~every 4min at 24h
+// A recording gap is judged against the RECORDER's cadence, never the display bucket: an outage is a
+// property of the stored data, so the same windows must be reported at every zoom level. Six missed
+// polls (floor 90s) clears ordinary jitter and the poller's failure backoff.
+const GAP_POLL_MULTIPLE = 6;
+const MIN_GAP_SECONDS = 90;
+const DEFAULT_POLL_INTERVAL_MS = 10_000;
 
 const badRequest = (issues: z.ZodError['issues']) => issues.map((i) => `${i.path.join('.') || '(query)'}: ${i.message}`).join('; ');
 
@@ -195,11 +201,16 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
       const nowMs = Date.parse(now());
       // Clamp the window end to [now − 7d, now] (the retained horizon), then derive the start.
       const endMs = Math.min(nowMs, Math.max(nowMs - 7 * 24 * 60 * 60_000, parsed.data.endMs ?? nowMs));
-      if (!opts.pniHistory) return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds: 0, windowStartMs: endMs - minutes * 60_000, windowEndMs: endMs, series: [] };
+      if (!opts.pniHistory) return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds: 0, windowStartMs: endMs - minutes * 60_000, windowEndMs: endMs, gapSeconds: 0, outages: [], series: [] };
       const until = new Date(endMs);
       const since = new Date(endMs - minutes * 60_000);
       const bucketSeconds = Math.max(10, Math.ceil((minutes * 60) / TARGET_POINTS));
-      const points = await opts.pniHistory.range({ since, until, bucketSeconds });
+      const pollMs = opts.poller?.status().intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
+      const gapSeconds = Math.max(MIN_GAP_SECONDS, Math.round((pollMs / 1000) * GAP_POLL_MULTIPLE));
+      const [points, gaps] = await Promise.all([
+        opts.pniHistory.range({ since, until, bucketSeconds }),
+        opts.pniHistory.gaps({ since, until, minGapSeconds: gapSeconds }),
+      ]);
       // Group the flat, interface-then-time-ordered points into one series per link (with its
       // classification, so the UI can list eyeball networks first and tag each with its DC).
       const byKey = new Map<string, { deviceId: string; interfaceName: string; provider: string | null; linkType: string | null; datacentre: string | null; points: { at: string; inBps: number | null; outBps: number | null }[] }>();
@@ -214,7 +225,16 @@ export const cloudVisionRoutes: FastifyPluginAsync<CloudVisionRouteOptions> = as
         if (s.datacentre === null && p.datacentre !== null) s.datacentre = p.datacentre;
         s.points.push({ at: p.at.toISOString(), inBps: p.inBps, outBps: p.outBps });
       }
-      return { provenance: envelope(now()), rangeMinutes: minutes, bucketSeconds, windowStartMs: endMs - minutes * 60_000, windowEndMs: endMs, series: [...byKey.values()] };
+      return {
+        provenance: envelope(now()),
+        rangeMinutes: minutes,
+        bucketSeconds,
+        windowStartMs: endMs - minutes * 60_000,
+        windowEndMs: endMs,
+        gapSeconds,
+        outages: gaps.map((g) => ({ fromMs: g.from.getTime(), toMs: g.to.getTime() })),
+        series: [...byKey.values()],
+      };
     },
   );
 };

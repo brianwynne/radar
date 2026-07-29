@@ -1108,7 +1108,10 @@ export interface OttHistoryResponse { provenance: NetworkProvenance; count: numb
 // PNI bandwidth history — one downsampled in/out time-series per private-peering link, for the PNI Graphs page.
 export interface PniHistoryPoint { at: string; inBps: number | null; outBps: number | null }
 export interface PniHistorySeries { deviceId: string; interfaceName: string; provider: string | null; linkType: string | null; datacentre: string | null; points: PniHistoryPoint[] }
-export interface PniHistoryResponse { provenance: NetworkProvenance; rangeMinutes: number; bucketSeconds: number; windowStartMs: number; windowEndMs: number; series: PniHistorySeries[] }
+/** A window in which the recorder logged nothing on any link. Detected server-side at native sample
+ *  resolution, so the same windows are reported whatever range/bucket the chart is showing. */
+export interface PniHistoryOutage { fromMs: number; toMs: number }
+export interface PniHistoryResponse { provenance: NetworkProvenance; rangeMinutes: number; bucketSeconds: number; windowStartMs: number; windowEndMs: number; gapSeconds: number; outages: PniHistoryOutage[]; series: PniHistorySeries[] }
 
 // --- CloudVision connection settings (Engineer-managed; token write-only) ---
 

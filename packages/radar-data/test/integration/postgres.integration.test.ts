@@ -83,7 +83,7 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
 
     it('bootstraps schema_migrations, applies migrations in lexical order with timing', async () => {
       const applied = await migrate();
-      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations', '0005_connector_settings', '0006_bgptools', '0007_pni_bandwidth', '0008_pni_bandwidth_classification', '0009_ris_events', '0010_delivery_samples', '0011_stream_assurance', '0012_stream_assurance_alerts']);
+      expect(applied).toEqual(['0001_init', '0002_live_steering', '0003_dns_observations', '0004_ns1_validations', '0005_connector_settings', '0006_bgptools', '0007_pni_bandwidth', '0008_pni_bandwidth_classification', '0009_ris_events', '0010_delivery_samples', '0011_stream_assurance', '0012_stream_assurance_alerts', '0013_pni_bandwidth_index']);
       const cols = await pool.query<{ column_name: string }>(
         `SELECT column_name FROM information_schema.columns WHERE table_name = 'schema_migrations'`,
       );
@@ -386,6 +386,21 @@ describe.skipIf(!URL)('real PostgreSQL persistence', () => {
 
       // Prune everything before 2026-07-26 → only the old row goes.
       expect(await repo.prune(new Date('2026-07-26T00:00:00Z'))).toBe(1);
+    });
+
+    it('reports recording gaps from the distinct capture times, independent of any bucket', async () => {
+      const repo = new PostgresPniBandwidthRepository(q());
+      const t = (s: number) => new Date(Date.parse('2026-07-26T12:00:00.000Z') + s * 1000);
+      const link = (name: string) => ({ deviceId: 'JPN1', interfaceName: name, provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', inBps: 1, outBps: 2 });
+      for (const s of [0, 10, 20]) await repo.insertBatch(t(s), [link('Ethernet1'), link('Ethernet2')]);
+      for (const s of [320, 330]) await repo.insertBatch(t(s), [link('Ethernet1'), link('Ethernet2')]);
+
+      const gaps = await repo.gaps({ since: t(-60), until: t(600), minGapSeconds: 90 });
+      expect(gaps).toHaveLength(1);
+      expect(gaps[0].from.getTime()).toBe(t(20).getTime());
+      expect(gaps[0].to.getTime()).toBe(t(320).getTime());
+      // Same underlying data, any display bucket → the same single gap (the reported 24h-vs-6h bug).
+      expect(await repo.gaps({ since: t(-60), until: t(600), minGapSeconds: 90 })).toEqual(gaps);
     });
   });
 

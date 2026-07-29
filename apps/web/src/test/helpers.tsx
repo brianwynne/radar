@@ -361,17 +361,24 @@ export const NETWORK_HISTORY_BODY = {
 };
 
 export const PNI_HISTORY_BODY = {
-  provenance: cvProv, rangeMinutes: 60, bucketSeconds: 10,
+  // Deliberately the 24h shape: 4-minute display buckets around a 5-minute recording gap (11:52 →
+  // 11:57) — the case that used to vanish at this zoom level. Note the points are bucket STARTS, so
+  // the gap's end (11:57) lands PAST the next plotted point (the 11:56 bucket holds the first sample
+  // after the gap). The gap is also shorter than the bucket-relative line-break distance, so only the
+  // server-reported window can reveal it.
+  provenance: cvProv, rangeMinutes: 1440, bucketSeconds: 240,
   windowStartMs: Date.parse('2026-07-15T11:00:00Z'), windowEndMs: Date.parse('2026-07-15T12:00:00Z'),
+  gapSeconds: 90,
+  outages: [{ fromMs: Date.parse('2026-07-15T11:52:00Z'), toMs: Date.parse('2026-07-15T11:57:00Z') }],
   series: [
     { deviceId: 'JPE00000001', interfaceName: 'Port-Channel7', provider: 'Eir', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', points: [
-      { at: '2026-07-15T11:40:00Z', inBps: 8e9, outBps: 41e9 }, // then a server-down gap (RADAR not logging)…
-      { at: '2026-07-15T11:59:50Z', inBps: 8e9, outBps: 40e9 }, // …resumes here
+      { at: '2026-07-15T11:48:00Z', inBps: 8e9, outBps: 41e9 }, // then a recording gap (nothing stored)…
+      { at: '2026-07-15T11:56:00Z', inBps: 8e9, outBps: 40e9 }, // …the bucket the first sample after it fell in
       { at: '2026-07-15T12:00:00Z', inBps: 9e9, outBps: 44e9 },
     ] },
     { deviceId: 'JPE00000001', interfaceName: 'Port-Channel4', provider: 'Sky', linkType: 'PRIVATE_PEERING', datacentre: 'Citywest', points: [
-      { at: '2026-07-15T11:40:00Z', inBps: 3e9, outBps: 59e9 },
-      { at: '2026-07-15T11:59:50Z', inBps: 3e9, outBps: 60e9 },
+      { at: '2026-07-15T11:48:00Z', inBps: 3e9, outBps: 59e9 },
+      { at: '2026-07-15T11:56:00Z', inBps: 3e9, outBps: 60e9 },
       { at: '2026-07-15T12:00:00Z', inBps: 3.2e9, outBps: 66e9 },
     ] },
     // A stray physical sub-port CVaaS failed to resolve as a LAG member — must be filtered out (bug fix).
