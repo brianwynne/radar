@@ -12,6 +12,7 @@ import { requirePermission } from '../auth/guards.js';
 import { buildHistory } from '../touchstream/adapter.js';
 import { TouchstreamError, type TouchstreamClient } from '../touchstream/client.js';
 import type { TouchstreamPoller } from '../touchstream/poller.js';
+import type { TouchstreamConnectorManager } from '../touchstream/manager.js';
 
 export interface TouchstreamRouteOptions {
   poller?: TouchstreamPoller;
@@ -19,7 +20,21 @@ export interface TouchstreamRouteOptions {
   client?: TouchstreamClient;
   environment?: 'PROD' | 'NPROD';
   maxErrorEntries?: number;
+  /** Engineer-managed connection settings (credentials encrypted at rest, never returned). */
+  manager?: TouchstreamConnectorManager;
 }
+
+/** Credentials are WRITE-ONLY: blank retains what is stored, a value replaces it, and both halves
+ *  must be supplied together because Touchstream refuses either alone. */
+const connectionInput = z.object({
+  enabled: z.boolean().optional(),
+  mode: z.enum(['mock', 'live']).optional(),
+  endpoint: z.string().max(400).nullable().optional(),
+  environment: z.enum(['PROD', 'NPROD']).optional(),
+  appId: z.string().max(400).optional(),
+  token: z.string().max(2000).optional(),
+  clearCredentials: z.boolean().optional(),
+});
 
 const NOTICE =
   'Touchstream delivery monitoring is read-only and observational. Probes run from cloud/datacentre vantage points, so this is measured synthetic delivery — NOT viewer traffic, and not evidence of what a subscriber on any ISP received.';
@@ -30,6 +45,9 @@ const historyQuery = z.object({
 });
 
 const DEFAULT_HISTORY_MINUTES = 24 * 60;
+
+/** Who made the change, for the audit trail. */
+const actorOf = (req: { principal?: { subject?: string } | null }): string | null => req.principal?.subject ?? null;
 
 export const touchstreamRoutes: FastifyPluginAsync<TouchstreamRouteOptions> = async (app, opts) => {
   const now = () => new Date().toISOString();
@@ -107,6 +125,58 @@ export const touchstreamRoutes: FastifyPluginAsync<TouchstreamRouteOptions> = as
   );
 
   app.get(
+    '/touchstream/connection',
+    {
+      preHandler: requirePermission('connector.manage'),
+      schema: schema('Touchstream connection settings', 'Read the Engineer-managed connection. Credentials are write-only — this reports only whether each is configured, never its value.'),
+    },
+    async (_req, reply) => {
+      if (!opts.manager) return reply.code(503).send({ code: 'TOUCHSTREAM_DISABLED', message: 'Touchstream settings storage is unavailable.' });
+      return { provenance: envelope(), connection: opts.manager.view() };
+    },
+  );
+
+  app.put(
+    '/touchstream/connection',
+    {
+      preHandler: requirePermission('connector.manage'),
+      schema: schema('Update Touchstream connection', 'Set mode, API base, environment and the credential pair. Leave both credential fields blank to keep the stored pair; supply BOTH to replace it; clearCredentials removes it.'),
+    },
+    async (req, reply) => {
+      if (!opts.manager) return reply.code(503).send({ code: 'TOUCHSTREAM_DISABLED', message: 'Touchstream settings storage is unavailable.', correlationId: req.id });
+      const parsed = connectionInput.safeParse(req.body);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          code: 'INVALID_REQUEST',
+          message: parsed.error.issues.map((i) => `${i.path.join('.') || '(body)'}: ${i.message}`).join('; '),
+          correlationId: req.id,
+        });
+      }
+      try {
+        const connection = await opts.manager.updateSettings(parsed.data, actorOf(req));
+        return { provenance: envelope(), connection };
+      } catch (err) {
+        if (err instanceof TouchstreamError) {
+          return reply.code(err.code === 'TOUCHSTREAM_AUTH' ? 400 : 409).send({ code: err.code, message: err.message, correlationId: req.id });
+        }
+        throw err;
+      }
+    },
+  );
+
+  app.post(
+    '/touchstream/connection/test',
+    {
+      preHandler: requirePermission('connector.manage'),
+      schema: schema('Test the Touchstream connection', 'Read-only check: lists probe locations and monitored streams, reporting the counts. Issues no writes.'),
+    },
+    async (req, reply) => {
+      if (!opts.manager) return reply.code(503).send({ code: 'TOUCHSTREAM_DISABLED', message: 'Touchstream settings storage is unavailable.', correlationId: req.id });
+      return { provenance: envelope(), result: await opts.manager.test() };
+    },
+  );
+
+  app.get(
     '/touchstream/history',
     {
       preHandler: requirePermission('dns.explain.read'),
@@ -124,17 +194,18 @@ export const touchstreamRoutes: FastifyPluginAsync<TouchstreamRouteOptions> = as
           correlationId: req.id,
         });
       }
-      if (!opts.client) {
+      const client = opts.manager?.getClient() ?? opts.client;
+      if (!client) {
         return reply.code(503).send({ code: 'TOUCHSTREAM_DISABLED', message: 'The Touchstream connector is not configured.', correlationId: req.id });
       }
       const minutes = parsed.data.minutes ?? DEFAULT_HISTORY_MINUTES;
       const toMs = Date.now();
       const fromMs = toMs - minutes * 60_000;
-      const environment = opts.environment ?? 'PROD';
+      const environment = opts.manager?.view().environment ?? opts.environment ?? 'PROD';
       const query = { environment, startEpochSeconds: Math.floor(fromMs / 1000), endEpochSeconds: Math.floor(toMs / 1000) };
       try {
         // Both reads are independent; run them together so the window is fetched in one round trip.
-        const [stats, errors] = await Promise.all([opts.client.fetchStats(query), opts.client.fetchErrors(query)]);
+        const [stats, errors] = await Promise.all([client.fetchStats(query), client.fetchErrors(query)]);
         return {
           provenance: envelope(),
           history: buildHistory({ stats, errors, fromMs, toMs, environment, maxErrors: opts.maxErrorEntries ?? 500 }),

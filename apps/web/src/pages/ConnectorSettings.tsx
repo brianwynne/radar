@@ -11,6 +11,8 @@ import type {
   AkamaiConnectionSettings, AkamaiConnectionUpdate, AkamaiConnectionTestResult,
   Ns1ConnectionSettings, Ns1ConnectionUpdate, Ns1ConnectionTestResult,
   BgpToolsConnection, BgpToolsConnectionUpdate, BgpToolsConnectionTest, MonitoredPrefixItem,
+  TsConnection,
+  TsConnectionTest,
 } from '../api/types';
 
 export function ConnectorSettings() {
@@ -26,7 +28,168 @@ export function ConnectorSettings() {
       <FastlyConnectorForm />
       <AkamaiConnectorForm />
       <BgpToolsConnectorForm />
+      <TouchstreamConnectorForm />
     </section>
+  );
+}
+
+
+// ---- Touchstream (delivery monitoring) -------------------------------------------------------
+// Touchstream needs TWO credentials together: the X-TS-ID app id and a bearer token. Either alone is
+// refused with 403, so both fields are write-only and must be filled together to change them.
+
+function TouchstreamConnectorForm() {
+  const [view, setView] = useState<TsConnection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [testResult, setTestResult] = useState<TsConnectionTest | null>(null);
+
+  const [enabled, setEnabled] = useState(false);
+  const [mode, setMode] = useState<'mock' | 'live'>('mock');
+  const [endpoint, setEndpoint] = useState('');
+  const [environment, setEnvironment] = useState<'PROD' | 'NPROD'>('PROD');
+  // Write-only: never populated from the server, only ever sent.
+  const [appId, setAppId] = useState('');
+  const [token, setToken] = useState('');
+  const [clearCredentials, setClearCredentials] = useState(false);
+
+  const load = () =>
+    api
+      .tsConnection()
+      .then((res) => {
+        setView(res.connection);
+        setEnabled(res.connection.enabled);
+        setMode(res.connection.mode);
+        setEndpoint(res.connection.endpoint ?? '');
+        setEnvironment(res.connection.environment);
+        setError(null);
+      })
+      .catch(() => setError('Could not load the Touchstream connection.'))
+      .finally(() => setLoading(false));
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const save = async () => {
+    setSaved(false);
+    setError(null);
+    try {
+      const res = await api.tsConnectionUpdate({
+        enabled,
+        mode,
+        endpoint: endpoint.trim() === '' ? null : endpoint.trim(),
+        environment,
+        ...(clearCredentials ? { clearCredentials: true } : {}),
+        ...(appId.trim() ? { appId: appId.trim() } : {}),
+        ...(token.trim() ? { token: token.trim() } : {}),
+      });
+      setView(res.connection);
+      setAppId('');
+      setToken('');
+      setClearCredentials(false);
+      setSaved(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not save the Touchstream connection.');
+    }
+  };
+
+  const test = async () => {
+    setTestResult(null);
+    setError(null);
+    try {
+      setTestResult((await api.tsConnectionTest()).result);
+    } catch {
+      setError('The connection test could not run.');
+    }
+  };
+
+  if (loading) return <p className="muted">Loading Touchstream connection…</p>;
+
+  const onlyOneCredential = (appId.trim() === '') !== (token.trim() === '');
+
+  return (
+    <div className="card">
+      <h2>Touchstream delivery monitoring</h2>
+      <p className="muted">
+        Read-only OTT/CDN monitoring. Touchstream requires <strong>both</strong> credentials together — the app id sent as
+        <code> X-TS-ID</code> and a bearer token. Either one on its own is refused, so change them as a pair.
+      </p>
+
+      {view?.degraded && <div className="notice warn">{view.degraded}</div>}
+      {!view?.masterKeyAvailable && (
+        <div className="notice warn">
+          No master key is available, so a credential cannot be stored. Provision <code>/run/secrets/radar_master_key</code> first.
+        </div>
+      )}
+      {error && <div className="notice danger">{error}</div>}
+      {saved && <div className="notice info">Saved.</div>}
+
+      <div className="form-grid">
+        <label>
+          <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} /> Enabled
+        </label>
+        <label>
+          Mode
+          <select value={mode} onChange={(e) => setMode(e.target.value as 'mock' | 'live')}>
+            <option value="mock">mock</option>
+            <option value="live">live</option>
+          </select>
+        </label>
+        <label>
+          API base
+          <input value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://tsi.touchstream.global" />
+        </label>
+        <label>
+          Environment
+          <select value={environment} onChange={(e) => setEnvironment(e.target.value as 'PROD' | 'NPROD')}>
+            <option value="PROD">PROD</option>
+            <option value="NPROD">NPROD</option>
+          </select>
+        </label>
+        <label>
+          App id (X-TS-ID)
+          <input value={appId} onChange={(e) => setAppId(e.target.value)} autoComplete="off" placeholder={view?.appIdConfigured ? 'configured — leave blank to keep' : 'not set'} />
+        </label>
+        <label>
+          Bearer token
+          <input type="password" value={token} onChange={(e) => setToken(e.target.value)} autoComplete="off" placeholder={view?.tokenConfigured ? 'configured — leave blank to keep' : 'not set'} />
+        </label>
+        <label>
+          <input type="checkbox" checked={clearCredentials} onChange={(e) => setClearCredentials(e.target.checked)} /> Remove the stored credentials
+        </label>
+      </div>
+
+      {onlyOneCredential && (
+        <div className="notice warn">Enter both the app id and the bearer token — Touchstream refuses either on its own.</div>
+      )}
+
+      <div className="form-actions">
+        <button className="btn" onClick={save} disabled={onlyOneCredential}>
+          Save
+        </button>
+        <button className="btn" onClick={test}>
+          Test connection
+        </button>
+      </div>
+
+      {testResult && (
+        <div className={`notice ${testResult.ok ? 'info' : 'danger'}`}>
+          {testResult.ok
+            ? `Connected — ${testResult.monitorCount} monitored stream${testResult.monitorCount === 1 ? '' : 's'} across ${testResult.locationCount} probe location${testResult.locationCount === 1 ? '' : 's'}.`
+            : (testResult.error ?? 'The connection failed.')}
+        </div>
+      )}
+
+      {view && (
+        <p className="muted">
+          {view.appIdConfigured && view.tokenConfigured ? 'Both credentials are stored' : 'Credentials incomplete'}
+          {view.credentialSetAt ? ` · set ${new Date(view.credentialSetAt).toLocaleString()}` : ''}
+          {view.updatedBy ? ` by ${view.updatedBy}` : ''}
+        </p>
+      )}
+    </div>
   );
 }
 

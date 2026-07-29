@@ -68,6 +68,7 @@ import type { ValidationService } from './validation/index.js';
 import type { CloudVisionPoller } from './cloudvision/poller.js';
 import type { TouchstreamPoller } from './touchstream/poller.js';
 import type { TouchstreamClient } from './touchstream/client.js';
+import type { TouchstreamConnectorManager } from './touchstream/manager.js';
 import type { CloudVisionSource } from './cloudvision/types.js';
 import { createNs1Client } from './ns1/index.js';
 import { ns1WriteRoutes } from './routes/ns1-write.js';
@@ -105,6 +106,7 @@ export interface BuildDeps extends AuthDeps {
   /** Touchstream delivery monitoring (read-only, observed-synthetic tier). */
   touchstreamPoller?: TouchstreamPoller;
   touchstreamClient?: TouchstreamClient;
+  touchstreamManager?: TouchstreamConnectorManager;
   touchstreamEnvironment?: 'PROD' | 'NPROD';
   pniBandwidthRepository?: PniBandwidthRepository;
   cloudflarePoller?: CloudflarePoller;
@@ -270,7 +272,7 @@ export async function buildApp(config: Config, deps: BuildDeps = {}): Promise<Fa
   await app.register(dnsObservationRoutes, { prefix: '/api/v1', service: deps.dnsObservationService, repository: deps.dnsObservationRepository, staleAfterSeconds: deps.dnsObservationStaleAfterSeconds });
   await app.register(validationRoutes, { prefix: '/api/v1', service: deps.validationService, repository: deps.validationRepository });
   await app.register(cloudVisionRoutes, { prefix: '/api/v1', poller: deps.cloudVisionPoller, mode: deps.cloudVisionMode, pniHistory: deps.pniBandwidthRepository });
-  await app.register(touchstreamRoutes, { prefix: '/api/v1', poller: deps.touchstreamPoller, client: deps.touchstreamClient, environment: deps.touchstreamEnvironment });
+  await app.register(touchstreamRoutes, { prefix: '/api/v1', poller: deps.touchstreamPoller, client: deps.touchstreamClient, manager: deps.touchstreamManager, environment: deps.touchstreamEnvironment });
   await app.register(cloudflareRoutes, { prefix: '/api/v1', poller: deps.cloudflarePoller });
   await app.register(cloudflareConnectionRoutes, { prefix: '/api/v1', manager: deps.cloudflareManager });
   await app.register(fastlyRoutes, { prefix: '/api/v1', poller: deps.fastlyPoller, realtimeStreamer: deps.fastlyRealtimeStreamer });

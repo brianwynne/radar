@@ -1582,3 +1582,24 @@ export interface TsStat { cdnLabel: string; platform: TsPlatform; format: string
 export interface TsErrorEntry { at: string; channel: string | null; cdnLabel: string; platform: TsPlatform; format: string | null; location: string | null; urlName: string | null; url: string | null; statusCode: string | null; statusText: string | null; plannedOutage: boolean }
 export interface TsHistory { fromMs: number; toMs: number; environment: string; stats: TsStat[]; errors: TsErrorEntry[]; truncated: boolean }
 export interface TsHistoryResponse { provenance: TsProvenance; history: TsHistory }
+
+/** Touchstream connection (Engineer-managed). Credentials are WRITE-ONLY: the API reports only
+ *  whether each is configured. Both halves must be supplied together — Touchstream refuses either
+ *  on its own. */
+export interface TsConnection {
+  connector: 'touchstream';
+  enabled: boolean;
+  mode: 'mock' | 'live';
+  endpoint: string | null;
+  environment: 'PROD' | 'NPROD';
+  appIdConfigured: boolean;
+  tokenConfigured: boolean;
+  credentialSetAt: string | null;
+  updatedBy: string | null;
+  degraded: string | null;
+  masterKeyAvailable: boolean;
+}
+export interface TsConnectionResponse { provenance: TsProvenance; connection: TsConnection }
+export interface TsConnectionInput { enabled?: boolean; mode?: 'mock' | 'live'; endpoint?: string | null; environment?: 'PROD' | 'NPROD'; appId?: string; token?: string; clearCredentials?: boolean }
+export interface TsConnectionTest { ok: boolean; locationCount?: number; monitorCount?: number; error?: string; code?: string }
+export interface TsConnectionTestResponse { provenance: TsProvenance; result: TsConnectionTest }
