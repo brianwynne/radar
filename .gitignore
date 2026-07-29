@@ -13,3 +13,5 @@ secrets/
 
 # Session scratch — temp files, tokens, downloaded toolchains (never commit)
 scratchpad/
+# Local Postgres data directories (embedded-postgres defaults to ./data/db — never commit these).
+data/
