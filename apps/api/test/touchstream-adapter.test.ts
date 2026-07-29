@@ -149,6 +149,22 @@ describe('buildSnapshot — attribution (the mislabelled-CDN finding)', () => {
     expect(m.warnings.some((w) => w.kind === 'attribution_mismatch')).toBe(true);
   });
 
+  it('reports a PROPORTION when only some probes were served from owned edges', () => {
+    // Observed live and it moves between polls: a "GOOGLE" monitor served from Google at one probe
+    // and from RTÉ prefixes at the others. Claiming either extreme would misstate the observation.
+    const streams = structuredClone(STREAMS_MISLABELLED);
+    const m0 = streams.find((x) => x.stream_key === 's-mislabelled')!;
+    (m0.location_detail![0] as { edge_ip_addr: string }).edge_ip_addr = '198.51.100.55'; // a genuine third party
+    const m = snap(streams).monitors.find((x) => x.streamKey === 's-mislabelled')!;
+    const split = m.warnings.find((w) => w.kind === 'attribution_split');
+    expect(split).toBeDefined();
+    expect(split!.message).toContain('1 of 2 probes');
+    expect(m.warnings.some((w) => w.kind === 'attribution_mismatch')).toBe(false);
+    const s = snap(streams).summary;
+    expect(s.attributionSplitCount).toBe(1);
+    expect(s.attributionMismatchCount).toBe(0);
+  });
+
   it('does not flag a third-party label served from third-party edges', () => {
     const s = snap();
     const fastly = s.monitors.find((x) => x.platformClaimed === 'Fastly')!;

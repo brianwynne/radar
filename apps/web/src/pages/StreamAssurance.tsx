@@ -2,6 +2,7 @@
 // per-profile CDN comparison and standards findings. A viewing engineer can trigger a diagnostic
 // run. Follows the existing RADAR visual language (cards, matrix tables, badges, notices).
 import { Component, Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { TouchstreamDelivery } from '../features/TouchstreamDelivery';
 import { api, ApiError } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import type { SaAlert, SaChannel, SaDiscoveredManifest, SaEndpointInput, SaFinding, SaObservation, SaProfileInput, SaProfileSummary, SaRun } from '../api/types';
@@ -396,6 +397,9 @@ export function StreamAssurance() {
   const { hasPermission } = useAuth();
   const canRun = hasPermission('dns.explain.read');
   const canManage = hasPermission('connector.manage');
+  // Two sources of delivery truth on one page: RADAR's own conformance runs, and Touchstream's
+  // independent monitoring. Separate tabs — they answer different questions and must not be blended.
+  const [tab, setTab] = useState<'tests' | 'touchstream'>('tests');
   const [profiles, setProfiles] = useState<SaProfileSummary[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -466,28 +470,35 @@ export function StreamAssurance() {
       <header className="page-head">
         <h1>Stream Tests</h1>
         <div className="head-meta">
-          <span className="muted">DASH / HLS / CMAF conformance · cross-CDN consistency</span>
-          {canManage && !creating && <button className="btn" onClick={() => setCreating(true)}>New profile</button>}
+          <span className="muted">DASH / HLS / CMAF conformance · cross-CDN consistency · Touchstream monitoring</span>
+          {tab === 'tests' && canManage && !creating && <button className="btn" onClick={() => setCreating(true)}>New profile</button>}
         </div>
       </header>
 
-      {error && <div className="notice danger">{error}</div>}
+      <nav className="subtabs">
+        <button className={`subtab ${tab === 'tests' ? 'active' : ''}`} onClick={() => setTab('tests')}>Conformance &amp; CDN Consistency</button>
+        <button className={`subtab ${tab === 'touchstream' ? 'active' : ''}`} onClick={() => setTab('touchstream')}>Touchstream Delivery</button>
+      </nav>
 
-      {creating && (
+      {tab === 'touchstream' && <TouchstreamDelivery />}
+
+      {tab === 'tests' && error && <div className="notice danger">{error}</div>}
+
+      {tab === 'tests' && creating && (
         <div className="sa-detail" style={{ marginBottom: '1rem' }}>
           <div className="sa-detail-head"><h2 style={{ margin: 0 }}>New Stream Test profile</h2></div>
           <NewProfileForm onCreated={onCreated} onCancel={() => setCreating(false)} />
         </div>
       )}
 
-      {!creating && profiles && profiles.length === 0 && (
+      {tab === 'tests' && !creating && profiles && profiles.length === 0 && (
         <div className="notice info">
           No Stream Test profiles configured yet.{' '}
           {canManage ? <button className="linklike" onClick={() => setCreating(true)}>Add one</button> : 'An Engineer can add one (channel + CDN endpoints).'}
         </div>
       )}
 
-      {!creating && profiles && profiles.length > 0 && (
+      {tab === 'tests' && !creating && profiles && profiles.length > 0 && (
         <div className="sa-layout">
           <nav className="sa-profiles">
             {profiles.map((p) => (

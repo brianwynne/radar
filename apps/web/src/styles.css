@@ -825,3 +825,111 @@ tr.dc-subtotal td { border-top: 1px solid var(--line); background: var(--panel-m
 .spark-line.spark-ok { stroke: var(--ok); }
 .spark-line.spark-warm { stroke: var(--warn); }
 .spark-line.spark-hot { stroke: var(--danger); }
+
+/* ---- Touchstream delivery matrix ----
+   Built on the existing tokens; the only new visual devices are the ones the data needs: a hatched
+   "not monitored" cell (absence must not read as a pass), a discrete pass/fail ribbon, and a
+   relative speed bar. */
+.ts-page { display: flex; flex-direction: column; gap: 1rem; }
+.ts-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.ts-title { margin: 0; }
+.ts-sub { margin: 0.15rem 0 0; font-size: 0.85rem; }
+.ts-head-meta { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+.ts-provenance {
+  margin: 0; padding: 0.5rem 0.7rem; font-size: 0.8rem; color: var(--ink-soft);
+  background: var(--panel-muted); border-left: 3px solid var(--info); border-radius: 0 4px 4px 0;
+}
+.ts-lasterror { margin-top: 0.4rem; font-size: 0.75rem; word-break: break-word; }
+
+/* KPI strip */
+.ts-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: 0.6rem; }
+.ts-kpi {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 0.7rem 0.8rem;
+  box-shadow: var(--shadow);
+}
+.ts-kpi.flagged { border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); background: var(--warn-bg); }
+.ts-kpi-donut { display: flex; align-items: center; gap: 0.7rem; }
+.ts-kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.ts-kpi-value.ok { color: var(--ok); }
+.ts-kpi-value.bad { color: var(--danger); }
+.ts-kpi-value.warn { color: var(--warn); }
+.ts-kpi-label { font-size: 0.72rem; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.03em; }
+.ts-warnings ul { margin: 0.35rem 0 0; padding-left: 1.1rem; font-size: 0.82rem; }
+.ts-warnings li + li { margin-top: 0.2rem; }
+
+/* Basis toggle — the page's signature control */
+.ts-controls { display: flex; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.ts-basis { display: flex; align-items: center; gap: 0.2rem; }
+.ts-basis-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; margin-right: 0.3rem; }
+.ts-basis .subtab { border: 1px solid var(--line); border-radius: 6px; padding: 0.28rem 0.65rem; font-size: 0.8rem; }
+.ts-basis .subtab.active { background: var(--info-bg); border-color: var(--brand); color: var(--brand-ink); }
+.ts-basis-help { margin: 0; font-size: 0.78rem; flex: 1 1 320px; min-width: 240px; }
+
+/* Matrix */
+.ts-matrix { display: flex; flex-direction: column; gap: 0.5rem; }
+.ts-colhead { display: grid; gap: 0.5rem; padding: 0 0.5rem 0 0.5rem; }
+.ts-col {
+  display: flex; align-items: center; gap: 0.35rem; font-size: 0.72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft);
+}
+.ts-swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.ts-row { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; }
+.ts-rowhead {
+  display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.55rem 0.7rem;
+  background: none; border: none; border-bottom: 1px solid var(--line); cursor: pointer; font: inherit; text-align: left;
+}
+.ts-rowhead:hover { background: var(--panel-muted); }
+.ts-caret { color: var(--ink-soft); width: 0.8rem; flex: none; }
+.ts-channel { font-weight: 700; }
+.ts-format { flex: none; }
+.ts-rowmeta { font-size: 0.78rem; margin-left: auto; }
+.ts-cells { display: grid; gap: 0.5rem; padding: 0.6rem; align-items: start; }
+.ts-row-note { margin: 0; padding: 0 0.7rem 0.6rem; font-size: 0.78rem; color: var(--warn); }
+
+/* Cells */
+.ts-cell { border: 1px solid var(--line); border-radius: 6px; padding: 0.5rem; display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.ts-cell.failing { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: var(--danger-bg); }
+.ts-cell.outage { border-style: dashed; }
+/* Hatched: unmistakably different from a pass. */
+.ts-cell.empty {
+  align-items: center; justify-content: center; min-height: 68px; border-style: dashed; color: var(--ink-soft);
+  background: repeating-linear-gradient(45deg, transparent, transparent 5px, var(--panel-muted) 5px, var(--panel-muted) 10px);
+}
+.ts-empty-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; }
+.ts-cell-top { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+.ts-cdn { font-size: 0.74rem; font-weight: 700; }
+.ts-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.ts-dot.ok { background: var(--ok); }
+.ts-dot.bad { background: var(--danger); }
+.ts-ribbon { display: block; max-width: 100%; }
+.ts-nodata { font-size: 0.72rem; }
+.ts-cell-speed { display: flex; align-items: baseline; gap: 0.35rem; }
+.ts-speed { font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ts-speed-note { font-size: 0.68rem; }
+.ts-speedbar { display: block; width: 100%; }
+.ts-cell-excluded { font-size: 0.68rem; }
+
+/* Drill-down: probe locations + renditions */
+.ts-row:not(.open) .ts-vantages { display: none; }
+.ts-vantages { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.2rem; padding-top: 0.4rem; border-top: 1px dashed var(--line); }
+.ts-vantage { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.75rem; }
+.ts-vantage.unshared { opacity: 0.55; }
+.ts-vantage-head { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+.ts-loc { font-weight: 700; font-size: 0.72rem; }
+.ts-vantage-meta { display: flex; gap: 0.6rem; flex-wrap: wrap; font-size: 0.72rem; }
+.ts-vantage-meta code { font-size: 0.7rem; }
+.ts-rends { display: flex; flex-wrap: wrap; gap: 2px; }
+.ts-rend {
+  font-size: 0.62rem; padding: 0.05rem 0.25rem; border-radius: 2px; background: var(--ok-bg); color: var(--ok);
+  border: 1px solid transparent; max-width: 8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ts-rend.bad { background: var(--danger-bg); color: var(--danger); }
+.ts-rend.stalled { border-color: var(--warn); background: var(--warn-bg); color: var(--warn); }
+
+@media (max-width: 900px) {
+  .ts-cells, .ts-colhead { grid-template-columns: 1fr !important; }
+  .ts-colhead { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ts-rowhead { transition: none; }
+}

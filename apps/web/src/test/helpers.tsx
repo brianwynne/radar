@@ -360,6 +360,61 @@ export const NETWORK_HISTORY_BODY = {
   ],
 };
 
+export const TS_DELIVERY_BODY = {
+  provenance: { source: 'touchstream', mode: 'live', readOnly: true, observational: true, tier: 'observed-synthetic', notice: 'Touchstream delivery monitoring is read-only and observational. Probes run from cloud/datacentre vantage points, so this is measured synthetic delivery — NOT viewer traffic.', retrievedAt: '2026-07-29T21:20:00Z' },
+  snapshot: {
+    capturedAt: '2026-07-29T21:20:00Z',
+    source: 'live',
+    platforms: ['Réalta', 'Fastly', 'Akamai'],
+    monitors: [],
+    summary: {
+      monitorCount: 3, channelCount: 1, platformCount: 3, okCount: 3, failingCount: 0, plannedOutageCount: 0,
+      coveragePercent: 66.7, monitoredCells: 2, possibleCells: 3, vantageCount: 3,
+      attributionMismatchCount: 1, incomparableRowCount: 0, oldestSampleAgeSeconds: 900,
+    },
+    // One row: Réalta measured from Dublin+London, Akamai only from Paris → a shared location exists
+    // (London) but the headline averages are not like-for-like. Fastly is NOT monitored at all.
+    rows: [
+      {
+        channel: 'Channel One',
+        format: 'MPD',
+        comparability: { comparable: true, headlineComparable: false, sharedLocations: ['GB-LND-LND'], reason: 'These CDNs are probed from different places, so their headline averages are not like-for-like — compare them at GB-LND-LND instead (AKAMAI lacks IE-D-AWS).' },
+        cells: [
+          {
+            platform: 'Réalta', cdnLabel: 'RTE CDN', sharedSpeed: 0.2, sharedLocationCount: 1, unsharedLocations: ['IE-D-AWS'],
+            monitor: {
+              streamKey: 's1', channel: 'Channel One', product: 'Live', format: 'MPD', cdnLabel: 'RTE CDN', platformClaimed: 'Réalta',
+              environment: 'PROD', manifestUrl: 'https://stream.example.net/one.mpd', plannedOutage: false,
+              lastMonitoredAt: '2026-07-29T21:05:00Z', ok: true, statusPct: 100, history: [1, 1, 1, 1, 1], historyPct: 100,
+              avgSpeed: 0.3, maxSpeed: 0.9, warnings: [], // headline 0.3 vs shared 0.2 → re-basing is visible
+              vantages: [
+                { location: 'GB-LND-LND', country: 'England', region: 'London', supplier: 'Linode', popIp: '203.0.113.2', edgeIp: '185.54.104.4', ok: true, statusPct: 100, avgSpeed: 0.2, edgeIsRteOwned: true, renditions: [{ name: 'BR1', sequence: 2, label: 'audio_main', resolution: null, ok: true, httpStatus: '200', statusText: 'PASS CONTENT', stalled: false, speed: 0.2, contentSize: 100, durationMs: 3840 }] },
+                { location: 'IE-D-AWS', country: 'Ireland', region: 'Dublin', supplier: 'Amazon Web Services', popIp: '203.0.113.1', edgeIp: '185.54.105.12', ok: true, statusPct: 100, avgSpeed: 0.1, edgeIsRteOwned: true, renditions: [] },
+              ],
+            },
+          },
+          { platform: 'Fastly', cdnLabel: null, monitor: null, sharedSpeed: null, sharedLocationCount: 0, unsharedLocations: [] },
+          {
+            platform: 'Akamai', cdnLabel: 'AKAMAI', sharedSpeed: 2.4, sharedLocationCount: 1, unsharedLocations: ['FR-IDF-AWS'],
+            monitor: {
+              streamKey: 's2', channel: 'Channel One', product: 'Live', format: 'MPD', cdnLabel: 'AKAMAI', platformClaimed: 'Akamai',
+              environment: 'PROD', manifestUrl: 'https://stream.example.net/one.mpd', plannedOutage: false,
+              lastMonitoredAt: '2026-07-29T21:05:00Z', ok: true, statusPct: 100, history: [1, 1, 0, 1, 1], historyPct: 80,
+              avgSpeed: 3.7, maxSpeed: 8.0,
+              warnings: [{ kind: 'attribution_mismatch', message: 'Labelled "AKAMAI" but every probe was served from an RTÉ-owned prefix.' }],
+              vantages: [
+                { location: 'GB-LND-LND', country: 'England', region: 'London', supplier: 'Linode', popIp: '203.0.113.2', edgeIp: '198.51.100.10', ok: true, statusPct: 100, avgSpeed: 2.4, edgeIsRteOwned: false, renditions: [] },
+                { location: 'FR-IDF-AWS', country: 'France', region: 'Paris', supplier: 'Amazon Web Services', popIp: '203.0.113.3', edgeIp: '198.51.100.11', ok: true, statusPct: 100, avgSpeed: 3.9, edgeIsRteOwned: false, renditions: [] },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+    warnings: [{ kind: 'attribution_mismatch', message: 'Channel One · MPD · Labelled "AKAMAI" but every probe was served from an RTÉ-owned prefix — this monitor is measuring RTÉ\'s own delivery, not AKAMAI.' }],
+  },
+};
+
 export const PNI_HISTORY_BODY = {
   // Deliberately the 24h shape: 4-minute display buckets around a 5-minute recording gap (11:52 →
   // 11:57) — the case that used to vanish at this zoom level. Note the points are bucket STARTS, so
@@ -627,6 +682,7 @@ export function stubApi(principal: Principal, overrides: { bgpBody?: unknown } =
         ], realtaBps: 8e9, commercialBps: 1.5e9, totalBps: 9.5e9 },
         average: { avgRealtaBps: 7.7e9, avgCommercialBps: 1.5e9, avgTotalBps: 9.2e9, sampleCount: 120, windowMinutes: 60 },
       };
+      else if (p.includes('/touchstream/delivery')) body = TS_DELIVERY_BODY;
       else if (p.endsWith('/stream-assurance/rules')) body = { count: 1, rules: [{ id: 'SA-CDN-001', severity: 'critical', standard: 'RADAR delivery consistency', section: null, description: 'origin-variant / forwarded-Host mismatch', remediation: 'Align the forwarded Host with the origin hostname.' }] };
       else if (p.includes('/stream-assurance/alerts')) body = { count: 1, alerts: [{ id: 'rte-one:akamai-edge:SA-CDN-001:ORIGIN_VARIANT_MISMATCH', profileId: 'rte-one', endpointId: 'akamai-edge', ruleId: 'SA-CDN-001', classification: 'ORIGIN_VARIANT_MISMATCH', severity: 'critical', state: 'active', occurrences: 3, firstObserved: '2026-07-27T20:00:00Z', lastObserved: '2026-07-27T21:00:00Z', explanation: 'akamai fetched from origin due to a Host mismatch.', remediation: 'Align the forwarded Host with the origin hostname.' }], eventModeProfiles: [] };
       else if (p.endsWith('/stream-assurance/channels')) body = { channels: [

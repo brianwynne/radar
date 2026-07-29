@@ -18,6 +18,9 @@ import type {
   SaProfileInput,
   SaDiscoverResponse,
   SaChannelsResponse,
+  TsDeliveryResponse,
+  TsHistoryResponse,
+  TsStatusResponse,
   SaResolveChannelResponse,
   RipeEventsResponse,
   RisEventHistoryResponse,
@@ -313,6 +316,11 @@ export const api = {
   saDeleteProfile: (id: string) => request<{ id: string; deleted: boolean }>(`/api/v1/stream-assurance/profiles/${enc(id)}`, { method: 'DELETE' }),
   saDiscover: (mpdUrl: string) => request<SaDiscoverResponse>('/api/v1/stream-assurance/discover', { method: 'POST', body: JSON.stringify({ mpdUrl }) }),
   saChannels: () => request<SaChannelsResponse>('/api/v1/stream-assurance/channels'),
+
+  // Touchstream delivery monitoring (read-only, observed-synthetic).
+  tsDelivery: () => request<TsDeliveryResponse>('/api/v1/touchstream/delivery'),
+  tsStatus: () => request<TsStatusResponse>('/api/v1/touchstream/status'),
+  tsHistory: (minutes?: number) => request<TsHistoryResponse>(`/api/v1/touchstream/history${minutes ? `?minutes=${minutes}` : ''}`),
   saResolveChannel: (callSign: string) => request<SaResolveChannelResponse>('/api/v1/stream-assurance/resolve-channel', { method: 'POST', body: JSON.stringify({ callSign }) }),
   saRun: (id: string, mode?: string) => request<SaRunResponse>(`/api/v1/stream-assurance/profiles/${enc(id)}/run${mode ? `?mode=${enc(mode)}` : ''}`, { method: 'POST' }),
   saAlerts: (profileId?: string) => request<SaAlertsResponse>(`/api/v1/stream-assurance/alerts${profileId ? `?profileId=${enc(profileId)}` : ''}`),

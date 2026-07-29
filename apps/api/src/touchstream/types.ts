@@ -75,6 +75,10 @@ export interface TouchstreamMonitor {
 
 export type TouchstreamWarningKind =
   | 'attribution_mismatch'
+  /** Some probes were served by the labelled CDN and some by RTÉ's own infrastructure. Observed live:
+   *  a monitor labelled GOOGLE served from Google at one probe and from RTÉ prefixes at three, and
+   *  the split MOVES between polls — so proportions are reported, never an absolute claim. */
+  | 'attribution_split'
   | 'no_vantages'
   | 'stalled_rendition'
   | 'planned_outage';
@@ -135,6 +139,7 @@ export interface TouchstreamSummary {
   possibleCells: number;
   vantageCount: number;
   attributionMismatchCount: number;
+  attributionSplitCount: number;
   incomparableRowCount: number;
   /** Oldest `lastMonitoredAt` across monitors, in seconds — the page's freshness signal. */
   oldestSampleAgeSeconds: number | null;

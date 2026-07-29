@@ -3,11 +3,14 @@
 //
 // Two rules shape this file, both learned from the live rtel data:
 //
-//  1. A CDN LABEL IS A CLAIM, NOT AN OBSERVATION. RTÉ's "GOOGLE" monitors are served from
-//     185.54.104.x / 89.207.56.x — RTÉ's own prefixes — because they point at a different origin
-//     (www.rte.ie/player-live/…) than the live.rte.ie monitors. So we map the label for display and
-//     independently check the observed edge, then say so when they disagree. We assert ONLY what we
-//     own (config-driven RTÉ prefixes); RADAR ships no guessed table of third-party CDN ranges.
+//  1. A CDN LABEL IS A CLAIM, NOT AN OBSERVATION. RTÉ's "GOOGLE" monitors point at a different
+//     origin (www.rte.ie/player-live/…) than the live.rte.ie ones, and are largely served from
+//     185.54.104.x / 89.207.56.x — RTÉ's own prefixes. Live polling showed the split MOVES: at one
+//     poll all four probes were RTÉ-served, seconds later one had a genuine Google edge. So the
+//     adapter maps the label for display, independently checks each observed edge, and reports a
+//     PROPORTION (all probes → attribution_mismatch, some → attribution_split) rather than an
+//     absolute claim either way. We assert only against prefixes we OWN (config-driven); RADAR ships
+//     no guessed table of third-party CDN ranges, and an unevaluable edge stays null, never "not ours".
 //
 //  2. SPEED IS ONLY COMPARABLE FROM THE SAME PLACE. In the live config, RTE 1 on Fastly/Akamai is
 //     probed from Paris/Frankfurt while Réalta is probed from Dublin, so comparing their figures
@@ -230,6 +233,14 @@ export function buildMonitor(
         .filter(Boolean)
         .join(', ')}) — this monitor is measuring RTÉ's own delivery, not ${cdnLabel}.`,
     });
+  } else if (platformClaimed !== 'Réalta' && owned.length > 0 && notOwned.length > 0) {
+    // Mixed: report the proportion. Claiming either extreme would misstate what was observed.
+    warnings.push({
+      kind: 'attribution_split',
+      message: `Labelled "${cdnLabel}" but ${owned.length} of ${owned.length + notOwned.length} probes were served from an RTÉ-owned prefix (${owned
+        .map((v) => `${v.location} → ${v.edgeIp}`)
+        .join(', ')}) — this monitor measures ${cdnLabel} from some locations and RTÉ's own delivery from others.`,
+    });
   } else if (platformClaimed === 'Réalta' && notOwned.length > 0 && owned.length === 0) {
     warnings.push({
       kind: 'attribution_mismatch',
@@ -398,6 +409,7 @@ export function buildSnapshot(input: BuildSnapshotInput): TouchstreamSnapshot {
   const monitoredCells = rows.reduce((n, r) => n + r.cells.filter((c) => c.monitor).length, 0);
   const possibleCells = rows.length * platforms.length;
   const attributionMismatches = monitors.filter((m) => m.warnings.some((w) => w.kind === 'attribution_mismatch'));
+  const attributionSplits = monitors.filter((m) => m.warnings.some((w) => w.kind === 'attribution_split'));
   const incomparable = rows.filter((r) => !r.comparability.comparable);
 
   const summary: TouchstreamSummary = {
@@ -412,14 +424,15 @@ export function buildSnapshot(input: BuildSnapshotInput): TouchstreamSnapshot {
     possibleCells,
     vantageCount: new Set(monitors.flatMap((m) => m.vantages.map((v) => v.location))).size,
     attributionMismatchCount: attributionMismatches.length,
+    attributionSplitCount: attributionSplits.length,
     incomparableRowCount: incomparable.length,
     oldestSampleAgeSeconds: ages.length > 0 ? Math.round(Math.max(...ages)) : null,
   };
 
   // Snapshot-level warnings roll up what the operator should act on, not every per-monitor note.
   const warnings: TouchstreamWarning[] = [];
-  for (const m of attributionMismatches) {
-    for (const w of m.warnings.filter((x) => x.kind === 'attribution_mismatch')) {
+  for (const m of [...attributionMismatches, ...attributionSplits]) {
+    for (const w of m.warnings.filter((x) => x.kind === 'attribution_mismatch' || x.kind === 'attribution_split')) {
       warnings.push({ kind: w.kind, message: `${m.channel} · ${m.format} · ${w.message}` });
     }
   }
