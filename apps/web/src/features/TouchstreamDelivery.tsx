@@ -21,7 +21,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api/client';
 import { colorFor } from '../steering/platforms';
-import type { TsCell, TsDeliveryResponse, TsMonitor, TsPlatform, TsRow, TsSnapshot, TsVantage } from '../api/types';
+import type { TsCell, TsDeliveryResponse, TsGroup, TsMonitor, TsPlatform, TsRow, TsSnapshot, TsVantage } from '../api/types';
 
 const REFRESH_MS = 30_000;
 
@@ -46,8 +46,13 @@ const tintFor = (p: TsPlatform): string =>
 
 // --- micro-graphics ---------------------------------------------------------------------------
 
-/** Discrete pass/fail ribbon. Blocks, not a line: these are checks, not a continuum. */
-function StatusRibbon({ history, color, height = 16 }: { history: number[]; color: string; height?: number }) {
+/** Discrete pass/fail ribbon. Blocks, not a line: these are checks, not a continuum.
+ *
+ *  Coloured by HEALTH, never by platform. Tinting it per CDN made a perfectly healthy Fastly cell
+ *  render solid red, because Fastly's brand colour IS red — a green status dot above a red ribbon
+ *  saying "passing". Platform identity belongs to the cell's left edge and the column swatch; red
+ *  here means one thing only: a failed check. */
+function StatusRibbon({ history, height = 16 }: { history: number[]; height?: number }) {
   if (history.length === 0) return <span className="ts-nodata">no history</span>;
   const w = 5;
   const gap = 1.5;
@@ -61,7 +66,7 @@ function StatusRibbon({ history, color, height = 16 }: { history: number[]; colo
       aria-label={`${history.filter((v) => v === 1).length} of ${history.length} recent checks passed`}
     >
       {history.map((v, i) => (
-        <rect key={i} x={i * (w + gap)} y={0} width={w} height={height} rx={1} fill={v === 1 ? color : 'var(--danger)'} opacity={v === 1 ? 0.9 : 1} />
+        <rect key={i} x={i * (w + gap)} y={0} width={w} height={height} rx={1} fill={v === 1 ? 'var(--ok)' : 'var(--danger)'} opacity={v === 1 ? 0.85 : 1} />
       ))}
     </svg>
   );
@@ -143,7 +148,7 @@ function Cell({
         {m.plannedOutage && <span className="ts-flag ts-flag-quiet">planned</span>}
       </span>
       <span className="ts-cell-ribbon">
-        <StatusRibbon history={m.history} color={m.ok ? tint : 'var(--danger)'} />
+        <StatusRibbon history={m.history} />
       </span>
       <span className="ts-cell-row ts-cell-figure">
         <span className="ts-speed">{unavailable ? 'n/a' : fmtSpeed(speed)}</span>
@@ -264,7 +269,8 @@ function MatrixRow({
   );
 }
 
-/** Aggregate for one CDN column across every channel — makes a column a unit, not just alignment. */
+/** Aggregate for one CDN column across the group's channels — makes a column a unit, not just
+ *  alignment. */
 function ColumnRail({ platform, rows }: { platform: TsPlatform; rows: TsRow[] }) {
   const monitors = rows.map((r) => r.cells.find((c) => c.platform === platform)?.monitor).filter((m): m is TsMonitor => !!m);
   const tint = tintFor(platform);
@@ -288,12 +294,60 @@ function ColumnRail({ platform, rows }: { platform: TsPlatform; rows: TsRow[] })
   );
 }
 
+/** One group = one grid with ONLY the CDNs that serve it.
+ *
+ *  Video and audio share no CDN — Triton carries radio only, and the video CDNs carry no radio — so a
+ *  single shared column set filled a third of the matrix with "not monitored" cells that could never
+ *  be anything else. Splitting the grids removes that noise; the "not monitored" cells that remain
+ *  are real coverage gaps within a group (RTE2 HLS having no Réalta monitor, say). Cross-group column
+ *  alignment is not lost, because there was nothing to compare across it. */
+function GroupGrid({
+  group,
+  basis,
+  open,
+  onToggle,
+}: {
+  group: TsGroup;
+  basis: Basis;
+  open: string | null;
+  onToggle: (key: string | null) => void;
+}) {
+  // Columns are capped rather than stretched: a single-CDN group (audio) would otherwise spread one
+  // cell across the full page width.
+  const cols = `minmax(130px, 190px) repeat(${group.platforms.length}, minmax(150px, 260px))`;
+  return (
+    <div className={`ts-groupblock ts-groupblock-${group.kind}`}>
+      <div className="ts-group">
+        <span className="ts-group-name">{group.label}</span>
+        <span className="ts-group-hint">{GROUP_HINT[group.kind] ?? ''}</span>
+        <span className="ts-group-count">
+          {group.rows.length} stream{group.rows.length === 1 ? '' : 's'} · {group.monitorCount} monitor
+          {group.monitorCount === 1 ? '' : 's'} · {group.coveragePercent}% of {group.platforms.length} CDN
+          {group.platforms.length === 1 ? '' : 's'}
+        </span>
+      </div>
+      <div className="ts-grid" style={{ gridTemplateColumns: cols }}>
+        <div className="ts-rail ts-rail-corner">
+          <span className="ts-rail-hint">channel · format</span>
+        </div>
+        {group.platforms.map((p) => (
+          <ColumnRail key={p} platform={p} rows={group.rows} />
+        ))}
+        {group.rows.map((row) => {
+          const key = `${row.channel}·${row.format}`;
+          return (
+            <MatrixRow key={key} row={row} basis={basis} open={open === key} onToggle={() => onToggle(open === key ? null : key)} />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // --- page -------------------------------------------------------------------------------------
 
-const GROUPS: { kind: 'video' | 'audio'; label: string; hint: string }[] = [
-  { kind: 'video', label: 'Video', hint: 'television channels' },
-  { kind: 'audio', label: 'Audio', hint: 'radio streams' },
-];
+/** Sub-label per group. The grouping itself is decided server-side. */
+const GROUP_HINT: Record<string, string> = { video: 'television channels', audio: 'radio streams' };
 
 export function TouchstreamDelivery() {
   const [data, setData] = useState<TsDeliveryResponse | null>(null);
@@ -343,8 +397,6 @@ export function TouchstreamDelivery() {
   }
 
   const s = snapshot.summary;
-  const platforms = snapshot.platforms;
-  const cols = `minmax(140px, 200px) repeat(${platforms.length}, minmax(0, 1fr))`;
   const mixedBasis = snapshot.rows.some((r) => !r.comparability.headlineComparable);
   const flags = s.attributionMismatchCount + s.attributionSplitCount;
 
@@ -429,34 +481,9 @@ export function TouchstreamDelivery() {
         </div>
       )}
 
-      <div className="ts-grid" style={{ gridTemplateColumns: cols }}>
-        <div className="ts-rail ts-rail-corner">
-          <span className="ts-rail-hint">channel · format</span>
-        </div>
-        {platforms.map((p) => (
-          <ColumnRail key={p} platform={p} rows={snapshot.rows} />
-        ))}
-
-        {/* Rows are emitted per group so the group band precedes its own rows. */}
-        {GROUPS.flatMap(({ kind, label, hint }) => {
-          const rows = snapshot.rows.filter((r) => r.mediaKind === kind);
-          if (rows.length === 0) return [];
-          const monitors = rows.reduce((n, r) => n + r.cells.filter((c) => c.monitor).length, 0);
-          return [
-            <div key={`band-${kind}`} className={`ts-group ts-group-${kind}`} style={{ gridColumn: '1 / -1' }}>
-              <span className="ts-group-name">{label}</span>
-              <span className="ts-group-hint">{hint}</span>
-              <span className="ts-group-count">
-                {rows.length} stream{rows.length === 1 ? '' : 's'} · {monitors} monitor{monitors === 1 ? '' : 's'}
-              </span>
-            </div>,
-            ...rows.map((row) => {
-              const key = `${row.channel}·${row.format}`;
-              return <MatrixRow key={key} row={row} basis={basis} open={open === key} onToggle={() => setOpen(open === key ? null : key)} />;
-            }),
-          ];
-        })}
-      </div>
+      {snapshot.groups.map((g) => (
+        <GroupGrid key={g.kind} group={g} basis={basis} open={open} onToggle={setOpen} />
+      ))}
     </section>
   );
 }

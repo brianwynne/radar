@@ -894,7 +894,7 @@ tr.dc-subtotal td { border-top: 1px solid var(--line); background: var(--panel-m
 
 /* The grid */
 .ts-grid {
-  display: grid; gap: 4px; align-items: stretch;
+  display: grid; gap: 4px; align-items: stretch; justify-content: start;
   background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px;
   box-shadow: var(--shadow); overflow-x: auto;
 }
@@ -908,10 +908,11 @@ tr.dc-subtotal td { border-top: 1px solid var(--line); background: var(--panel-m
 .ts-rail-meta { font-size: 0.68rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
 .ts-rail-flag { color: var(--warn); }
 
-/* Group bands: video / audio */
+/* Group blocks: video and audio are separate grids, because they share no CDN */
+.ts-groupblock { display: flex; flex-direction: column; gap: 0.4rem; }
 .ts-group {
-  display: flex; align-items: baseline; gap: 0.5rem; margin-top: 0.2rem;
-  padding: 0.35rem 0.5rem; border-radius: 5px; background: var(--panel-muted);
+  display: flex; align-items: baseline; gap: 0.5rem;
+  padding: 0.4rem 0.6rem; border-radius: 6px; background: var(--panel-muted);
   border-left: 3px solid var(--ink-soft);
 }
 .ts-group-video { border-left-color: var(--brand); }
@@ -1005,7 +1006,7 @@ tr.dc-subtotal td { border-top: 1px solid var(--line); background: var(--panel-m
 
 @media (max-width: 1000px) {
   .ts-console { grid-template-columns: 1fr; }
-  .ts-grid { grid-template-columns: minmax(120px, 160px) repeat(auto-fit, minmax(150px, 1fr)) !important; }
+  .ts-grid { grid-template-columns: minmax(110px, 150px) repeat(auto-fit, minmax(140px, 1fr)) !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   .ts-cell { transition: none; }

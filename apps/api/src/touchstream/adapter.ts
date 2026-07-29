@@ -18,6 +18,7 @@
 import type {
   DeliveryPlatform,
   MediaKind,
+  TouchstreamGroup,
   TouchstreamCell,
   TouchstreamComparability,
   TouchstreamErrorEntry,
@@ -363,6 +364,36 @@ function speedAt(monitor: TouchstreamMonitor, locations: string[]): number | nul
 
 // --- matrix ------------------------------------------------------------------------------------
 
+/** Groups, each with only the platforms that actually serve that media kind. Video and audio share no
+ *  CDN — Triton is radio-only and the video CDNs carry no radio — so a shared column set would fill
+ *  the grid with impossible cells and understate coverage by counting them as gaps. */
+export function buildGroups(monitors: TouchstreamMonitor[]): TouchstreamGroup[] {
+  const order: { kind: MediaKind; label: string }[] = [
+    { kind: 'video', label: 'Video' },
+    { kind: 'audio', label: 'Audio' },
+  ];
+  const groups: TouchstreamGroup[] = [];
+  for (const { kind, label } of order) {
+    const own = monitors.filter((m) => m.mediaKind === kind);
+    if (own.length === 0) continue;
+    const platforms = [...new Set(own.map((m) => m.platformClaimed))].sort((a, b) => platformRank(a) - platformRank(b));
+    const rows = buildRows(own, platforms);
+    const monitoredCells = rows.reduce((n, r) => n + r.cells.filter((c) => c.monitor).length, 0);
+    const possibleCells = rows.length * platforms.length;
+    groups.push({
+      kind,
+      label,
+      platforms,
+      rows,
+      monitorCount: own.length,
+      monitoredCells,
+      possibleCells,
+      coveragePercent: possibleCells === 0 ? 0 : Math.round((monitoredCells / possibleCells) * 1000) / 10,
+    });
+  }
+  return groups;
+}
+
 export function buildRows(monitors: TouchstreamMonitor[], platforms: DeliveryPlatform[]): TouchstreamRow[] {
   const keyOf = (m: TouchstreamMonitor) => `${m.channel} ${m.format}`;
   const groups = new Map<string, TouchstreamMonitor[]>();
@@ -416,7 +447,8 @@ export function buildSnapshot(input: BuildSnapshotInput): TouchstreamSnapshot {
     .sort((a, b) => a.channel.localeCompare(b.channel) || a.format.localeCompare(b.format) || platformRank(a.platformClaimed) - platformRank(b.platformClaimed));
 
   const platforms = [...new Set(monitors.map((m) => m.platformClaimed))].sort((a, b) => platformRank(a) - platformRank(b));
-  const rows = buildRows(monitors, platforms);
+  const groups = buildGroups(monitors);
+  const rows = groups.flatMap((g) => g.rows);
 
   const nowMs = input.now ?? Date.parse(input.capturedAt);
   // Clamped at 0: Touchstream stamps samples with its own clock, so mild skew must not produce a
@@ -425,8 +457,10 @@ export function buildSnapshot(input: BuildSnapshotInput): TouchstreamSnapshot {
     .map((m) => (m.lastMonitoredAt ? Math.max(0, (nowMs - Date.parse(m.lastMonitoredAt)) / 1000) : null))
     .filter((n): n is number => n !== null && Number.isFinite(n));
 
-  const monitoredCells = rows.reduce((n, r) => n + r.cells.filter((c) => c.monitor).length, 0);
-  const possibleCells = rows.length * platforms.length;
+  // Coverage counts only cells that COULD be monitored — i.e. within each group's own columns. A
+  // radio stream having no Akamai monitor is not a gap; Akamai does not carry radio.
+  const monitoredCells = groups.reduce((n, g) => n + g.monitoredCells, 0);
+  const possibleCells = groups.reduce((n, g) => n + g.possibleCells, 0);
   const attributionMismatches = monitors.filter((m) => m.warnings.some((w) => w.kind === 'attribution_mismatch'));
   const attributionSplits = monitors.filter((m) => m.warnings.some((w) => w.kind === 'attribution_split'));
   const incomparable = rows.filter((r) => !r.comparability.comparable);
@@ -461,7 +495,7 @@ export function buildSnapshot(input: BuildSnapshotInput): TouchstreamSnapshot {
     warnings.push({ kind: 'attribution_mismatch', message: `${r.channel} · ${r.format} · ${r.comparability.reason}` });
   }
 
-  return { capturedAt: input.capturedAt, source: input.source, monitors, platforms, rows, summary, warnings };
+  return { capturedAt: input.capturedAt, source: input.source, monitors, platforms, rows, groups, summary, warnings };
 }
 
 // --- windowed history --------------------------------------------------------------------------

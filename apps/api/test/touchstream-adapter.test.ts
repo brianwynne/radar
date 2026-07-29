@@ -100,27 +100,39 @@ describe('buildLocationIndex', () => {
 });
 
 describe('buildSnapshot — matrix and coverage', () => {
-  it('builds one row per channel+format and one cell per platform column', () => {
+  it('gives each group ONLY the platforms that serve it', () => {
     const s = snap();
+    // The union is still reported for reference…
     expect(s.platforms).toEqual(['Réalta', 'Fastly', 'Triton']);
-    const one = s.rows.find((r) => r.channel === 'Channel One' && r.format === 'MPD')!;
-    expect(one.cells.map((c) => c.platform)).toEqual(['Réalta', 'Fastly', 'Triton']);
+    // …but a video row has no Triton column and an audio row has no video-CDN columns. Triton is
+    // radio-only, so a shared column set would be a column of cells that could never be monitored.
+    const video = s.groups.find((g) => g.kind === 'video')!;
+    const audio = s.groups.find((g) => g.kind === 'audio')!;
+    expect(video.platforms).toEqual(['Réalta', 'Fastly']);
+    expect(audio.platforms).toEqual(['Triton']);
+    const one = video.rows.find((r) => r.channel === 'Channel One' && r.format === 'MPD')!;
+    expect(one.cells.map((c) => c.platform)).toEqual(['Réalta', 'Fastly']);
     expect(one.cells.find((c) => c.platform === 'Réalta')!.monitor).not.toBeNull();
+    expect(audio.rows[0].cells.map((c) => c.platform)).toEqual(['Triton']);
   });
 
-  it('leaves an unmonitored cell NULL — absence must never render as healthy', () => {
+  it('leaves a REAL unmonitored cell NULL — absence must never render as healthy', () => {
     const s = snap();
+    // Within the video group Fastly is a genuine gap for the HLS stream, so the cell stays null.
     const hls = s.rows.find((r) => r.channel === 'Channel One' && r.format === 'HLS')!;
     expect(hls.cells.find((c) => c.platform === 'Réalta')!.monitor).not.toBeNull();
     expect(hls.cells.find((c) => c.platform === 'Fastly')!.monitor).toBeNull();
   });
 
-  it('reports coverage as monitored cells over possible cells', () => {
+  it('counts coverage only over cells that COULD be monitored', () => {
     const s = snap();
-    // 3 rows × 3 platforms = 9 possible; 4 monitors configured.
-    expect(s.summary.possibleCells).toBe(9);
+    // Video: 2 rows × 2 video CDNs = 4. Audio: 1 row × Triton = 1. Total 5 possible, not 3 rows × 3
+    // platforms = 9 — a radio stream having no Fastly monitor is not a gap, Fastly carries no radio.
+    expect(s.summary.possibleCells).toBe(5);
     expect(s.summary.monitoredCells).toBe(4);
-    expect(s.summary.coveragePercent).toBeCloseTo(44.4, 1);
+    expect(s.summary.coveragePercent).toBe(80);
+    // Each group also reports its own coverage.
+    expect(s.groups.find((g) => g.kind === 'audio')!.coveragePercent).toBe(100);
   });
 
   it('summarises health, vantages and sample age', () => {

@@ -1575,7 +1575,8 @@ export interface TsSummary {
   plannedOutageCount: number; coveragePercent: number; monitoredCells: number; possibleCells: number;
   vantageCount: number; videoMonitorCount: number; audioMonitorCount: number; attributionMismatchCount: number; attributionSplitCount: number; incomparableRowCount: number; oldestSampleAgeSeconds: number | null;
 }
-export interface TsSnapshot { capturedAt: string; source: 'mock' | 'live'; monitors: TsMonitor[]; platforms: TsPlatform[]; rows: TsRow[]; summary: TsSummary; warnings: TsWarning[] }
+export interface TsGroup { kind: TsMediaKind; label: string; platforms: TsPlatform[]; rows: TsRow[]; monitorCount: number; monitoredCells: number; possibleCells: number; coveragePercent: number }
+export interface TsSnapshot { capturedAt: string; source: 'mock' | 'live'; monitors: TsMonitor[]; platforms: TsPlatform[]; rows: TsRow[]; groups: TsGroup[]; summary: TsSummary; warnings: TsWarning[] }
 export interface TsDeliveryResponse { provenance: TsProvenance; snapshot: TsSnapshot | null; reason?: string; lastError?: string | null }
 export interface TsStatus { enabled: boolean; running: boolean; source: 'mock' | 'live' | 'disabled'; intervalMs: number; lastPollAt: string | null; lastSuccessAt: string | null; lastDurationMs: number | null; consecutiveFailures: number; lastError: string | null; snapshotAgeSeconds: number | null; monitorCount: number; oldestSampleAgeSeconds: number | null; stale: boolean }
 export interface TsStatusResponse { provenance: TsProvenance; status: TsStatus }

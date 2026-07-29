@@ -134,6 +134,22 @@ export interface TouchstreamRow {
   comparability: TouchstreamComparability;
 }
 
+/** One media group with ITS OWN columns. Video and audio share no CDN: Triton carries only radio, and
+ *  the video CDNs carry no radio, so a single shared column set would fill 12 of 30 cells with
+ *  structurally-impossible "not monitored" — noise that also understated coverage. Each group
+ *  therefore lists only the platforms that actually serve it. */
+export interface TouchstreamGroup {
+  kind: MediaKind;
+  label: string;
+  platforms: DeliveryPlatform[];
+  rows: TouchstreamRow[];
+  monitorCount: number;
+  /** Cells with a monitor, over cells that COULD have one within this group's own columns. */
+  monitoredCells: number;
+  possibleCells: number;
+  coveragePercent: number;
+}
+
 export interface TouchstreamSummary {
   monitorCount: number;
   channelCount: number;
@@ -162,6 +178,8 @@ export interface TouchstreamSnapshot {
   /** Platform columns actually present, in RADAR's canonical order. */
   platforms: DeliveryPlatform[];
   rows: TouchstreamRow[];
+  /** Video first, then audio; each with its own platform columns. Drives the page. */
+  groups: TouchstreamGroup[];
   summary: TouchstreamSummary;
   /** Snapshot-level findings (incomparable rows, mislabelled CDNs) for the page banner. */
   warnings: TouchstreamWarning[];
